@@ -4,6 +4,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <direct.h>
+#include <errno.h>
 #include <io.h>
 #include <stdlib.h>
 #include <string.h>
@@ -15,24 +16,42 @@ int yetty_yplatform_mkdir(const char *path)
     return _mkdir(path);
 }
 
-void yetty_yplatform_mkdir_p(const char *path)
+struct yetty_ycore_void_result yetty_yplatform_mkdir_p(const char *path)
 {
-    char tmp[512];
-    snprintf(tmp, sizeof(tmp), "%s", path);
+    if (!path || !*path) {
+        return YETTY_ERR(yetty_ycore_void, "mkdir_p: empty path");
+    }
+    char tmp[1024];
+    int written = snprintf(tmp, sizeof(tmp), "%s", path);
+    if (written < 0 || (size_t)written >= sizeof(tmp)) {
+        return YETTY_ERR(yetty_ycore_void, "mkdir_p: path too long");
+    }
 
     size_t len = strlen(tmp);
     if (len > 0 && (tmp[len - 1] == '/' || tmp[len - 1] == '\\')) {
         tmp[len - 1] = '\0';
     }
 
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/' || *p == '\\') {
-            *p = '\0';
+    for (char *cursor = tmp + 1; *cursor; cursor++) {
+        if (*cursor == '/' || *cursor == '\\') {
+            char saved = *cursor;
+            *cursor = '\0';
+            /* Parent steps: drive roots ("C:") and already-existing
+             * components fail harmlessly; a real failure makes the final
+             * _mkdir below fail too, which is where the error surfaces. */
             _mkdir(tmp);
-            *p = '/';
+            *cursor = saved;
         }
     }
-    _mkdir(tmp);
+    if (_mkdir(tmp) != 0 && errno != EEXIST) {
+        return YETTY_ERR(yetty_ycore_void, "mkdir_p: cannot create directory");
+    }
+    /* EEXIST also fires when a regular file sits at `path` — verify. */
+    struct _stat st;
+    if (_stat(tmp, &st) != 0 || (st.st_mode & _S_IFMT) != _S_IFDIR) {
+        return YETTY_ERR(yetty_ycore_void, "mkdir_p: path exists but is not a directory");
+    }
+    return YETTY_OK_VOID();
 }
 
 int yetty_yplatform_file_exists(const char *path)

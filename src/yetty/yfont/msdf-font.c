@@ -495,7 +495,8 @@ struct yetty_ycore_void_result yetty_yfont_msdf_resolve_cdb(struct yetty_ymsdf_g
           "from %s",
           name, style_suffix, install_dir, cache_fonts_dir, ttf_path);
 
-    yetty_yplatform_mkdir_p(cache_fonts_dir);
+    struct yetty_ycore_void_result cache_dir_res = yetty_yplatform_mkdir_p(cache_fonts_dir);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, cache_dir_res, "cannot create MSDF font cache dir");
     struct yetty_ymsdf_generator_config gen = {
         .ttf_path = ttf_path,
         .cdb_path = cdb_path_out,

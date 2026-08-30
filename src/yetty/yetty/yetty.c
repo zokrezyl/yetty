@@ -488,7 +488,13 @@ static struct yetty_ycore_int_result yetty_event_handler(
             }
             char dir[384];
             snprintf(dir, sizeof(dir), "%s/screenshots", data_dir);
-            yetty_yplatform_mkdir_p(dir);
+            struct yetty_ycore_void_result screenshots_dir_res = yetty_yplatform_mkdir_p(dir);
+            if (YETTY_IS_ERR(screenshots_dir_res)) {
+                yerror("yetty: SCREENSHOT: cannot create %s: %s", dir,
+                       screenshots_dir_res.error.msg);
+                yetty_ycore_error_destroy(screenshots_dir_res.error);
+                return YETTY_OK(yetty_ycore_int, 1);
+            }
 
             time_t now = time(NULL);
             struct tm tm_buf;

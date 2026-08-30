@@ -7,6 +7,8 @@
 
 #include <stddef.h>
 
+#include <yetty/ycore/result.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -14,8 +16,11 @@ extern "C" {
 /* Create a single directory (returns 0 on success or if already exists) */
 int yetty_yplatform_mkdir(const char *path);
 
-/* Create directory and all parent directories */
-void yetty_yplatform_mkdir_p(const char *path);
+/* Create directory and all parent directories. An already-existing
+ * directory is success; anything else (permission denied, read-only
+ * filesystem, a path component that is a regular file, an over-long
+ * path) is an error naming the failing step. */
+struct yetty_ycore_void_result yetty_yplatform_mkdir_p(const char *path);
 
 /* Non-zero if a file or directory exists at path. */
 int yetty_yplatform_file_exists(const char *path);

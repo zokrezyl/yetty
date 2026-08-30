@@ -1767,7 +1767,9 @@ static struct yetty_ycore_void_result scene_install_wire_font(
             if (!scene->msdf_generator) {
                 return YETTY_ERR(yetty_ycore_void, "yscene wire font: no MSDF generator");
             }
-            yetty_yplatform_mkdir_p(fonts_dir);
+            struct yetty_ycore_void_result fonts_dir_res = yetty_yplatform_mkdir_p(fonts_dir);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, fonts_dir_res,
+                                "yscene wire font: create fonts cache dir");
             if (!yetty_yplatform_file_exists(ttf_path)) {
                 FILE *out = fopen(ttf_path, "wb");
                 if (!out) {

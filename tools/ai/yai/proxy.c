@@ -300,7 +300,13 @@ static void conversation_path_init(struct yai_proxy *proxy)
         proxy->conversation_path[0] = '\0';
         return;
     }
-    yetty_yplatform_mkdir_p(dir);
+    struct yetty_ycore_void_result mkdir_res = yetty_yplatform_mkdir_p(dir);
+    if (YETTY_IS_ERR(mkdir_res)) {
+        /* The conversation mirror is best-effort — disable it, don't fail. */
+        yetty_ycore_error_destroy(mkdir_res.error);
+        proxy->conversation_path[0] = '\0';
+        return;
+    }
     /* proxy-<tag>.jsonl, parallel to the transcript's transcript-<tag>.jsonl
      * and keyed off the same session tag so the pair stays in lockstep. */
     int written = snprintf(proxy->conversation_path, sizeof(proxy->conversation_path),
