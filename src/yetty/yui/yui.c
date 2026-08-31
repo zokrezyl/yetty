@@ -2748,6 +2748,24 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     YETTY_RETURN_IF_ERR(yetty_ycore_int, active_r, "on_event: is_active");
     int active = active_r.value;
     int has_pressed = yetty_ygui_framework_has_pressed_widget(yui->engine);
+    /* While chrome owns a live gesture (window drag or edge resize) it must
+     * see every MOUSE_MOVE and the terminating MOUSE_UP — regardless of what
+     * widget ygui thinks is pressed. Without this, an edge-resize gesture
+     * fires MOUSE_DOWN into chrome (chrome->resizing=1) but ygui also marks
+     * some widget under the pointer as pressed; every subsequent MOVE hits
+     * the `!has_pressed` gate below and skips the chrome fallback, so
+     * chrome never emits WINDOW_RESIZE_BY until the drag ends and MOUSE_UP
+     * clears the pressed widget — the user's "nothing during drag, then
+     * catches up on release" symptom. */
+    int chrome_in_gesture = 0;
+    if (yui->chrome) {
+        struct yetty_ycore_int_result gr = yetty_ychrome_host_in_gesture(yui->chrome);
+        if (YETTY_IS_OK(gr)) {
+            chrome_in_gesture = gr.value;
+        } else {
+            yetty_ycore_error_destroy(gr.error);
+        }
+    }
     int in_titlebar = 0;
     /* The ygui chrome is laid out in logical pixels; pointer events arrive
      * in framebuffer pixels. Convert once so every ygui-facing hit-test and
@@ -2818,6 +2836,14 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
         return YETTY_OK(yetty_ycore_int, fallback_r.value ? 1 : 0);
     }
     case YETTY_YCORE_MOUSE_UP: {
+        /* If chrome is mid-gesture (edge resize / caption drag), deliver the
+         * release to chrome directly — it's the only path that can drop
+         * chrome->resizing/dragging back to 0. */
+        if (chrome_in_gesture) {
+            struct yetty_ycore_int_result cf = yui_chrome_fallback(yui, event);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, cf, "on_event: chrome fallback (up, in_gesture)");
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
         struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_button(
             yui->engine, event->mouse.x / scale, event->mouse.y / scale, event->mouse.button, 0,
             event->mouse.mods);
@@ -2843,6 +2869,15 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
     }
     case YETTY_YCORE_MOUSE_MOVE:
     case YETTY_YCORE_MOUSE_DRAG: {
+        /* Chrome-first while a chrome gesture is live: bypass the
+         * has_pressed gate so edge-resize / caption-drag deltas keep
+         * flowing to the platform (WINDOW_RESIZE_BY / WINDOW_DRAG_BY)
+         * on every mouse move. */
+        if (chrome_in_gesture) {
+            struct yetty_ycore_int_result cf = yui_chrome_fallback(yui, event);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, cf, "on_event: chrome fallback (move, in_gesture)");
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
         struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_motion(
             yui->engine, event->mouse.x / scale, event->mouse.y / scale);
         YETTY_RETURN_IF_ERR(yetty_ycore_int, feed_r, "on_event: feed motion");

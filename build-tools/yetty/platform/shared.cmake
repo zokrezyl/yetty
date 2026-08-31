@@ -445,6 +445,10 @@ set(YETTY_APP_BOOTSTRAP_SOURCES
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/glfw.c
     ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/glfw.c
 )
+if(APPLE)
+    list(APPEND YETTY_APP_BOOTSTRAP_SOURCES
+        ${YETTY_ROOT}/src/yetty/yplatform/ywindow/macos.m)
+endif()
 # The shared GLFW entry (provides int main()). Class 1 apps add this; Class 2
 # apps (custom CLI) provide their own main and leave this out.
 set(YETTY_APP_ENTRY_GLFW

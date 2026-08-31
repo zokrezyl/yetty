@@ -28,6 +28,22 @@
  * render-side drag/resize moved the window (that press was a drag, not a click). */
 void yetty_yplatform_os_event_invalidate_click_pairing(GLFWwindow *window);
 
+/* Wake-hook setter on the base chrome (window-chrome.c). Declared here because
+ * it isn't a virtual class method — no generated header carries it. */
+struct yetty_ycore_void_result yetty_yplatform_window_chrome_set_wake(
+    struct yetty_yclass_object *obj, void (*wake_main)(void));
+
+/* Base wake trampoline: glfwPostEmptyEvent is thread-safe and unparks
+ * glfwWaitEvents on the main thread. Without this the render thread's
+ * WINDOW_RESIZE_BY / WINDOW_DRAG_BY posts sit in the chrome bus until an
+ * unrelated OS event happens to wake glfwWaitEvents — which manifests as
+ * a live resize that only applies on mouse-release. */
+YETTY_EXTERNAL_CALLBACK
+static void glfw_window_chrome_wake_main(void)
+{
+    glfwPostEmptyEvent();
+}
+
 /* Own result wrapper + codegen accessor/downcast forward-decls. */
 YETTY_YRESULT_DECLARE(yetty_yplatform_glfw_window_chrome_ptr,
                       struct yetty_yplatform_glfw_window_chrome *);
@@ -80,6 +96,9 @@ struct yetty_ycore_void_result yetty_yplatform_glfw_window_chrome_attach(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, data, "glfw_window_chrome_attach: data_get");
     data.value->window = os_window;
     data.value->input_pipe = input_pipe;
+    struct yetty_ycore_void_result wake_r =
+        yetty_yplatform_window_chrome_set_wake(obj, glfw_window_chrome_wake_main);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wake_r, "glfw_window_chrome_attach: set_wake");
     return YETTY_OK_VOID();
 }
 
@@ -183,15 +202,34 @@ static struct yetty_ycore_void_result glfw_window_chrome_handle_event(
         yetty_yplatform_os_event_invalidate_click_pairing(chrome->window);
         break;
     }
-    case YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE:
-        yetty_yplatform_wayland_begin_interactive_move(chrome->window);
+    case YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_MOVE: {
+        int took_over = yetty_yplatform_wayland_begin_interactive_move(chrome->window);
         yetty_yplatform_os_event_invalidate_click_pairing(chrome->window);
+        /* Wayland grabbed the gesture: the compositor eats the ensuing
+         * MOUSE_MOVEs and MOUSE_UP. Fire a synthetic MOUSE_UP into the
+         * render input pipe so ychrome / yui's tabbar-model drop
+         * `dragging`/`resizing` back to 0 — otherwise those flags stay
+         * live and every next MOUSE_MOVE (a stray cursor motion, or the
+         * ygui-bypass path we take while chrome_in_gesture is set) is
+         * mis-read as gesture continuation and produces bogus
+         * WINDOW_DRAG_BY/WINDOW_RESIZE_BY deltas. No-op on X11/macOS
+         * (took_over == 0): the real MOUSE_UP arrives normally there. */
+        if (took_over && chrome->input_pipe) {
+            struct yetty_yui_event synth = {.type = YETTY_YCORE_MOUSE_UP};
+            chrome->input_pipe->ops->write(chrome->input_pipe, &synth, sizeof(synth));
+        }
         break;
-    case YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_RESIZE:
-        yetty_yplatform_wayland_begin_interactive_resize(
+    }
+    case YETTY_YCORE_WINDOW_BEGIN_INTERACTIVE_RESIZE: {
+        int took_over = yetty_yplatform_wayland_begin_interactive_resize(
             chrome->window, (unsigned int)event->window_begin_resize.edge);
         yetty_yplatform_os_event_invalidate_click_pairing(chrome->window);
+        if (took_over && chrome->input_pipe) {
+            struct yetty_yui_event synth = {.type = YETTY_YCORE_MOUSE_UP};
+            chrome->input_pipe->ops->write(chrome->input_pipe, &synth, sizeof(synth));
+        }
         break;
+    }
     case YETTY_YCORE_SET_CURSOR: {
         int shape = event->set_cursor.shape;
         if (shape < 0 || (size_t)shape >= sizeof(chrome->cursors) / sizeof(chrome->cursors[0])) {

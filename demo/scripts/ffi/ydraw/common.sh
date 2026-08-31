@@ -29,15 +29,19 @@ ffi_find_library() {
         FFI_LIB="$YETTY_FFI_LIB"
         return 0
     fi
-    local tree
+    # macOS builds emit libyetty_ffi.dylib; Linux/BSD emit .so. Try both.
+    local basenames=(libyetty_ffi.so libyetty_ffi.dylib)
+    local tree name
     for tree in "$FFI_ROOT"/build-desktop-*-release "$FFI_ROOT"/build-desktop-*; do
-        local candidate="$tree/src/yetty/yffi/libyetty_ffi.so"
-        if [ -f "$candidate" ]; then
-            FFI_LIB="$candidate"
-            return 0
-        fi
+        for name in "${basenames[@]}"; do
+            local candidate="$tree/src/yetty/yffi/$name"
+            if [ -f "$candidate" ]; then
+                FFI_LIB="$candidate"
+                return 0
+            fi
+        done
     done
-    echo "libyetty_ffi.so not found in any build-desktop-* tree." >&2
+    echo "libyetty_ffi.{so,dylib} not found in any build-desktop-* tree." >&2
     echo "Build it:  USE_DISTCC=1 make build-desktop-ytrace-release" >&2
     echo "or point YETTY_FFI_LIB at an existing library." >&2
     return 1
@@ -102,7 +106,10 @@ ffi_run_go() {
     ffi_require_tool go "install Go >= 1.21 (the bindings use cgo)"
     local library_dir
     library_dir="$(dirname "$FFI_LIB")"
+    # macOS uses DYLD_LIBRARY_PATH; Linux/BSD use LD_LIBRARY_PATH. Set both
+    # so the dlopen search hits the fresh build regardless of platform.
     cd "$FFI_ROOT"
-    exec env CGO_LDFLAGS="-L$library_dir -lyetty_ffi" LD_LIBRARY_PATH="$library_dir" \
+    exec env CGO_LDFLAGS="-L$library_dir -lyetty_ffi" \
+        LD_LIBRARY_PATH="$library_dir" DYLD_LIBRARY_PATH="$library_dir" \
         go run "$FFI_DEMO_DIR/$1"
 }

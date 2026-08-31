@@ -328,6 +328,17 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
             yetty_ycore_void_chain(configure_result, destroy_result);
         return YETTY_ERR(yetty_ychrome_host_ptr, "ychrome_host: configure", chained);
     }
+    /* Chrome needs the content_scale to convert its logical-px gesture
+     * deltas back to fb px for the wire (window_chrome_resize_by/drag_by).
+     * Plain function (no codegen), forward-declared here since it isn't
+     * a virtual class method exposed in the generated header. */
+    struct yetty_ycore_void_result yetty_ychrome_set_content_scale(
+        struct yetty_yclass_object *obj, float content_scale);
+    struct yetty_ycore_void_result scale_result =
+        yetty_ychrome_set_content_scale(host->chrome, host->content_scale);
+    if (YETTY_IS_ERR(scale_result)) {
+        yetty_ycore_error_destroy(scale_result.error);
+    }
     struct yetty_ycore_void_result size_result =
         yetty_ychrome_set_size(host->chrome, host->width, host->height);
     if (YETTY_IS_ERR(size_result)) {

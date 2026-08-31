@@ -27,13 +27,9 @@ target_include_directories(yetty_ffi PRIVATE
     ${YETTY_ROOT}/src
 )
 
-# Force-export each facade's whole archive so its `yetty_api_*` stubs are
-# available to ctypes even though nothing in this TU references them. The real
-# render/compute dependency targets are pulled normally to satisfy references;
-# their transitive third-party libs (libyaml, …) come along as usage
-# requirements.
-target_link_libraries(yetty_ffi PRIVATE
-    -Wl,--whole-archive
+# Facades whose whole archive must be pulled in so their `yetty_api_*` stubs
+# reach the bindings even though nothing in this TU references them.
+set(YETTY_FFI_WHOLE_ARCHIVE_TARGETS
     yetty_api_yplot      # public API facade — exports yetty_api_yplot_* for bindings
     yetty_ydrawlist2     # v2 ydraw client interface: drawable/shape/font/text/list
     yetty_api_ydrawlist2 # its generated stubs + class accessors
@@ -41,7 +37,13 @@ target_link_libraries(yetty_ffi PRIVATE
     yetty_api_ysdf2      # their generated stubs + class accessors
     yetty_ycomplex2      # v2 complex-kind drawables (image/mesh/shadertoy/video)
     yetty_api_ycomplex2
-    -Wl,--no-whole-archive
+)
+
+# The real render/compute dependency targets are pulled normally to satisfy
+# references; their transitive third-party libs (libyaml, …) come along as
+# usage requirements.
+target_link_libraries(yetty_ffi PRIVATE
+    ${YETTY_FFI_WHOLE_ARCHIVE_TARGETS}
     yetty_yplot_core  # yetty_yplot_render + dcs_bin_emit (GPU-less)
     yetty_yimage_core
     yetty_ymesh_core
@@ -61,9 +63,26 @@ if(YETTY_ENABLE_FEATURE_YVIDEO)
     target_link_libraries(yetty_ffi PRIVATE yetty_yvideo_core)
 endif()
 
-# Fail the link on any unresolved symbol so a missing transitive dependency
-# shows up here at build time, not as a dlopen error in the bindings.
-target_link_options(yetty_ffi PRIVATE -Wl,--no-undefined)
+# Force-load the facade archives and fail on unresolved symbols. GNU ld and
+# Apple ld spell both features differently — GNU ld brackets the whole set
+# with --whole-archive / --no-whole-archive; Apple ld needs one -force_load
+# per archive path.
+if(APPLE)
+    foreach(yetty_ffi_target IN LISTS YETTY_FFI_WHOLE_ARCHIVE_TARGETS)
+        target_link_options(yetty_ffi PRIVATE
+            "LINKER:-force_load,$<TARGET_FILE:${yetty_ffi_target}>")
+    endforeach()
+    target_link_options(yetty_ffi PRIVATE "LINKER:-undefined,error")
+else()
+    target_link_options(yetty_ffi PRIVATE "LINKER:--push-state,--whole-archive")
+    foreach(yetty_ffi_target IN LISTS YETTY_FFI_WHOLE_ARCHIVE_TARGETS)
+        target_link_options(yetty_ffi PRIVATE "$<TARGET_FILE:${yetty_ffi_target}>")
+    endforeach()
+    target_link_options(yetty_ffi PRIVATE
+        "LINKER:--pop-state"
+        "LINKER:--no-undefined"
+    )
+endif()
 
 set_target_properties(yetty_ffi PROPERTIES
     OUTPUT_NAME yetty_ffi

@@ -39,6 +39,7 @@ set(YETTY_PLATFORM_SOURCES
     ${YETTY_ROOT}/src/yetty/gen/api/yetty/app.c
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/window.c
     ${YETTY_ROOT}/src/yetty/yplatform/ywindow/glfw.c
+    ${YETTY_ROOT}/src/yetty/yplatform/ywindow/macos.m
     ${YETTY_ROOT}/src/yetty/yplatform/yclipboard/glfw.c
     ${YETTY_ROOT}/src/yetty/yplatform/webgpu-surface/default.c
     ${YETTY_ROOT}/src/yetty/yplatform/os-event-loop/default.c

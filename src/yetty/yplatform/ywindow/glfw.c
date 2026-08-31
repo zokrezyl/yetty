@@ -18,6 +18,15 @@
 /* WebGPU surface creator (webgpu-surface/default.c). */
 WGPUSurface yetty_yplatform_create_surface(WGPUInstance instance, GLFWwindow *window);
 
+#if defined(__APPLE__)
+/* ywindow/macos.m — strip AppKit's own edge-resize behavior from the
+ * NSWindow after creation. Without this, drags on the window margin get
+ * eaten by AppKit's modal resize-tracking loop instead of reaching GLFW,
+ * so yetty's own edge-resize (chrome / tabbar) never fires and Metal
+ * presents queue up until the drag ends. */
+void yetty_yplatform_glfw_window_configure_macos(struct GLFWwindow *window);
+#endif
+
 /* Own result wrapper + codegen accessor/downcast forward-decls. */
 YETTY_YRESULT_DECLARE(yetty_yplatform_glfw_window_ptr, struct yetty_yplatform_glfw_window *);
 YETTY_YRESULT_DECLARE(yetty_yplatform_glfw_window_handle_ptr, struct GLFWwindow *);
@@ -94,6 +103,9 @@ static struct yetty_ycore_void_result glfw_window_open(struct yetty_yclass_objec
      * such a window either. Requesting it here makes keyboard input work as soon
      * as the window appears, regardless of WM focus policy. */
     glfwFocusWindow(window);
+#if defined(__APPLE__)
+    yetty_yplatform_glfw_window_configure_macos(window);
+#endif
     data.value->handle = window;
     return YETTY_OK_VOID();
 }
