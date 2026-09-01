@@ -21,8 +21,9 @@ only what the static-library build needs is kept.
 
 ## Local modifications (why this isn't pristine upstream)
 
-The package `version` (`../version`) carries a `-pN` suffix to mark that the
-vendored source is patched. Current deltas from pristine upstream:
+The package version (`build-tools/3rdparty/libcss/version`) carries a `-pN`
+suffix to mark that the vendored source is patched. Current deltas from
+pristine upstream:
 
 - **`libcss/src/select/select.c` — static `empty_bloom` double-free**
   (upstream `f1c3e3d1`, landed after 0.9.2). On a root-element select, any
@@ -32,18 +33,25 @@ vendored source is patched. Current deltas from pristine upstream:
   `node_data->bloom != css__get_empty_bloom()` guard in
   `css__destroy_node_data`. This is `-p1`.
 
-When you change the vendored source, add an entry here so the delta from
-pristine upstream stays documented.
+When you change the vendored source, add an entry here, then bump the `-pN`
+suffix in `build-tools/3rdparty/libcss/version` and cut a new release
+(`build-tools/push-3rdparty-tag.sh libcss`) — yetty builds link the prebuilt
+tarball, not this tree, so an unreleased edit is invisible to them.
 
 ## How it builds
 
-`build-tools/yetty/libs/libcss.cmake` compiles this source **in-tree**, the
-same way `vterm.cmake` builds `src/libvterm-0.3.3` — three `add_library`
-targets (`libwapcaplet_static`, `libparserutils_static`, `libcss_static`)
-compiled with the same toolchain as the rest of yetty. There is no NetSurf
-GNU-make build, no prebuilt tarball, and no 3rdparty cache. (NetSurf's
-`buildsystem/` make trees are retained as part of the upstream snapshot but
-are not used by the CMake build.)
+libcss follows the per-library 3rdparty prebuilt model
+(`build-tools/3rdparty/README.md`), with one twist: there is **no upstream
+download** — `build-tools/3rdparty/libcss/_build.sh` builds THIS vendored
+tree via the standalone CMake project in the same directory, so the repo
+checkout is the source fetch. The tag-triggered workflow
+(`build-3rdparty-libcss.yml`) publishes one tarball per target
+(`lib/{libcss,libparserutils,libwapcaplet}.a` + `include/`) to the
+`lib-libcss-<version>` release; `build-tools/yetty/libs/libcss.cmake`
+fetches it at configure time and exposes the historical IMPORTED targets
+(`libwapcaplet_static`, `libparserutils_static`, `libcss_static`). There is
+no NetSurf GNU-make build. (NetSurf's `buildsystem/` make trees are retained
+as part of the upstream snapshot but are not used.)
 
 Two pieces of build-time codegen are reproduced by the CMake at configure time:
 
@@ -58,8 +66,9 @@ host (correct for cross-compiles) and write into the build tree — the source
 stays clean. The `select/` property tables ship pre-generated
 (`select_generator.py` output, committed).
 
-Requires a host C compiler and `perl` (both already present on the desktop
-Linux / macOS build hosts). libcss is built on Linux (including the
-riscv64 / aarch64 cross-targets) and macOS; on other platforms
-(Windows-MSVC / webasm / Android / iOS / tvOS) the targets are skipped and
-ybrowser falls back to its built-in lexbor-CSS path.
+The producer build requires a host C compiler and `perl` (both present in
+the generic `3rdparty-<target>` nix shells). libcss is built on Linux
+(including the riscv64 / aarch64 cross-targets) and macOS; the other
+platforms (Windows-MSVC / webasm / Android / iOS / tvOS) get a placeholder
+tarball carrying an `UNSUPPORTED` marker — the consumer cmake detects it,
+creates no targets, and ybrowser falls back to its built-in lexbor-CSS path.

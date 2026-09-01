@@ -33,11 +33,12 @@ target_link_libraries(yetty_ybrowser
         stb
 )
 
-# libcss (MIT) — NetSurf's CSS cascade. Prefer the in-tree libcss build
-# (build-tools/yetty/libs/libcss.cmake compiles src/libcss, target
-# libcss_static). Fall back to the legacy netsurf prebuilt (ns_css) on
-# platforms where libcss isn't built. If neither is available, ybrowser
-# falls back to the lexbor string-parsing path via YETTY_HAVE_LIBCSS=0.
+# libcss (MIT) — NetSurf's CSS cascade. Prefer the yetty libcss prebuilt
+# (build-tools/yetty/libs/libcss.cmake fetches the 3rdparty tarball built
+# from the vendored src/libcss tree, target libcss_static). Fall back to
+# the legacy netsurf prebuilt (ns_css) on platforms where libcss isn't
+# built. If neither is available, ybrowser falls back to the lexbor
+# string-parsing path via YETTY_HAVE_LIBCSS=0.
 include(${YETTY_ROOT}/build-tools/yetty/libs/libcss.cmake OPTIONAL)
 include(${YETTY_ROOT}/build-tools/yetty/libs/netsurf.cmake OPTIONAL)
 if(TARGET libcss_static)

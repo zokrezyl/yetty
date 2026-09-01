@@ -46,6 +46,15 @@ Bump `<rev>` for packaging-only changes (config tweaks, bundled-rootfs
 bumps); bump the upstream component when moving to a new upstream
 release.
 
+### Vendored-source producers (libcss)
+
+libcss builds from the **vendored, locally patched tree at `src/libcss`**
+— there is no upstream download; the CI checkout is the source fetch
+(the vendoring exists so the CSS engine can be edited directly, see
+`src/libcss/README.md`). Its `version` is `<upstream>-p<N>` (e.g.
+`0.9.2-p1`); bump `<N>` whenever the vendored source changes and cut a
+new tag, otherwise yetty builds keep linking the previous tarball.
+
 ## Workflow per library
 
 `.github/workflows/build-3rdparty-<libname>.yml`, triggered by tags
@@ -105,6 +114,7 @@ Tier 0 = already pre-built (Dawn).
 | Tier | Library          | Build system       | Status |
 |------|------------------|--------------------|--------|
 | 0    | dawn             | (pre-built)        | done — `Dawn.cmake` |
+| 1    | **libcss**       | CMake (standalone, vendored src/libcss) | **migrated to per-lib 3rdparty** |
 | 1    | **openh264**     | GNU make           | **migrated to per-lib 3rdparty** |
 | 1    | dav1d            | meson + ninja      | todo   |
 | 1    | openssl          | CMake (janbar)     | todo   |
