@@ -24,12 +24,21 @@ extern "C" {
 
 struct GLFWwindow;
 
-void yetty_yplatform_wayland_begin_interactive_move(struct GLFWwindow *window);
+/* Returns 1 if the compositor took the gesture over (Wayland-native path
+ * fired xdg_toplevel.move / .resize), 0 otherwise (null.c on
+ * macOS/Windows/mobile/web, or the runtime-X11 branch on a Wayland-capable
+ * GLFW build). The desktop chrome subclass uses the return value to
+ * synthesize a MOUSE_UP into the render pipe after a compositor takeover —
+ * the compositor eats the real MOUSE_UP, so without a synthetic one chrome
+ * (and yui's tabbar-model) would stay in a stale `resizing`/`dragging`
+ * state and misinterpret every subsequent MOUSE_MOVE. */
+int yetty_yplatform_wayland_begin_interactive_move(struct GLFWwindow *window);
 
 /* `edge` is a yetty_ycore_resize_edge value (values match xdg-shell's
  * xdg_toplevel.resize_edge wire enum: 1=top, 2=bottom, 4=left, 8=right,
- * combine for corners). 0 (NONE) is a no-op. */
-void yetty_yplatform_wayland_begin_interactive_resize(struct GLFWwindow *window, unsigned int edge);
+ * combine for corners). 0 (NONE) is a no-op. Return semantics match
+ * yetty_yplatform_wayland_begin_interactive_move above. */
+int yetty_yplatform_wayland_begin_interactive_resize(struct GLFWwindow *window, unsigned int edge);
 
 #ifdef __cplusplus
 }

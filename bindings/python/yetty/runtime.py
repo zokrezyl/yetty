@@ -203,25 +203,31 @@ def _candidate_paths() -> list[str]:
       2. bundled in the package  (an installed wheel ships the .so here)
       3. build trees in the repo (dev checkout: build-desktop-ffi-release, …)
       4. the OS loader           (LD_LIBRARY_PATH / ldconfig / DYLD_*)
+
+    An explicit override short-circuits the rest — probing the build tree is
+    O(build-tree size) and pointless once the caller has named the file.
     """
+    override = os.environ.get("YETTY_FFI_LIB")
+    if override:
+        return [override]
+
     package_dir = Path(__file__).resolve().parent
     repo_root = package_dir.parents[2]  # <repo>/bindings/python/yetty → <repo>
     candidates: list[str] = []
 
-    override = os.environ.get("YETTY_FFI_LIB")
-    if override:
-        candidates.append(override)
-
     for basename in _LIB_BASENAMES:
         candidates.append(str(package_dir / basename))
 
-    # Dev checkout: the library builds inside the normal build tree, under the
-    # yffi module dir (e.g. build-desktop-ytrace-release/src/yetty/yffi/). Prefer
-    # a release tree, then any build* tree.
+    # Dev checkout: the library builds at a fixed path under each build tree,
+    # <repo>/build-desktop-*/src/yetty/yffi/<basename>. Glob only that exact
+    # slot — a recursive `**` walk over the build tree scans tens of thousands
+    # of object files and dominates startup. Prefer a `-release` tree, then
+    # any `build-desktop-*`.
+    yffi_subpath = Path("src") / "yetty" / "yffi"
     for basename in _LIB_BASENAMES:
-        for build_glob in ("build-desktop-*-release", "build-desktop-*", "build*"):
+        for build_glob in ("build-desktop-*-release", "build-desktop-*"):
             candidates.extend(sorted(glob.glob(
-                str(repo_root / build_glob / "**" / basename), recursive=True)))
+                str(repo_root / build_glob / yffi_subpath / basename))))
 
     system = ctypes.util.find_library("yetty_ffi")
     if system:

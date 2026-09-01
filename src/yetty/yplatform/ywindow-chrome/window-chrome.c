@@ -35,6 +35,13 @@ struct YETTY_ANNOTATE("class@yplatform:window_chrome") yetty_yplatform_window_ch
     /* Borrowed render→main marshalling bus — owned by the caller, set via
      * configure(). The producer slots write typed events here. */
     struct yetty_ycore_xthread_event_pipe *output_pipe;
+    /* Optional main-thread wake hook — post_event calls this after every
+     * write so the platform's blocking event loop (e.g. glfwWaitEvents)
+     * returns promptly instead of parking until the next OS event. The
+     * platform subclass installs it via yetty_yplatform_window_chrome_set_wake
+     * during its attach step; a NULL means the platform doesn't need a
+     * wake (e.g. a loop that already polls the pipe). */
+    void (*wake_main)(void);
 };
 
 /* Result wrapper for the window-chrome handle. Declared here (not pulled from the
@@ -60,9 +67,13 @@ static struct yetty_yclass_void_ptr_result window_chrome_from_obj(struct yetty_y
     return slice_r;
 }
 
-/* Push one typed event to the main thread. Best-effort: a full or broken pipe
- * just drops the request. Waking the main thread (e.g. glfwPostEmptyEvent) is the
- * platform layer's job — it owns the OS event loop that drains output_pipe. */
+/* Push one typed event to the main thread, then wake the platform's event
+ * loop so the drain happens promptly (before the missing wake, a resize
+ * gesture's RESIZE_BY events sat in the pipe until the next unrelated OS
+ * event happened to unblock glfwWaitEvents — the user saw the window
+ * catch up to the mouse only after releasing). Best-effort: a full or
+ * broken pipe just drops the request; a NULL wake_main means the platform
+ * doesn't need one. */
 static void post_event(struct yetty_yplatform_window_chrome *chrome,
                        const struct yetty_yui_event *event)
 {
@@ -72,6 +83,22 @@ static void post_event(struct yetty_yplatform_window_chrome *chrome,
     struct yetty_ycore_size_result write_result =
         chrome->output_pipe->ops->write(chrome->output_pipe, event, sizeof(*event));
     (void)write_result;
+    if (chrome->wake_main) {
+        chrome->wake_main();
+    }
+}
+
+/* Install the main-thread wake hook. Called by the platform subclass at
+ * attach time. Passing a NULL fn clears it. Kept as a plain exported
+ * function (not a virtual class method) — this is subclass-owned wiring,
+ * not a polymorphic operation. */
+struct yetty_ycore_void_result yetty_yplatform_window_chrome_set_wake(
+    struct yetty_yclass_object *obj, void (*wake_main)(void))
+{
+    struct yetty_yclass_void_ptr_result data_r = window_chrome_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "window_chrome set_wake: object");
+    ((struct yetty_yplatform_window_chrome *)data_r.value)->wake_main = wake_main;
+    return YETTY_OK_VOID();
 }
 
 /*=============================================================================

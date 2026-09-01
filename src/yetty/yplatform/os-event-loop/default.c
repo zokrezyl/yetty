@@ -140,6 +140,8 @@ static void mouse_button_callback(GLFWwindow *window, int button, int action, in
     glfwGetCursorPos(window, &x, &y);
     scale_cursor_to_framebuffer(window, &x, &y);
 
+    ydebug("glfw: mouse_button b=%d act=%d at (%.1f,%.1f)", button, action, x, y);
+
     struct yetty_yui_event event = {0};
     if (action == GLFW_PRESS) {
         event.type = YETTY_YCORE_MOUSE_DOWN;
@@ -244,6 +246,13 @@ static void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 {
     struct yetty_ycore_xthread_event_pipe *pipe = pipe_of(window);
     struct yetty_yui_event event = {0};
+
+    /* Traced: on macOS a borderless-resizable window's live-drag enters an
+     * AppKit modal tracking loop that only surfaces resizes via this
+     * delegate — the timing here is the difference between "smooth" and
+     * "batched at drag end". Keep the trace so a bad-behaviour report can
+     * be diagnosed straight from the log without reinstrumenting. */
+    ydebug("glfw: framebuffer_size_callback %dx%d", width, height);
 
     if (!pipe) {
         return;

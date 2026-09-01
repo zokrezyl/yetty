@@ -35,10 +35,10 @@
 #include <GLFW/glfw3.h>
 #include <yetty/ytrace/ytrace.h>
 
-void yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
+int yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
 {
     if (!handle) {
-        return;
+        return 0;
     }
     /* Only the Wayland backend has an xdg_toplevel — and the runtime
      * platform may not be Wayland even on a Linux build (X11 fallback).
@@ -46,7 +46,7 @@ void yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
      * so just no-op here. */
     if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) {
         ydebug("wayland-move: not Wayland (platform=%d), no-op", glfwGetPlatform());
-        return;
+        return 0;
     }
 
     /* Cast the public GLFWwindow* to the private _GLFWwindow*. They
@@ -56,7 +56,7 @@ void yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
 
     if (!_glfw.wl.seat) {
         ydebug("wayland-move: no wl_seat — bailing");
-        return;
+        return 0;
     }
 
     /* GLFW has two CSD paths on Wayland:
@@ -81,7 +81,7 @@ void yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
         ydebug("wayland-move: no xdg_toplevel reachable "
                "(wl.xdg.toplevel=%p, wl.libdecor.frame=%p) — bailing",
                (void *)window->wl.xdg.toplevel, (void *)window->wl.libdecor.frame);
-        return;
+        return 0;
     }
 
     /* Same protocol call GLFW runs in src/wl_window.c:1565 to drag its
@@ -94,23 +94,24 @@ void yetty_yplatform_wayland_begin_interactive_move(GLFWwindow *handle)
     ydebug("wayland-move: xdg_toplevel_move(toplevel=%p, seat=%p, serial=%u)", (void *)toplevel,
            (void *)_glfw.wl.seat, (unsigned)_glfw.wl.serial);
     xdg_toplevel_move(toplevel, _glfw.wl.seat, _glfw.wl.serial);
+    return 1;
 }
 
-void yetty_yplatform_wayland_begin_interactive_resize(GLFWwindow *handle, unsigned int edge)
+int yetty_yplatform_wayland_begin_interactive_resize(GLFWwindow *handle, unsigned int edge)
 {
     if (!handle || edge == 0) {
-        return;
+        return 0;
     }
     if (glfwGetPlatform() != GLFW_PLATFORM_WAYLAND) {
         ydebug("wayland-resize: not Wayland (platform=%d), no-op", glfwGetPlatform());
-        return;
+        return 0;
     }
 
     _GLFWwindow *window = (_GLFWwindow *)handle;
 
     if (!_glfw.wl.seat) {
         ydebug("wayland-resize: no wl_seat — bailing");
-        return;
+        return 0;
     }
 
     /* Same toplevel-resolution dance as the move helper: direct xdg-shell
@@ -125,7 +126,7 @@ void yetty_yplatform_wayland_begin_interactive_resize(GLFWwindow *handle, unsign
     }
     if (!toplevel) {
         ydebug("wayland-resize: no xdg_toplevel reachable — bailing");
-        return;
+        return 0;
     }
 
     /* edge values match the xdg_toplevel.resize_edge wire enum exactly
@@ -134,4 +135,5 @@ void yetty_yplatform_wayland_begin_interactive_resize(GLFWwindow *handle, unsign
     ydebug("wayland-resize: xdg_toplevel_resize(toplevel=%p, seat=%p, serial=%u, edge=%u)",
            (void *)toplevel, (void *)_glfw.wl.seat, (unsigned)_glfw.wl.serial, edge);
     xdg_toplevel_resize(toplevel, _glfw.wl.seat, _glfw.wl.serial, edge);
+    return 1;
 }

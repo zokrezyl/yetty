@@ -113,6 +113,15 @@ struct YETTY_ANNOTATE("class@ychrome:chrome")
     float edge_size;      /* right/bottom resize border thickness (logical px)          */
     float width;          /* current window size (logical px); set via set_size()       */
     float height;
+    /* Logical→framebuffer conversion for the wire delta we hand to the
+     * window_chrome producer slots (resize_by / drag_by). Chrome hit-tests
+     * in logical pixels; the platform layer (ywindow-chrome/glfw.c) expects
+     * framebuffer-pixel deltas and scales them back to screen coords for
+     * glfwSetWindowSize/Pos. Without this multiply, a 1-logical-pixel move
+     * would send 1 fb-pixel = ½ screen pixel on a 2× Retina display, so the
+     * window edge lags behind the cursor at half speed. Set via
+     * yetty_ychrome_set_content_scale (defaults to 1.0). */
+    float content_scale;
     uint32_t flags; /* YETTY_YCHROME_FLAG_*                               */
 
     /* Drag (move) gesture state. */
@@ -222,7 +231,24 @@ static struct yetty_ycore_void_result chrome_configure(struct yetty_yclass_objec
     chrome->window_chrome = window_chrome;
     chrome->caption_height = caption_height > 0.0f ? caption_height : 0.0f;
     chrome->edge_size = edge_size > 0.0f ? edge_size : (float)YCHROME_DEFAULT_EDGE_PX;
+    if (chrome->content_scale <= 0.0f) {
+        chrome->content_scale = 1.0f;
+    }
     chrome->flags = flags;
+    return YETTY_OK_VOID();
+}
+
+/* Set the logical→framebuffer scale used when emitting resize/drag deltas
+ * to the platform. Plain function (not a virtual class method) so it can
+ * land without a codegen change — the host calls it at attach and after
+ * each resize with the fresh content_scale it captured. */
+struct yetty_ycore_void_result yetty_ychrome_set_content_scale(struct yetty_yclass_object *obj,
+                                                               float content_scale)
+{
+    struct yetty_yclass_void_ptr_result data_r = chrome_from_obj(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, data_r, "chrome set_content_scale: object");
+    struct yetty_ychrome_chrome *chrome = data_r.value;
+    chrome->content_scale = content_scale > 0.0f ? content_scale : 1.0f;
     return YETTY_OK_VOID();
 }
 
@@ -481,7 +507,11 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
                 step_dy = (int)(y - chrome->resize_anchor_y);
             }
             if (step_dx != 0 || step_dy != 0) {
-                wm_absorb(yetty_yplatform_window_chrome_resize_by(wm, step_dx, step_dy,
+                /* Chrome tracks in logical px; the wire delta is fb px. */
+                float scale = chrome->content_scale > 0.0f ? chrome->content_scale : 1.0f;
+                int fb_dx = (int)((float)step_dx * scale);
+                int fb_dy = (int)((float)step_dy * scale);
+                wm_absorb(yetty_yplatform_window_chrome_resize_by(wm, fb_dx, fb_dy,
                                                                   chrome->resize_edge));
             }
             return YETTY_OK(yetty_ycore_int, 1);
@@ -510,8 +540,12 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
             if (dx != 0 || dy != 0) {
                 /* Don't update the anchor: glfwSetWindowPos repositions
                  * absolutely, leaving the cursor at the anchor in the moved
-                 * frame; resetting would accumulate rounding error. */
-                wm_absorb(yetty_yplatform_window_chrome_drag_by(wm, dx, dy));
+                 * frame; resetting would accumulate rounding error.
+                 * Chrome tracks in logical px; the wire delta is fb px. */
+                float scale = chrome->content_scale > 0.0f ? chrome->content_scale : 1.0f;
+                int fb_dx = (int)((float)dx * scale);
+                int fb_dy = (int)((float)dy * scale);
+                wm_absorb(yetty_yplatform_window_chrome_drag_by(wm, fb_dx, fb_dy));
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }

@@ -10,13 +10,15 @@
 
 #include <yetty/yplatform/move-resize.h>
 
-void yetty_yplatform_wayland_begin_interactive_move(struct GLFWwindow *window)
+int yetty_yplatform_wayland_begin_interactive_move(struct GLFWwindow *window)
 {
     (void)window;
+    return 0;
 }
 
-void yetty_yplatform_wayland_begin_interactive_resize(struct GLFWwindow *window, unsigned int edge)
+int yetty_yplatform_wayland_begin_interactive_resize(struct GLFWwindow *window, unsigned int edge)
 {
     (void)window;
     (void)edge;
+    return 0;
 }
