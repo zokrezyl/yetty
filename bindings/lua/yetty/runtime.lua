@@ -78,9 +78,40 @@ function M.C()
   return clib
 end
 
+-- Lazily declared: `struct yetty_ycore_error` is cdef'd by
+-- yetty.generated._types, which loads AFTER this runtime module — a
+-- module-load-time cdef would see an incomplete struct and silently fail.
+local error_destroy_declared = false
+local function declare_error_destroy()
+  if not error_destroy_declared then
+    require("yetty.generated._types")
+    pcall(ffi.cdef, [[
+void yetty_ycore_error_destroy(struct yetty_ycore_error);
+]])
+    error_destroy_declared = true
+  end
+end
+
 function M.check(res)
   if res.ok == 0 then
     local msg = res.error.msg ~= nil and ffi.string(res.error.msg) or "yetty error"
+    -- Flatten the cause chain into the message, then DESTROY the native
+    -- chain: the Result contract makes the receiver own the heap-linked
+    -- causes — reading only the top message would leak one allocation per
+    -- cause on every failed call.
+    local cause = res.error.cause
+    local guard = 0
+    while cause ~= nil and guard < 64 do
+      if cause.msg ~= nil then
+        msg = msg .. "; caused by: " .. ffi.string(cause.msg)
+      end
+      cause = cause.cause
+      guard = guard + 1
+    end
+    declare_error_destroy()
+    pcall(function()
+      M.C().yetty_ycore_error_destroy(res.error)
+    end)
     error("yetty: " .. msg, 2)
   end
 end

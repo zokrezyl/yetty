@@ -20,7 +20,7 @@ func main() {
 	dlist.Add(ydraw.Circle{CenterX: 96, CenterY: 96, Radius: 64,
 		Fill: "#6BA892", Stroke: "#364A47", StrokeWidth: 2})
 	dlist.Add(ydraw.Box{CenterX: 280, CenterY: 96, HalfWidth: 72,
-		HalfHeight: 48, CornerRadius: 8, Fill: "#1E262C", Z: 1})
+		HalfHeight: 48, CornerRadius: 8, Fill: "#1E262C", Layer: 1})
 	dlist.Add(ydraw.Star{CenterX: 460, CenterY: 96, Radius: 56,
 		NumPoints: 5, InnerRatio: 0.45, Fill: "#74C5A5"})
 	dlist.Add(ydraw.Segment{StartX: 40, StartY: 180, EndX: 600, EndY: 180,

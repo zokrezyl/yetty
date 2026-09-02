@@ -378,6 +378,18 @@ classes:
         type: float
         get: true
         set: true
+      - name: layer
+        type: int32_t
+        get: true
+        set: true
+      - name: id
+        type: uint32_t
+        get: true
+        set: true
+      - name: chrome_group
+        type: uint32_t
+        get: true
+        set: true
       - name: source
         type: "char *"
         get: false

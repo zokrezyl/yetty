@@ -19,7 +19,7 @@ dlist:add(ydraw.Circle{center_x = 96, center_y = 96, radius = 64,
                        stroke_width = 2})
 dlist:add(ydraw.Box{center_x = 280, center_y = 96, half_width = 72,
                     half_height = 48, corner_radius = 8,
-                    fill = "#1E262C", z = 1})
+                    fill = "#1E262C", layer = 1})
 dlist:add(ydraw.Star{center_x = 460, center_y = 96, radius = 56,
                      num_points = 5, inner_ratio = 0.45,
                      fill = "#74C5A5"})

@@ -13,15 +13,17 @@ selection, input forwarding — and composes the content layer
 
 A `struct yetty_yterminal_terminal` (`include/yetty/yterminal/terminal.h`) owns:
 
-- **One content layer** — `terminal->layer`, implemented by
-  `yetty_yvterm_content_layer`. This wraps terminal text and row-anchored ydraw
-  content; it is not the old public stack of sibling layers.
+- **One content figure** — the `yvterm:vterm` figure (seated as the lowest-z,
+  protected child of the root container), composing the `yvterm:grid` model:
   - **text grid** — one `VTerm` (libvterm): primary + alt buffers, scrollback,
     cursor. Driven by PTY bytes (text + CSI/OSC).
-  - **ydraw canvas** — a scrolling canvas of SDF/MSDF primitives anchored to
-    terminal rows. Driven by DCS drawing commands.
-- **A root `yfigure` container** — hosts rich content (ygui, ymgui, yrdawn
-  canvases, ygrid, yplot, …) and renders **after** the content layer by z-order.
+  - **rolling rich store** — addressable rich BLOCKS (SDF/MSDF records,
+    figures, named groups) anchored to terminal rows. Driven by DCS drawing
+    commands (`GROUP`/`DELETE`/`UPDATE` included); each complete envelope is
+    validated before any mutation. See [yvterm](../yvterm/README.md).
+- **A root `yfigure` container** — hosts producer figures (yscene scenes,
+  ygui, ymgui, yrdawn canvases, …) stacked above the content figure by
+  z-order.
 - **A wire state machine** — `ywire` framer/dispatcher that routes incoming
   OSC/DCS envelopes to raw text, the ydraw canvas, yclass RPC, or the root
   `yfigure` compositor.
@@ -35,14 +37,15 @@ changed (see [yrender](../yrender/README.md)).
 
 ```
 PTY bytes ─┬─ raw text → libvterm → text grid (dirty)
-           └─ OSC/DCS → ywire dispatch ─┬─ ydraw canvas (dirty)
+           └─ OSC/DCS → ywire dispatch ─┬─ yvterm rich store (dirty)
                                         ├─ yclass RPC
                                         └─ yfigure records → root container (dirty)
 
 per frame:  clear the shared target once (root event handler)
-            render the content layer directly into the target
-              (text grid, ydraw canvas, shader-glyph figure)
-            render the root yfigure container LAST, by z-order
+            one root-container walk, back to front by z-order:
+              the vterm figure (lowest z: text grid, per-block rich
+              records + figures, shader glyphs), then every producer
+              figure above it
             present (or copy to VNC / readback when headless)
 ```
 
@@ -82,8 +85,7 @@ the primitive-side detail is in [ydraw](../ydraw/README.md).
 
 - Terminal: `include/yetty/yterminal/terminal.h`,
   `src/yetty/yterminal/terminal.c`
-- Content layer: `include/yetty/yvterm/content-layer.h`,
-  `src/yetty/yvterm/content-layer.c`
-- Text grid: `src/yetty/yvterm/text-layer.c`
-- ydraw canvas: `src/yetty/yvterm/ydraw-content.c`
+- Content figure + grid model: `src/yetty/yvterm/vterm.c`,
+  `src/yetty/yvterm/grid.c`
+- Rolling rich store: `src/yetty/yvterm/rich-store.c`
 - Figure container: `src/yetty/yfigure/container.c`

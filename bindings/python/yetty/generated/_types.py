@@ -265,7 +265,7 @@ yetty_ycore_buffer._fields_ = [("data", c_void_p), ("capacity", c_size_t), ("siz
 
 class yetty_ycore_char_ptr_result_u1(Union):
     pass
-yetty_ycore_char_ptr_result_u1._fields_ = [("value", c_char_p), ("error", yetty_ycore_error)]
+yetty_ycore_char_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
 class yetty_ycore_char_ptr_result(Structure):
     pass
 yetty_ycore_char_ptr_result._anonymous_ = ('_anon1',)
@@ -371,14 +371,6 @@ class yetty_ycore_xthread_event_pipe_ptr_result(Structure):
 yetty_ycore_xthread_event_pipe_ptr_result._anonymous_ = ('_anon1',)
 yetty_ycore_xthread_event_pipe_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ycore_xthread_event_pipe_ptr_result_u1)]
 
-class yetty_ydraw_complex_const_ptr_ptr_result_u1(Union):
-    pass
-yetty_ydraw_complex_const_ptr_ptr_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
-class yetty_ydraw_complex_const_ptr_ptr_result(Structure):
-    pass
-yetty_ydraw_complex_const_ptr_ptr_result._anonymous_ = ('_anon1',)
-yetty_ydraw_complex_const_ptr_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ydraw_complex_const_ptr_ptr_result_u1)]
-
 class yetty_ydraw_drawable_list_result_u1(Union):
     pass
 yetty_ydraw_drawable_list_result_u1._fields_ = [("value", c_void_p), ("error", yetty_ycore_error)]
@@ -386,10 +378,6 @@ class yetty_ydraw_drawable_list_result(Structure):
     pass
 yetty_ydraw_drawable_list_result._anonymous_ = ('_anon1',)
 yetty_ydraw_drawable_list_result._fields_ = [("ok", c_int), ("_anon1", yetty_ydraw_drawable_list_result_u1)]
-
-class yetty_ydraw_stream_registry(Structure):
-    pass
-yetty_ydraw_stream_registry._fields_ = [("targets", (c_void_p * 16))]
 
 class yetty_yevent_event_listener(Structure):
     pass
@@ -463,6 +451,14 @@ class yetty_ygit_status_ptr_result(Structure):
 yetty_ygit_status_ptr_result._anonymous_ = ('_anon1',)
 yetty_ygit_status_ptr_result._fields_ = [("ok", c_int), ("_anon1", yetty_ygit_status_ptr_result_u1)]
 
+class yetty_ygui2_layout(Structure):
+    pass
+yetty_ygui2_layout._fields_ = [("basis", c_float), ("grow", c_float), ("cross_size", c_float), ("min_main", c_float), ("direction", c_uint32), ("gap", c_float), ("pad_left", c_float), ("pad_top", c_float), ("pad_right", c_float), ("pad_bottom", c_float)]
+
+class yetty_ygui2_theme(Structure):
+    pass
+yetty_ygui2_theme._fields_ = [("bg", c_uint32), ("bg_lifted", c_uint32), ("bg_row", c_uint32), ("border", c_uint32), ("text_muted", c_uint32), ("text_secondary", c_uint32), ("text_primary", c_uint32), ("accent_deep", c_uint32), ("accent", c_uint32), ("accent_bright", c_uint32)]
+
 class yetty_ygui_input_state(Structure):
     pass
 yetty_ygui_input_state._fields_ = [("st", c_int), ("params", (c_char * 16)), ("params_len", c_int)]
@@ -533,7 +529,7 @@ yetty_ymux_tty._fields_ = [("caps", yetty_ymux_tty_caps), ("term", c_void_p), ("
 
 class yetty_ymux_tty_term(Structure):
     pass
-yetty_ymux_tty_term._fields_ = [("name", (c_char * 64)), ("strings", (c_char_p * 46)), ("colors", c_int), ("bools", (c_uint8 * 3)), ("loaded_from_db", c_uint), ("bools_loaded", c_uint)]
+yetty_ymux_tty_term._fields_ = [("name", (c_char * 64)), ("strings", (c_void_p * 46)), ("colors", c_int), ("bools", (c_uint8 * 3)), ("loaded_from_db", c_uint), ("bools_loaded", c_uint)]
 
 class yetty_yplatform_gpu_context(Structure):
     pass
@@ -708,7 +704,19 @@ yetty_yui_view._fields_ = [("ops", c_void_p), ("id", c_void_p), ("bounds", yetty
 
 class yetty_yvterm_line(Structure):
     pass
-yetty_yvterm_line._fields_ = [("text_cells", c_void_p), ("primitives", c_void_p), ("primitive_count", c_uint32), ("primitive_capacity", c_uint32), ("arena", c_void_p), ("arena_count", c_uint32), ("arena_capacity", c_uint32), ("complexes", c_void_p), ("complex_count", c_uint32), ("complex_capacity", c_uint32), ("rich_span_rows", c_uint32), ("envelope_count", c_uint32), ("view_stamp", c_uint32), ("dirty", c_int), ("continuation", c_int)]
+yetty_yvterm_line._fields_ = [("text_cells", c_void_p), ("rich_blocks", c_void_p), ("rich_block_count", c_uint32), ("rich_block_capacity", c_uint32), ("rich_coverage_count", c_uint32), ("view_stamp", c_uint32), ("dirty", c_int), ("continuation", c_int)]
+
+class yetty_yvterm_paint_plan(Structure):
+    pass
+yetty_yvterm_paint_plan._fields_ = [("leaves", c_void_p), ("leaf_count", c_uint32), ("leaf_capacity", c_uint32), ("built_stamp", c_uint64), ("built", c_int), ("build_count", c_uint64)]
+
+class yetty_yvterm_rich_handle(Structure):
+    pass
+yetty_yvterm_rich_handle._fields_ = [("slot", c_uint32), ("generation", c_uint32)]
+
+class yetty_yvterm_rich_store(Structure):
+    pass
+yetty_yvterm_rich_store._fields_ = [("blocks", c_void_p), ("block_capacity", c_uint32), ("free_slots", c_void_p), ("free_count", c_uint32), ("free_capacity", c_uint32), ("next_paint_sequence", c_uint64), ("live_count", c_uint32), ("ambient_paint_z", (c_int32 * 8)), ("ambient_paint_z_depth", c_uint32), ("ambient_paint_z_overflow", c_uint32), ("paint_generation", (c_uint64 * 3)), ("journal_bytes_used", c_size_t), ("journal_bytes_budget", c_size_t)]
 
 class yetty_yvterm_screen(Structure):
     pass
@@ -732,7 +740,7 @@ yetty_yvterm_tier_cache_entry._fields_ = [("valid", c_int), ("zombie", c_int), (
 
 class yetty_yvterm_tiers(Structure):
     pass
-yetty_yvterm_tiers._fields_ = [("segments", c_void_p), ("segment_head", c_uint32), ("segment_count", c_uint32), ("segment_capacity", c_uint32), ("builder", yetty_yvterm_tier_builder), ("archived_lines", c_uint64), ("dropped_lines", c_uint64), ("warm_bytes_used", c_size_t), ("warm_bytes_budget", c_size_t), ("file_bytes_budget", c_uint64), ("total_line_cap", c_uint64), ("spill_file", c_void_p), ("spill_file_size", c_uint64), ("spill_disabled", c_int), ("rich_clear_watermark", c_uint64), ("cache", (yetty_yvterm_tier_cache_entry * 4)), ("cache_tick", c_uint64), ("memtag", c_void_p), ("live_pin_stamp", c_uint32)]
+yetty_yvterm_tiers._fields_ = [("segments", c_void_p), ("segment_head", c_uint32), ("segment_count", c_uint32), ("segment_capacity", c_uint32), ("builder", yetty_yvterm_tier_builder), ("archived_lines", c_uint64), ("dropped_lines", c_uint64), ("warm_bytes_used", c_size_t), ("warm_bytes_budget", c_size_t), ("file_bytes_budget", c_uint64), ("total_line_cap", c_uint64), ("spill_file", c_void_p), ("spill_file_size", c_uint64), ("spill_disabled", c_int), ("rich_clear_watermark", c_uint64), ("cache", (yetty_yvterm_tier_cache_entry * 4)), ("cache_tick", c_uint64), ("memtag", c_void_p), ("live_pin_stamp", c_uint32), ("rich_store", c_void_p)]
 
 class ymusic_staff(Structure):
     pass

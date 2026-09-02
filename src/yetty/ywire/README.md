@@ -96,7 +96,7 @@ DCS carries the `6xxxxx`/`8xxxxx` bulk + RPC traffic; OSC carries the
 | Code | Name | Args | Direction | Handler | Purpose |
 |---|---|---|---|---|---|
 | `600000` | `YETTY_DCS_YDRAW_CLEAR` | — | client → server | ydraw canvas | Clear the ydraw canvas (empty body). |
-| `600001` | `YETTY_DCS_YDRAW_BIN` | `yetty_yface_bin_meta` | client → server | ydraw canvas | Binary ydraw primitive batch (flat list). Used by ypdf, `ycat` svg, … |
+| `600001` | `YETTY_DCS_YDRAW_BIN` | `yetty_yface_bin_meta` | client → server | yvterm rich store | Binary ydraw batch. Anonymous records anchor at the cursor; `CMD_GROUP(id, body)` opens a named entity (re-emitting a live id replaces in place), `CMD_DELETE(id)` removes a subtree, `CMD_UPDATE(id, …)` targets a live figure. The complete envelope is validated before any mutation. Used by ypdf, `ycat` svg, the group demos, … |
 | `600002` | `YETTY_DCS_YDRAW_YAML` | — | client → server | (defined; not wired in the terminal today) | YAML-text ydraw payload. |
 | `600003` | `YETTY_DCS_YDRAW_OVERLAY` | `yetty_yface_bin_meta` | client → server | ydraw canvas | Overlay variant of the binary batch. |
 | `600004` | `YETTY_DCS_YDRAW_SCENE_BIN` | `yetty_yface_bin_meta` | client → server | scene-canvas | Entity-scoped (ygui) batch — scene-canvas with GROUP/DELETE incremental updates, so producers re-emit only dirty widgets. |

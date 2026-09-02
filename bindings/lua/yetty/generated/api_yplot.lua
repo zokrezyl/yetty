@@ -19,6 +19,12 @@ struct float_result yetty_api_yplot_plot_width_get(struct yetty_yclass_object *)
 struct yetty_ycore_void_result yetty_api_yplot_plot_width_set(struct yetty_yclass_object *, float);
 struct float_result yetty_api_yplot_plot_height_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_api_yplot_plot_height_set(struct yetty_yclass_object *, float);
+struct yetty_ycore_int_result yetty_api_yplot_plot_layer_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_api_yplot_plot_layer_set(struct yetty_yclass_object *, int32_t);
+struct uint32_result yetty_api_yplot_plot_id_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_api_yplot_plot_id_set(struct yetty_yclass_object *, uint32_t);
+struct uint32_result yetty_api_yplot_plot_chrome_group_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_api_yplot_plot_chrome_group_set(struct yetty_yclass_object *, uint32_t);
 struct yetty_ycore_void_result yetty_api_yplot_set_name(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_api_yplot_set_color(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_api_yplot_set_body(struct yetty_yclass_object *, const char *);
@@ -371,6 +377,39 @@ Plot.__prop_set.height = function(obj, value)
   local res = rt.C().yetty_api_yplot_plot_height_set(obj.handle, value)
   rt.check(res)
 end
+Plot.__prop_get.layer = function(obj)
+  rt.live(obj, "Plot.layer")
+  local res = rt.C().yetty_api_yplot_plot_layer_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Plot.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Plot.layer")
+  local res = rt.C().yetty_api_yplot_plot_layer_set(obj.handle, value)
+  rt.check(res)
+end
+Plot.__prop_get.id = function(obj)
+  rt.live(obj, "Plot.id")
+  local res = rt.C().yetty_api_yplot_plot_id_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Plot.__prop_set.id = function(obj, value)
+  rt.live(obj, "Plot.id")
+  local res = rt.C().yetty_api_yplot_plot_id_set(obj.handle, value)
+  rt.check(res)
+end
+Plot.__prop_get.chrome_group = function(obj)
+  rt.live(obj, "Plot.chrome_group")
+  local res = rt.C().yetty_api_yplot_plot_chrome_group_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Plot.__prop_set.chrome_group = function(obj, value)
+  rt.live(obj, "Plot.chrome_group")
+  local res = rt.C().yetty_api_yplot_plot_chrome_group_set(obj.handle, value)
+  rt.check(res)
+end
 Plot.__destroy_sym = "yetty_api_yplot_destroy"
 Plot.__spec = {
   primary = "set_expression",
@@ -388,7 +427,10 @@ Plot.__spec = {
     y_range = { fn = "set_y_range", n = 2 },
   },
   props = {
+    chrome_group = true,
     height = true,
+    id = true,
+    layer = true,
     width = true,
     x = true,
     y = true,

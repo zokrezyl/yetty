@@ -28,8 +28,11 @@ package ydraw
 // struct yetty_yclass_object_ptr_result yetty_api_yplot_curve_create(void *ctx);
 // struct yetty_ycore_void_result yetty_api_yplot_destroy(struct yetty_yclass_object *obj);
 // struct yetty_yclass_object_ptr_result yetty_api_yplot_function_create(void *ctx);
+// struct yetty_ycore_void_result yetty_api_yplot_plot_chrome_group_set(struct yetty_yclass_object *obj, uint32_t value);
 // struct yetty_yclass_object_ptr_result yetty_api_yplot_plot_create(void *ctx);
 // struct yetty_ycore_void_result yetty_api_yplot_plot_height_set(struct yetty_yclass_object *obj, float value);
+// struct yetty_ycore_void_result yetty_api_yplot_plot_id_set(struct yetty_yclass_object *obj, uint32_t value);
+// struct yetty_ycore_void_result yetty_api_yplot_plot_layer_set(struct yetty_yclass_object *obj, int32_t value);
 // struct yetty_ycore_void_result yetty_api_yplot_plot_width_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_api_yplot_plot_x_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_api_yplot_plot_y_set(struct yetty_yclass_object *obj, float value);
@@ -51,6 +54,8 @@ package ydraw
 // struct yetty_ycore_void_result yetty_yclass_object_free(struct yetty_yclass_object *obj);
 // struct yetty_yclass_object_ptr_result yetty_ycomplex2_image_create(void *ctx);
 // struct yetty_ycore_void_result yetty_ycomplex2_image_height_set(struct yetty_yclass_object *obj, float value);
+// struct yetty_ycore_void_result yetty_ycomplex2_image_id_set(struct yetty_yclass_object *obj, uint32_t value);
+// struct yetty_ycore_void_result yetty_ycomplex2_image_layer_set(struct yetty_yclass_object *obj, int32_t value);
 // struct yetty_ycore_void_result yetty_ycomplex2_image_width_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_ycomplex2_image_x_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_ycomplex2_image_y_set(struct yetty_yclass_object *obj, float value);
@@ -58,6 +63,8 @@ package ydraw
 // struct yetty_yclass_object_ptr_result yetty_ycomplex2_mesh_create(void *ctx);
 // struct yetty_ycore_void_result yetty_ycomplex2_mesh_elevation_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_ycomplex2_mesh_height_set(struct yetty_yclass_object *obj, float value);
+// struct yetty_ycore_void_result yetty_ycomplex2_mesh_id_set(struct yetty_yclass_object *obj, uint32_t value);
+// struct yetty_ycore_void_result yetty_ycomplex2_mesh_layer_set(struct yetty_yclass_object *obj, int32_t value);
 // struct yetty_ycore_void_result yetty_ycomplex2_mesh_width_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_ycomplex2_mesh_wireframe_set(struct yetty_yclass_object *obj, uint32_t value);
 // struct yetty_ycore_void_result yetty_ycomplex2_mesh_x_set(struct yetty_yclass_object *obj, float value);
@@ -70,6 +77,8 @@ package ydraw
 // struct yetty_ycore_void_result yetty_ycomplex2_set_wgsl_path(struct yetty_yclass_object *obj, const char *value);
 // struct yetty_yclass_object_ptr_result yetty_ycomplex2_shadertoy_create(void *ctx);
 // struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_height_set(struct yetty_yclass_object *obj, float value);
+// struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_id_set(struct yetty_yclass_object *obj, uint32_t value);
+// struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_layer_set(struct yetty_yclass_object *obj, int32_t value);
 // struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_width_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_x_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_y_set(struct yetty_yclass_object *obj, float value);
@@ -77,6 +86,7 @@ package ydraw
 // __attribute__((weak)) struct yetty_ycore_void_result yetty_ycomplex2_video_fps_set(struct yetty_yclass_object *obj, float value);
 // __attribute__((weak)) struct yetty_ycore_void_result yetty_ycomplex2_video_height_set(struct yetty_yclass_object *obj, float value);
 // __attribute__((weak)) struct yetty_ycore_void_result yetty_ycomplex2_video_id_set(struct yetty_yclass_object *obj, uint32_t value);
+// __attribute__((weak)) struct yetty_ycore_void_result yetty_ycomplex2_video_layer_set(struct yetty_yclass_object *obj, int32_t value);
 // __attribute__((weak)) struct yetty_ycore_void_result yetty_ycomplex2_video_video_h_set(struct yetty_yclass_object *obj, uint32_t value);
 // __attribute__((weak)) struct yetty_ycore_void_result yetty_ycomplex2_video_video_w_set(struct yetty_yclass_object *obj, uint32_t value);
 // __attribute__((weak)) struct yetty_ycore_void_result yetty_ycomplex2_video_width_set(struct yetty_yclass_object *obj, float value);
@@ -86,6 +96,7 @@ package ydraw
 // struct yetty_ycore_void_result yetty_ydrawlist2_dcs_emit(struct yetty_yclass_object *obj);
 // struct yetty_ycore_void_result yetty_ydrawlist2_destroy(struct yetty_yclass_object *obj);
 // struct yetty_yclass_object_ptr_result yetty_ydrawlist2_drawable_list_create(void *ctx);
+// struct yetty_ycore_void_result yetty_ydrawlist2_end_group(struct yetty_yclass_object *obj);
 // struct yetty_yclass_object_ptr_result yetty_ydrawlist2_font_create(void *ctx);
 // struct yetty_ycore_void_result yetty_ydrawlist2_font_font_id_set(struct yetty_yclass_object *obj, int32_t value);
 // struct yetty_ycore_void_result yetty_ydrawlist2_set_body(struct yetty_yclass_object *obj, const char *value);
@@ -95,12 +106,12 @@ package ydraw
 // struct yetty_ycore_void_result yetty_ydrawlist2_set_stroke(struct yetty_yclass_object *obj, const char *value);
 // struct yetty_yclass_object_ptr_result yetty_ydrawlist2_shape_create(void *ctx);
 // struct yetty_ycore_void_result yetty_ydrawlist2_shape_id_set(struct yetty_yclass_object *obj, uint32_t value);
+// struct yetty_ycore_void_result yetty_ydrawlist2_shape_layer_set(struct yetty_yclass_object *obj, int32_t value);
 // struct yetty_ycore_void_result yetty_ydrawlist2_shape_stroke_width_set(struct yetty_yclass_object *obj, float value);
-// struct yetty_ycore_void_result yetty_ydrawlist2_shape_z_set(struct yetty_yclass_object *obj, uint32_t value);
 // struct yetty_yclass_object_ptr_result yetty_ydrawlist2_text_create(void *ctx);
 // struct yetty_ycore_void_result yetty_ydrawlist2_text_font_id_set(struct yetty_yclass_object *obj, int32_t value);
 // struct yetty_ycore_void_result yetty_ydrawlist2_text_font_size_set(struct yetty_yclass_object *obj, float value);
-// struct yetty_ycore_void_result yetty_ydrawlist2_text_layer_set(struct yetty_yclass_object *obj, uint32_t value);
+// struct yetty_ycore_void_result yetty_ydrawlist2_text_layer_set(struct yetty_yclass_object *obj, int32_t value);
 // struct yetty_ycore_void_result yetty_ydrawlist2_text_rotation_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_ydrawlist2_text_x_set(struct yetty_yclass_object *obj, float value);
 // struct yetty_ycore_void_result yetty_ydrawlist2_text_y_set(struct yetty_yclass_object *obj, float value);
@@ -370,7 +381,7 @@ type Text struct {
 	X float64
 	Y float64
 	FontSize float64
-	Layer uint32
+	Layer int32
 	FontID int32
 	Rotation float64
 }
@@ -417,7 +428,7 @@ func (value Text) materialize() (*C.struct_yetty_yclass_object, error) {
 		}
 	}
 	if value.Layer != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_text_layer_set(object, C.uint32_t(value.Layer))); err != nil {
+		if err := applyVoid(C.yetty_ydrawlist2_text_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -446,7 +457,7 @@ type Shape struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -479,8 +490,8 @@ func (value Shape) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -506,7 +517,7 @@ type Circle struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -557,8 +568,8 @@ func (value Circle) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -586,7 +597,7 @@ type Box struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -649,8 +660,8 @@ func (value Box) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -677,7 +688,7 @@ type Segment struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -734,8 +745,8 @@ func (value Segment) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -764,7 +775,7 @@ type Triangle struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -833,8 +844,8 @@ func (value Triangle) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -861,7 +872,7 @@ type Ellipse struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -918,8 +929,8 @@ func (value Ellipse) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -948,7 +959,7 @@ type Arc struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1017,8 +1028,8 @@ func (value Arc) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1049,7 +1060,7 @@ type RoundedBox struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1130,8 +1141,8 @@ func (value RoundedBox) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1158,7 +1169,7 @@ type Rhombus struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1215,8 +1226,8 @@ func (value Rhombus) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1242,7 +1253,7 @@ type Pentagon struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1293,8 +1304,8 @@ func (value Pentagon) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1320,7 +1331,7 @@ type Hexagon struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1371,8 +1382,8 @@ func (value Hexagon) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1400,7 +1411,7 @@ type Star struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1463,8 +1474,8 @@ func (value Star) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1492,7 +1503,7 @@ type Pie struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1555,8 +1566,8 @@ func (value Pie) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1585,7 +1596,7 @@ type Ring struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1654,8 +1665,8 @@ func (value Ring) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1681,7 +1692,7 @@ type Heart struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1732,8 +1743,8 @@ func (value Heart) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1761,7 +1772,7 @@ type Cross struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1824,8 +1835,8 @@ func (value Cross) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1852,7 +1863,7 @@ type RoundedX struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -1909,8 +1920,8 @@ func (value RoundedX) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -1938,7 +1949,7 @@ type Capsule struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2001,8 +2012,8 @@ func (value Capsule) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2030,7 +2041,7 @@ type Moon struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2093,8 +2104,8 @@ func (value Moon) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2121,7 +2132,7 @@ type Egg struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2178,8 +2189,8 @@ func (value Egg) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2205,7 +2216,7 @@ type Octogon struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2256,8 +2267,8 @@ func (value Octogon) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2283,7 +2294,7 @@ type Hexagram struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2334,8 +2345,8 @@ func (value Hexagram) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2361,7 +2372,7 @@ type Pentagram struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2412,8 +2423,8 @@ func (value Pentagram) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2447,7 +2458,7 @@ type LinearGradientBox struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2546,8 +2557,8 @@ func (value LinearGradientBox) materialize() (*C.struct_yetty_yclass_object, err
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2580,7 +2591,7 @@ type RadialGradientBox struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2673,8 +2684,8 @@ func (value RadialGradientBox) materialize() (*C.struct_yetty_yclass_object, err
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2701,7 +2712,7 @@ type Sphere3d struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2758,8 +2769,8 @@ func (value Sphere3d) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2788,7 +2799,7 @@ type Box3d struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2857,8 +2868,8 @@ func (value Box3d) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2886,7 +2897,7 @@ type Torus3d struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -2949,8 +2960,8 @@ func (value Torus3d) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -2978,7 +2989,7 @@ type Cylinder3d struct {
 	Fill string
 	Stroke string
 	ID uint32
-	Z uint32
+	Layer int32
 	StrokeWidth float64
 }
 
@@ -3041,8 +3052,8 @@ func (value Cylinder3d) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
-	if value.Z != 0 {
-		if err := applyVoid(C.yetty_ydrawlist2_shape_z_set(object, C.uint32_t(value.Z))); err != nil {
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ydrawlist2_shape_layer_set(object, C.int32_t(value.Layer))); err != nil {
 			_ = applyVoid(C.yetty_yclass_object_free(object))
 			return nil, err
 		}
@@ -3214,6 +3225,9 @@ type Plot struct {
 	Y float64
 	Width float64
 	Height float64
+	Layer int32
+	ID uint32
+	ChromeGroup uint32
 }
 
 func (value Plot) materialize() (*C.struct_yetty_yclass_object, error) {
@@ -3369,6 +3383,24 @@ func (value Plot) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_api_yplot_plot_layer_set(object, C.int32_t(value.Layer))); err != nil {
+			_ = applyVoid(C.yetty_api_yplot_destroy(object))
+			return nil, err
+		}
+	}
+	if value.ID != 0 {
+		if err := applyVoid(C.yetty_api_yplot_plot_id_set(object, C.uint32_t(value.ID))); err != nil {
+			_ = applyVoid(C.yetty_api_yplot_destroy(object))
+			return nil, err
+		}
+	}
+	if value.ChromeGroup != 0 {
+		if err := applyVoid(C.yetty_api_yplot_plot_chrome_group_set(object, C.uint32_t(value.ChromeGroup))); err != nil {
+			_ = applyVoid(C.yetty_api_yplot_destroy(object))
+			return nil, err
+		}
+	}
 	return object, nil
 }
 
@@ -3383,6 +3415,8 @@ type Image struct {
 	Y float64
 	Width float64
 	Height float64
+	Layer int32
+	ID uint32
 }
 
 func (value Image) materialize() (*C.struct_yetty_yclass_object, error) {
@@ -3423,6 +3457,18 @@ func (value Image) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ycomplex2_image_layer_set(object, C.int32_t(value.Layer))); err != nil {
+			_ = applyVoid(C.yetty_yclass_object_free(object))
+			return nil, err
+		}
+	}
+	if value.ID != 0 {
+		if err := applyVoid(C.yetty_ycomplex2_image_id_set(object, C.uint32_t(value.ID))); err != nil {
+			_ = applyVoid(C.yetty_yclass_object_free(object))
+			return nil, err
+		}
+	}
 	return object, nil
 }
 
@@ -3441,6 +3487,8 @@ type Mesh struct {
 	Elevation float64
 	Zoom float64
 	Wireframe bool
+	Layer int32
+	ID uint32
 }
 
 func (value Mesh) materialize() (*C.struct_yetty_yclass_object, error) {
@@ -3505,6 +3553,18 @@ func (value Mesh) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ycomplex2_mesh_layer_set(object, C.int32_t(value.Layer))); err != nil {
+			_ = applyVoid(C.yetty_yclass_object_free(object))
+			return nil, err
+		}
+	}
+	if value.ID != 0 {
+		if err := applyVoid(C.yetty_ycomplex2_mesh_id_set(object, C.uint32_t(value.ID))); err != nil {
+			_ = applyVoid(C.yetty_yclass_object_free(object))
+			return nil, err
+		}
+	}
 	return object, nil
 }
 
@@ -3520,6 +3580,8 @@ type Shadertoy struct {
 	Y float64
 	Width float64
 	Height float64
+	Layer int32
+	ID uint32
 }
 
 func (value Shadertoy) materialize() (*C.struct_yetty_yclass_object, error) {
@@ -3569,6 +3631,18 @@ func (value Shadertoy) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ycomplex2_shadertoy_layer_set(object, C.int32_t(value.Layer))); err != nil {
+			_ = applyVoid(C.yetty_yclass_object_free(object))
+			return nil, err
+		}
+	}
+	if value.ID != 0 {
+		if err := applyVoid(C.yetty_ycomplex2_shadertoy_id_set(object, C.uint32_t(value.ID))); err != nil {
+			_ = applyVoid(C.yetty_yclass_object_free(object))
+			return nil, err
+		}
+	}
 	return object, nil
 }
 
@@ -3587,6 +3661,7 @@ type Video struct {
 	VideoW uint32
 	VideoH uint32
 	FPS float64
+	Layer int32
 }
 
 func (value Video) materialize() (*C.struct_yetty_yclass_object, error) {
@@ -3654,6 +3729,12 @@ func (value Video) materialize() (*C.struct_yetty_yclass_object, error) {
 			return nil, err
 		}
 	}
+	if value.Layer != 0 {
+		if err := applyVoid(C.yetty_ycomplex2_video_layer_set(object, C.int32_t(value.Layer))); err != nil {
+			_ = applyVoid(C.yetty_yclass_object_free(object))
+			return nil, err
+		}
+	}
 	return object, nil
 }
 
@@ -3693,6 +3774,15 @@ func (list *DrawableList) Add(drawable Drawable) {
 	err = applyVoid(C.yetty_ydrawlist2_add(list.handle, object))
 	drawable.release(object)
 	if err != nil {
+		panic(err)
+	}
+}
+
+func (list *DrawableList) EndGroup() {
+	if list.handle == nil {
+		panic("DrawableList: already destroyed")
+	}
+	if err := applyVoid(C.yetty_ydrawlist2_end_group(list.handle)); err != nil {
 		panic(err)
 	}
 }

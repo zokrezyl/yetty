@@ -2487,6 +2487,9 @@ void vterm_state_reset(VTermState *state, int hard)
     VTermRect rect = { 0, state->rows, 0, state->cols };
     erase(state, rect, 0);
   }
+
+  if(state->callbacks && state->callbacks->reset)
+    (*state->callbacks->reset)(hard, state->cbdata);
 }
 
 void vterm_state_get_cursorpos(const VTermState *state, VTermPos *cursorpos)

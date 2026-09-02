@@ -37,6 +37,8 @@ set(YETTY_FFI_WHOLE_ARCHIVE_TARGETS
     yetty_api_ysdf2      # their generated stubs + class accessors
     yetty_ycomplex2      # v2 complex-kind drawables (image/mesh/shadertoy/video)
     yetty_api_ycomplex2
+    yetty_ygui2          # drawable-contract widget toolkit (PTY producer, GPU-less)
+    yetty_api_ygui2      # its generated stubs + class accessors
 )
 
 # The real render/compute dependency targets are pulled normally to satisfy

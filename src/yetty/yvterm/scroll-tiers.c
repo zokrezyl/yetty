@@ -15,6 +15,7 @@
  * a cached line scrolls back into view.
  */
 #include <inttypes.h>
+#include <math.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
@@ -23,6 +24,8 @@
 
 #include <yetty/ycore/memtag.h>
 #include <yetty/ycore/result.h>
+#include <yetty/ydraw-list/cmds.h>
+#include <yetty/ysdf/types.gen.h>
 #include <yetty/ytrace/ytrace.h>
 #include "yetty/gen/impl/yvterm/grid.h"
 
@@ -32,15 +35,20 @@
  * header-clash avoidance as grid.c). */
 bool yetty_ydraw_is_complex(uint32_t type);
 
-/* Serialized line header, in u32 words. */
+/* Serialized line header, in u32 words (format v2: the rich content is a
+ * list of BLOCKS — span + records + arena each — instead of the old
+ * line-wide primitive/arena/span triple). */
 enum {
     LINE_WORD_FLAGS = 0,
     LINE_WORD_STORED_COLS = 1,
     LINE_WORD_ORIGINAL_COLS = 2,
     LINE_WORD_RUN_COUNT = 3,
-    LINE_WORD_PRIMITIVE_COUNT = 4,
-    LINE_WORD_ARENA_COUNT = 5,
-    LINE_WORD_RICH_SPAN = 6,
+    LINE_WORD_RICH_BLOCK_COUNT = 4,
+    /* Total u32 words of all serialized rich blocks trailing the cell runs
+     * (headers + record descriptors + arenas), so the record size validates
+     * before walking the variable-length blocks. */
+    LINE_WORD_RICH_WORDS = 5,
+    LINE_WORD_RESERVED = 6,
     /* Total combining-mark words trailing the cell runs (one block per run
      * whose representative cell carries marks). Kept in the header so a line
      * record's size can be validated before walking the variable-length
@@ -54,7 +62,43 @@ enum {
      * far under 2^24). The marks follow the run's CELL_RUN_WORDS. */
     CELL_RUN_REPEAT_MASK = 0x00FFFFFFu,
     CELL_RUN_MARK_SHIFT = 24,
+    /* Per-block sub-header words: span_rows, record_count, arena_count.
+     * The block's arena words follow the descriptors verbatim. Bytes-less
+     * runtime-only records serialize with word_count 0 and decode to
+     * nothing renderable — their runtimes died with the hot line. */
+    RICH_BLOCK_HEADER_WORDS = 3,
+    /* v5 descriptor: arena_offset, word_count, journal_words, record kind,
+     * paint_z (i32 bits), paint_sequence lo, paint_sequence hi,
+     * record_ordinal, frozen offset_x (f32 bits), frozen offset_y (f32
+     * bits). The paint key round-trips EXACTLY — materialization never
+     * re-extracts or re-mints it. The offset is the record's accumulated
+     * group-chain translation at serialize time: sealed content is
+     * immutable, so this bake preserves the final projection without
+     * archiving the group tree. */
+    RICH_RECORD_WORDS = 10,
+    RICH_RECORD_WORD_OFFSET_X = 8,
+    RICH_RECORD_WORD_OFFSET_Y = 9,
 };
+
+/* The record's accumulated group-chain translation (cycle-guarded walk, the
+ * same accumulation the renderer's leaf resolve performs). */
+static void record_frozen_offset(const struct yetty_yvterm_rich_block *block,
+                                 const struct yetty_yvterm_rich_record *record, float *out_x,
+                                 float *out_y)
+{
+    float sum_x = 0.0f;
+    float sum_y = 0.0f;
+    uint32_t walk = record->group_slot;
+    uint32_t guard = 0;
+    while (walk != 0 && walk <= block->group_count && guard++ <= block->group_count) {
+        const struct yetty_yvterm_rich_group *group = &block->groups[walk - 1u];
+        sum_x += group->offset_x;
+        sum_y += group->offset_y;
+        walk = group->parent_slot;
+    }
+    *out_x = sum_x;
+    *out_y = sum_y;
+}
 
 /* Spill-file record header (self-delimiting, one per sealed segment). */
 struct tier_file_record_header {
@@ -88,7 +132,7 @@ static void tier_cache_entry_free_lines(struct yetty_yvterm_tiers *tiers,
                                         struct yetty_yvterm_tier_cache_entry *entry)
 {
     for (uint32_t index = 0; index < entry->line_count; ++index) {
-        yetty_yvterm_line_release_rich(&entry->lines[index]);
+        yetty_yvterm_line_release_rich(tiers->rich_store, &entry->lines[index]);
         yetty_ycore_memtag_free(tiers->memtag, entry->lines[index].text_cells);
     }
     yetty_ycore_memtag_free(tiers->memtag, entry->lines);
@@ -229,8 +273,32 @@ static struct yetty_ycore_void_result builder_push_line(struct yetty_yvterm_tier
         col = run_end;
     }
 
-    size_t word_count = LINE_HEADER_WORDS + (size_t)run_count * CELL_RUN_WORDS +
-                        (size_t)mark_words + (size_t)line->primitive_count * 2u + line->arena_count;
+    /* Size the serialized rich blocks. Stale handles serialize as nothing;
+     * live blocks contribute a sub-header + record descriptors + arena. */
+    uint32_t rich_block_count = 0;
+    size_t rich_words = 0;
+    for (uint32_t index = 0; index < line->rich_block_count; ++index) {
+        const struct yetty_yvterm_rich_block *block =
+            yetty_yvterm_rich_store_resolve(tiers->rich_store, line->rich_blocks[index]);
+        if (!block) {
+            continue;
+        }
+        rich_block_count++;
+        uint32_t alive_records = 0;
+        uint32_t alive_words = 0;
+        for (uint32_t record_index = 0; record_index < block->record_count; ++record_index) {
+            if (block->records[record_index].alive) {
+                alive_records++;
+                alive_words += block->records[record_index].word_count;
+                alive_words += block->records[record_index].journal_count;
+            }
+        }
+        rich_words +=
+            RICH_BLOCK_HEADER_WORDS + (size_t)alive_records * RICH_RECORD_WORDS + alive_words;
+    }
+
+    size_t word_count =
+        LINE_HEADER_WORDS + (size_t)run_count * CELL_RUN_WORDS + (size_t)mark_words + rich_words;
     struct yetty_ycore_void_result reserve_res =
         builder_reserve(tiers, word_count * sizeof(uint32_t));
     YETTY_RETURN_IF_ERR(yetty_ycore_void, reserve_res, "scroll tiers: push_line reserve");
@@ -245,9 +313,9 @@ static struct yetty_ycore_void_result builder_push_line(struct yetty_yvterm_tier
     words[LINE_WORD_STORED_COLS] = used_cols;
     words[LINE_WORD_ORIGINAL_COLS] = original_cols;
     words[LINE_WORD_RUN_COUNT] = run_count;
-    words[LINE_WORD_PRIMITIVE_COUNT] = line->primitive_count;
-    words[LINE_WORD_ARENA_COUNT] = line->arena_count;
-    words[LINE_WORD_RICH_SPAN] = line->rich_span_rows;
+    words[LINE_WORD_RICH_BLOCK_COUNT] = rich_block_count;
+    words[LINE_WORD_RICH_WORDS] = (uint32_t)rich_words;
+    words[LINE_WORD_RESERVED] = 0u;
     words[LINE_WORD_MARK_WORDS] = mark_words;
     uint32_t *cursor = words + LINE_HEADER_WORDS;
 
@@ -270,13 +338,64 @@ static struct yetty_ycore_void_result builder_push_line(struct yetty_yvterm_tier
         }
         col = run_end;
     }
-    for (uint32_t index = 0; index < line->primitive_count; ++index) {
-        cursor[0] = line->primitives[index].arena_offset;
-        cursor[1] = line->primitives[index].word_count;
-        cursor += 2;
-    }
-    if (line->arena_count) {
-        memcpy(cursor, line->arena, (size_t)line->arena_count * sizeof(uint32_t));
+    for (uint32_t index = 0; index < line->rich_block_count; ++index) {
+        const struct yetty_yvterm_rich_block *block =
+            yetty_yvterm_rich_store_resolve(tiers->rich_store, line->rich_blocks[index]);
+        if (!block) {
+            continue;
+        }
+        /* Alive records only — dead (deleted/replaced) records and their
+         * bytes compact away here; the serialized arena is the alive records'
+         * words back to back with rebased offsets. */
+        uint32_t alive_records = 0;
+        uint32_t alive_arena_words = 0;
+        uint32_t alive_journal_words = 0;
+        for (uint32_t record_index = 0; record_index < block->record_count; ++record_index) {
+            if (block->records[record_index].alive) {
+                alive_records++;
+                alive_arena_words += block->records[record_index].word_count;
+                alive_journal_words += block->records[record_index].journal_count;
+            }
+        }
+        cursor[0] = block->span_rows;
+        cursor[1] = alive_records;
+        cursor[2] = alive_arena_words + alive_journal_words;
+        cursor += RICH_BLOCK_HEADER_WORDS;
+        uint32_t *arena_cursor = cursor + (size_t)alive_records * RICH_RECORD_WORDS;
+        uint32_t *journal_cursor = arena_cursor + alive_arena_words;
+        uint32_t rebased_offset = 0;
+        uint32_t journal_offset = 0;
+        for (uint32_t record_index = 0; record_index < block->record_count; ++record_index) {
+            const struct yetty_yvterm_rich_record *record = &block->records[record_index];
+            if (!record->alive) {
+                continue;
+            }
+            cursor[0] = rebased_offset;
+            cursor[1] = record->word_count;
+            cursor[2] = record->journal_count;
+            cursor[3] = (uint32_t)record->kind;
+            memcpy(&cursor[4], &record->paint_z, sizeof(uint32_t));
+            cursor[5] = (uint32_t)(record->paint_sequence & 0xFFFFFFFFu);
+            cursor[6] = (uint32_t)(record->paint_sequence >> 32);
+            cursor[7] = record->record_ordinal;
+            float frozen_x = 0.0f;
+            float frozen_y = 0.0f;
+            record_frozen_offset(block, record, &frozen_x, &frozen_y);
+            memcpy(&cursor[RICH_RECORD_WORD_OFFSET_X], &frozen_x, sizeof(uint32_t));
+            memcpy(&cursor[RICH_RECORD_WORD_OFFSET_Y], &frozen_y, sizeof(uint32_t));
+            cursor += RICH_RECORD_WORDS;
+            if (record->word_count) {
+                memcpy(arena_cursor + rebased_offset, block->arena + record->arena_offset,
+                       (size_t)record->word_count * sizeof(uint32_t));
+                rebased_offset += record->word_count;
+            }
+            if (record->journal_count) {
+                memcpy(journal_cursor + journal_offset, record->journal,
+                       (size_t)record->journal_count * sizeof(uint32_t));
+                journal_offset += record->journal_count;
+            }
+        }
+        cursor = journal_cursor + journal_offset;
     }
     return YETTY_OK_VOID();
 }
@@ -546,21 +665,40 @@ static struct yetty_yvterm_tier_segment *tiers_find_segment(struct yetty_yvterm_
  * width. Longer stored lines clip (the archive is never rewritten; view-time
  * re-wrap is a future refinement — the continuation flag and original width
  * are already stored for it). */
+/* Append one block handle onto a cache line (plain realloc, matching the
+ * grid-side handle arrays that release_line_rich frees). */
+static struct yetty_ycore_void_result line_blocks_push_cache(struct yetty_yvterm_line *line,
+                                                             struct yetty_yvterm_rich_handle handle)
+{
+    if (line->rich_block_count == line->rich_block_capacity) {
+        uint32_t new_capacity = line->rich_block_capacity ? line->rich_block_capacity * 2u : 2u;
+        struct yetty_yvterm_rich_handle *grown = realloc(
+            line->rich_blocks, (size_t)new_capacity * sizeof(struct yetty_yvterm_rich_handle));
+        if (!grown) {
+            return YETTY_ERR(yetty_ycore_void, "scroll tiers: cache line handle grow");
+        }
+        line->rich_blocks = grown;
+        line->rich_block_capacity = new_capacity;
+    }
+    line->rich_blocks[line->rich_block_count++] = handle;
+    return YETTY_OK_VOID();
+}
+
 static struct yetty_ycore_void_result tier_inflate_line(struct yetty_yvterm_tiers *tiers,
                                                         const uint32_t *words, size_t word_count,
                                                         struct yetty_yvterm_line *line,
                                                         uint32_t cols, uint32_t blank_fg,
-                                                        uint32_t blank_bg, int suppress_rich)
+                                                        uint32_t blank_bg, int suppress_rich,
+                                                        uint64_t timeline_row)
 {
     if (word_count < LINE_HEADER_WORDS) {
         return YETTY_ERR(yetty_ycore_void, "scroll tiers: truncated line record");
     }
     uint32_t run_count = words[LINE_WORD_RUN_COUNT];
-    uint32_t primitive_count = words[LINE_WORD_PRIMITIVE_COUNT];
-    uint32_t arena_count = words[LINE_WORD_ARENA_COUNT];
+    uint32_t rich_block_count = words[LINE_WORD_RICH_BLOCK_COUNT];
+    uint32_t rich_words = words[LINE_WORD_RICH_WORDS];
     uint32_t mark_words = words[LINE_WORD_MARK_WORDS];
-    if (LINE_HEADER_WORDS + (size_t)run_count * CELL_RUN_WORDS + (size_t)mark_words +
-            (size_t)primitive_count * 2u + arena_count >
+    if (LINE_HEADER_WORDS + (size_t)run_count * CELL_RUN_WORDS + (size_t)mark_words + rich_words >
         word_count) {
         return YETTY_ERR(yetty_ycore_void, "scroll tiers: corrupt line record");
     }
@@ -607,37 +745,179 @@ static struct yetty_ycore_void_result tier_inflate_line(struct yetty_yvterm_tier
         cursor += CELL_RUN_WORDS + mark_count;
     }
 
-    if (suppress_rich || (primitive_count == 0 && arena_count == 0)) {
+    if (suppress_rich || rich_block_count == 0) {
         return YETTY_OK_VOID();
     }
-    line->rich_span_rows = words[LINE_WORD_RICH_SPAN];
-    line->primitives =
-        calloc(primitive_count ? primitive_count : 1u, sizeof(struct yetty_yvterm_primitive));
-    line->arena = arena_count ? malloc((size_t)arena_count * sizeof(uint32_t)) : NULL;
-    if (!line->primitives || (arena_count && !line->arena)) {
-        free(line->primitives);
-        free(line->arena);
-        line->primitives = NULL;
-        line->arena = NULL;
-        return YETTY_ERR(yetty_ycore_void, "scroll tiers: cache line rich alloc");
-    }
-    line->primitive_capacity = primitive_count;
-    line->arena_capacity = arena_count;
-    for (uint32_t index = 0; index < primitive_count; ++index) {
-        line->primitives[index].arena_offset = cursor[0];
-        line->primitives[index].word_count = cursor[1];
-        cursor += 2;
-    }
-    if (arena_count) {
-        memcpy(line->arena, cursor, (size_t)arena_count * sizeof(uint32_t));
-        line->arena_count = arena_count;
-    }
-    line->primitive_count = primitive_count;
-    for (uint32_t index = 0; index < primitive_count; ++index) {
-        const struct yetty_yvterm_primitive *record = &line->primitives[index];
-        if (record->word_count && record->arena_offset < line->arena_count &&
-            yetty_ydraw_is_complex(line->arena[record->arena_offset])) {
-            line->envelope_count++;
+    /* Mint one sealed cache-local block per serialized block. Materialized
+     * archive content is immutable and cache-local: it dies with its cache
+     * entry and never re-registers producer-visible identity. Best-effort:
+     * a failed block mint drops that block (text still renders). */
+    const uint32_t *rich_end = words + word_count;
+    for (uint32_t block_index = 0; block_index < rich_block_count; ++block_index) {
+        if (cursor + RICH_BLOCK_HEADER_WORDS > rich_end) {
+            return YETTY_ERR(yetty_ycore_void, "scroll tiers: truncated rich block header");
+        }
+        uint32_t span_rows = cursor[0];
+        uint32_t record_count = cursor[1];
+        uint32_t body_words = cursor[2]; /* arena + journals */
+        cursor += RICH_BLOCK_HEADER_WORDS;
+        if (cursor + (size_t)record_count * RICH_RECORD_WORDS + body_words > rich_end) {
+            return YETTY_ERR(yetty_ycore_void, "scroll tiers: truncated rich block body");
+        }
+        const uint32_t *descriptors = cursor;
+        uint32_t arena_count = 0;
+        for (uint32_t record_index = 0; record_index < record_count; ++record_index) {
+            arena_count += descriptors[record_index * RICH_RECORD_WORDS + 1u];
+        }
+        if (arena_count > body_words) {
+            return YETTY_ERR(yetty_ycore_void, "scroll tiers: rich block arena overrun");
+        }
+        const uint32_t *arena = cursor + (size_t)record_count * RICH_RECORD_WORDS;
+        const uint32_t *journals = arena + arena_count;
+        uint32_t journal_words_total = body_words - arena_count;
+        cursor = arena + body_words;
+
+        /* The serializing line was the block's bottom OWNER line, so this
+         * line's timeline index restores the block's real rolling anchors
+         * — plan-order rendering and view placement need them, not a zero
+         * placeholder. */
+        uint32_t anchor_span = span_rows ? span_rows : 1u;
+        uint64_t insertion_row =
+            timeline_row >= anchor_span - 1u ? timeline_row - (anchor_span - 1u) : 0u;
+        struct yetty_yvterm_rich_handle_result block_res = yetty_yvterm_rich_store_block_create(
+            tiers->rich_store, YETTY_YVTERM_RICH_SCREEN_CACHE, insertion_row);
+        if (YETTY_IS_ERR(block_res)) {
+            yetty_ycore_error_destroy(block_res.error);
+            continue;
+        }
+        int block_ok = 1;
+        uint32_t journal_offset = 0;
+        /* Synthetic offset carrier: consecutive records sharing one frozen
+         * offset reuse one cache-local group (the common case — records of
+         * one source group serialize adjacently). */
+        float carrier_x = 0.0f;
+        float carrier_y = 0.0f;
+        uint32_t carrier_slot = 0;
+        for (uint32_t record_index = 0; record_index < record_count && block_ok; ++record_index) {
+            uint32_t record_offset = descriptors[record_index * RICH_RECORD_WORDS];
+            uint32_t record_words = descriptors[record_index * RICH_RECORD_WORDS + 1u];
+            uint32_t record_journal_words = descriptors[record_index * RICH_RECORD_WORDS + 2u];
+            uint32_t record_kind = descriptors[record_index * RICH_RECORD_WORDS + 3u];
+            int32_t record_paint_z;
+            memcpy(&record_paint_z, &descriptors[record_index * RICH_RECORD_WORDS + 4u],
+                   sizeof(record_paint_z));
+            uint64_t record_sequence =
+                (uint64_t)descriptors[record_index * RICH_RECORD_WORDS + 5u] |
+                ((uint64_t)descriptors[record_index * RICH_RECORD_WORDS + 6u] << 32);
+            uint32_t record_ordinal = descriptors[record_index * RICH_RECORD_WORDS + 7u];
+            float frozen_x;
+            float frozen_y;
+            memcpy(&frozen_x,
+                   &descriptors[record_index * RICH_RECORD_WORDS + RICH_RECORD_WORD_OFFSET_X],
+                   sizeof(frozen_x));
+            memcpy(&frozen_y,
+                   &descriptors[record_index * RICH_RECORD_WORDS + RICH_RECORD_WORD_OFFSET_Y],
+                   sizeof(frozen_y));
+            if (!isfinite(frozen_x) || !isfinite(frozen_y)) {
+                frozen_x = 0.0f; /* corrupt spill data degrades to unshifted */
+                frozen_y = 0.0f;
+            }
+            if (record_journal_words > journal_words_total ||
+                journal_offset > journal_words_total - record_journal_words) {
+                block_ok = 0;
+                break;
+            }
+            if (record_words == 0) {
+                journal_offset += record_journal_words;
+                continue; /* bytes-less runtime-only record — nothing survives */
+            }
+            if (record_offset > arena_count || record_words > arena_count - record_offset) {
+                block_ok = 0;
+                break;
+            }
+            /* Serialized kind must agree with the wire record it fronts —
+             * a mismatch means a corrupt or forged descriptor. */
+            uint32_t wire_type = arena[record_offset];
+            uint32_t wire_kind =
+                yetty_ydraw_is_complex(wire_type) &&
+                        yetty_ysdf_primitive_size(wire_type & ~YETTY_YDRAW_HAS_ID_FLAG) == 0u
+                    ? (uint32_t)YETTY_YVTERM_RICH_RECORD_COMPLEX
+                    : (uint32_t)YETTY_YVTERM_RICH_RECORD_PRIMITIVE;
+            if (record_kind != wire_kind) {
+                block_ok = 0;
+                break;
+            }
+            /* Re-attach the frozen projection: records with a nonzero baked
+             * offset hang under a synthetic group carrying it, so the
+             * renderer's ancestor accumulation reproduces the sealed
+             * appearance without the original group tree. */
+            uint32_t record_group_slot = 0;
+            if (frozen_x != 0.0f || frozen_y != 0.0f) {
+                if (carrier_slot == 0 || frozen_x != carrier_x || frozen_y != carrier_y) {
+                    struct yetty_ycore_uint32_result carrier_res =
+                        yetty_yvterm_rich_store_block_group_open(tiers->rich_store, block_res.value,
+                                                                 0u, false, 0u);
+                    if (YETTY_IS_ERR(carrier_res)) {
+                        yetty_ycore_error_destroy(carrier_res.error);
+                        block_ok = 0;
+                        break;
+                    }
+                    carrier_slot = carrier_res.value;
+                    carrier_x = frozen_x;
+                    carrier_y = frozen_y;
+                    struct yetty_yvterm_rich_block *carrier_block =
+                        yetty_yvterm_rich_store_resolve(tiers->rich_store, block_res.value);
+                    if (carrier_block && carrier_slot <= carrier_block->group_count) {
+                        carrier_block->groups[carrier_slot - 1u].offset_x = frozen_x;
+                        carrier_block->groups[carrier_slot - 1u].offset_y = frozen_y;
+                    }
+                }
+                record_group_slot = carrier_slot;
+            }
+            struct yetty_ycore_void_result append_res =
+                yetty_yvterm_rich_store_block_append_record_exact(
+                    tiers->rich_store, block_res.value, record_group_slot, arena + record_offset,
+                    record_words, record_paint_z, record_sequence, record_ordinal);
+            if (YETTY_IS_ERR(append_res)) {
+                yetty_ycore_error_destroy(append_res.error);
+                block_ok = 0;
+                break;
+            }
+            if (record_journal_words) {
+                /* Rebuild the record's journal so a later materialize replays
+                 * the accepted updates. Direct field fill (module-internal);
+                 * bytes count against the aggregate budget. */
+                struct yetty_yvterm_rich_block *fresh =
+                    yetty_yvterm_rich_store_resolve(tiers->rich_store, block_res.value);
+                if (fresh && fresh->record_count) {
+                    struct yetty_yvterm_rich_record *record =
+                        &fresh->records[fresh->record_count - 1u];
+                    record->journal = malloc((size_t)record_journal_words * sizeof(uint32_t));
+                    if (record->journal) {
+                        memcpy(record->journal, journals + journal_offset,
+                               (size_t)record_journal_words * sizeof(uint32_t));
+                        record->journal_count = record_journal_words;
+                        record->journal_capacity = record_journal_words;
+                        tiers->rich_store->journal_bytes_used +=
+                            (size_t)record_journal_words * sizeof(uint32_t);
+                    }
+                }
+            }
+            journal_offset += record_journal_words;
+        }
+        struct yetty_yvterm_rich_block *block =
+            yetty_yvterm_rich_store_resolve(tiers->rich_store, block_res.value);
+        if (!block_ok || !block) {
+            yetty_yvterm_rich_store_block_destroy(tiers->rich_store, block_res.value);
+            continue;
+        }
+        block->span_rows = span_rows;
+        block->bottom_owner_row = block->insertion_rolling_row + anchor_span - 1u;
+        block->state = YETTY_YVTERM_RICH_BLOCK_SEALED;
+        struct yetty_ycore_void_result push_res = line_blocks_push_cache(line, block_res.value);
+        if (YETTY_IS_ERR(push_res)) {
+            yetty_ycore_error_destroy(push_res.error);
+            yetty_yvterm_rich_store_block_destroy(tiers->rich_store, block_res.value);
         }
     }
     return YETTY_OK_VOID();
@@ -741,7 +1021,7 @@ static struct yetty_ycore_void_result tier_cache_inflate(
             index + 1u < segment->line_count ? directory[index + 1u] : payload_size;
         if (offset > next_offset || next_offset > payload_size) {
             for (uint32_t undo = 0; undo < index; ++undo) {
-                yetty_yvterm_line_release_rich(&lines[undo]);
+                yetty_yvterm_line_release_rich(tiers->rich_store, &lines[undo]);
                 yetty_ycore_memtag_free(tiers->memtag, lines[undo].text_cells);
             }
             yetty_ycore_memtag_free(tiers->memtag, lines);
@@ -751,10 +1031,10 @@ static struct yetty_ycore_void_result tier_cache_inflate(
         int suppress_rich = segment->first_line + index < tiers->rich_clear_watermark;
         struct yetty_ycore_void_result line_res = tier_inflate_line(
             tiers, (const uint32_t *)(payload + offset), (next_offset - offset) / sizeof(uint32_t),
-            &lines[index], cols, blank_fg, blank_bg, suppress_rich);
+            &lines[index], cols, blank_fg, blank_bg, suppress_rich, segment->first_line + index);
         if (YETTY_IS_ERR(line_res)) {
             for (uint32_t undo = 0; undo < index; ++undo) {
-                yetty_yvterm_line_release_rich(&lines[undo]);
+                yetty_yvterm_line_release_rich(tiers->rich_store, &lines[undo]);
                 yetty_ycore_memtag_free(tiers->memtag, lines[undo].text_cells);
             }
             yetty_ycore_memtag_free(tiers->memtag, lines);

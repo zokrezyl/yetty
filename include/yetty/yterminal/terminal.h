@@ -23,6 +23,8 @@ struct yetty_platform_pty;
 struct yetty_yui_view;
 struct yetty_yrender_gpu_resource_binder;
 struct yetty_ydraw_target;
+struct yetty_ydraw_complex_factory;
+struct yetty_yclass_object;
 
 /* Result types */
 YETTY_YRESULT_DECLARE(yetty_yterminal_terminal, struct yetty_yterminal_terminal *);
@@ -284,6 +286,46 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     struct yetty_ycore_grid_size grid_size, const struct yetty_context *yetty_context);
 struct yetty_ycore_void_result yetty_yterminal_terminal_destroy(
     struct yetty_yterminal_terminal *terminal);
+
+/* Headless ingest harness (#728): a terminal slice with ONLY the ydraw
+ * ingest surface wired — content grid figure (CPU model), the default
+ * drawable-list registry, and an empty complex-factory registry the test
+ * populates with an instrumented concrete factory. No PTY, no event
+ * loop, no GPU. Feed producer envelope bytes through
+ * yetty_yterminal_mime_ingest_serialized() — the same
+ * terminal_ydraw_apply_body pipeline as the PTY wire path — and assert
+ * on the grid reached via the accessors (borrowed pointers). */
+struct yetty_yterminal_terminal_result yetty_yterminal_ingest_harness_open(uint32_t cols,
+                                                                           uint32_t rows);
+struct yetty_ydraw_complex_factory *yetty_yterminal_ingest_harness_factory(
+    struct yetty_yterminal_terminal *terminal);
+struct yetty_yclass_object *yetty_yterminal_ingest_harness_grid(
+    struct yetty_yterminal_terminal *terminal);
+/* Committed content scale (HiDPI density) for the harness: sets both the
+ * terminal's layout scale (reserve/span row conversion) and the grid's
+ * rich density (per-node retirement). Producer envelopes stay logical;
+ * the receiver converts. Default 1.0. */
+struct yetty_ycore_void_result yetty_yterminal_ingest_harness_set_scale(
+    struct yetty_yterminal_terminal *terminal, float content_scale);
+/* Pane-wide resize subscription (the CLIENT_INPUT_SUB RESIZE bit) and a
+ * test-owned PTY backend — together the capture path for host→client
+ * OSC envelopes, so the zoom/resize contract can be pinned end to end
+ * (view event → committed grid state → envelope → ygui2). The PTY is
+ * BORROWED; the caller keeps ownership. */
+struct yetty_ycore_void_result yetty_yterminal_ingest_harness_subscribe_pane(
+    struct yetty_yterminal_terminal *terminal);
+struct yetty_platform_pty;
+struct yetty_ycore_void_result yetty_yterminal_ingest_harness_set_pty(
+    struct yetty_yterminal_terminal *terminal, struct yetty_platform_pty *pty);
+struct yetty_ycore_void_result yetty_yterminal_ingest_harness_close(
+    struct yetty_yterminal_terminal *terminal);
+
+/* Ingest one serialized drawable-list blob (24-byte YPB1 header + record
+ * stream — yetty_ydraw_drawable_list_serialize output) through the full
+ * ydraw ingest. The in-process MIME renderers use this; so does the
+ * headless harness above. */
+struct yetty_ycore_void_result yetty_yterminal_mime_ingest_serialized(
+    struct yetty_yterminal_terminal *terminal, const uint8_t *bytes, size_t len);
 
 /* Get terminal as yui view (for pushing into pane) */
 struct yetty_yui_view *yetty_yterminal_terminal_as_view(struct yetty_yterminal_terminal *terminal);

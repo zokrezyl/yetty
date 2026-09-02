@@ -1,0 +1,12 @@
+{
+  "name": "ygui2-demos",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@yetty/ydraw": "file:../../../../bindings/typescript"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2"
+  }
+}

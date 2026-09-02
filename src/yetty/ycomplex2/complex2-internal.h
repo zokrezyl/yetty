@@ -72,4 +72,38 @@ static inline struct yetty_ycore_void_result ycomplex2_append_rendered(
     return YETTY_OK_VOID();
 }
 
+/* Open / close a paint-z scope around a complex's emitted record(s), so a
+ * complex (which carries no z in its wire record) stacks at `layer` like
+ * any shape. layer 0 is the default plane and emits nothing. */
+static inline struct yetty_ycore_void_result ycomplex2_paint_z_open(
+    struct yetty_ydraw_drawable_list *list, int32_t layer)
+{
+    if (layer == 0) {
+        return YETTY_OK_VOID();
+    }
+    return yetty_ydraw_drawable_list_add_cmd_paint_z(list, layer);
+}
+
+static inline struct yetty_ycore_void_result ycomplex2_paint_z_close(
+    struct yetty_ydraw_drawable_list *list, int32_t layer)
+{
+    if (layer == 0) {
+        return YETTY_OK_VOID();
+    }
+    return yetty_ydraw_drawable_list_add_cmd_paint_z_end(list);
+}
+
+/* Emit CMD_NODE_ID(id) ahead of a complex's record run when id != 0: the
+ * receiver binds the complex ITSELF as the addressable node at (enclosing
+ * path . id) — its own id, no wrapper group (drawable-use-cases.md §2).
+ * id 0 = anonymous, emits nothing. */
+static inline struct yetty_ycore_void_result ycomplex2_node_id(
+    struct yetty_ydraw_drawable_list *list, uint32_t id)
+{
+    if (id == 0) {
+        return YETTY_OK_VOID();
+    }
+    return yetty_ydraw_drawable_list_add_cmd_node_id(list, id);
+}
+
 #endif /* YETTY_YCOMPLEX2_INTERNAL_H */

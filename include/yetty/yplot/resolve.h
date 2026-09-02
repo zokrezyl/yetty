@@ -113,6 +113,8 @@ struct yetty_yplot_render_plan {
     uint32_t legend_count;
     const char *title, *x_label, *y_label; /* borrowed; NULL/empty = absent */
     enum yetty_yplot_legend_mode legend_mode;
+    /* Nonzero = self-owned chrome (see yetty_yplot_render_config). */
+    uint32_t chrome_group_id;
 };
 
 /* Emit a render plan (plot prim + chrome: axis labels, title, legend, colorbar)

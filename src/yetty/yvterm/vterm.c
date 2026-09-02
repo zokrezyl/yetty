@@ -49,6 +49,7 @@
 
 #include "ligature-cells.h"
 #include "grid-sdf-layer.h"
+#include "paint-plan.h"
 #include "grid-shader-glyph-layer.h"
 
 /* GPU cell layout the text shader reads: 4 u32 words per cell. */
@@ -205,6 +206,7 @@ struct yetty_ycore_void_result yetty_ydraw_complex_render(struct yetty_ydraw_com
  * instead of dropping it the moment its anchor (top) line scrolls off. */
 float yetty_ydraw_complex_pixel_height(const struct yetty_ydraw_complex *instance);
 float yetty_ydraw_complex_pixel_bottom(const struct yetty_ydraw_complex *instance);
+float yetty_ydraw_complex_pixel_top(const struct yetty_ydraw_complex *instance);
 /* Set a figure's content scale so it magnifies with the zoomed text — same
  * reason for the hand declaration. */
 void yetty_ydraw_complex_set_content_scale(struct yetty_ydraw_complex *instance, float scale);
@@ -238,6 +240,14 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("parent@yfigure:figur
      * cell later grows, the figure must grow by cell_height/baseline to keep
      * filling those N (now taller) rows. 0 until the first resize. */
     float baseline_cell_height;
+    /* Producer-logical → framebuffer multiplier for RICH content: the
+     * content scale the cell metrics were derived at (font_size = config
+     * x content_scale). The wire authors rich geometry in LOGICAL pixels;
+     * cells are framebuffer pixels — the SDF layer, complex placement and
+     * per-node retirement multiply the logical side by this. 1.0 headless
+     * or on a standard-density display; later density changes ride the
+     * cell-ratio (intrusive-zoom) machinery like any cell resize. */
+    float density_scale;
 
     /* Resolved content rect in pane-local pixels — where the text surface sits
      * inside the figure rect (a client reserved part of the pane for its own
@@ -333,7 +343,78 @@ struct YETTY_ANNOTATE("class@yvterm:vterm") YETTY_ANNOTATE("parent@yfigure:figur
      * rendered as per-cell fragment shaders on top of the text. Best-effort:
      * NULL if its shaders couldn't load — the rest still renders. */
     struct yetty_yvterm_shader_glyph_layer *shader_glyph_layer;
+
+    /* Per-frame visible execution list built from the sorted paint plan:
+     * contiguous staged-prim ranges alternating with delegated complex
+     * draws, in total paint-key order. Reused buffer, grown on demand. */
+    struct vterm_paint_exec *paint_exec;
+    uint32_t paint_exec_count;
+    uint32_t paint_exec_capacity;
 };
+
+/* One execution-list entry (see paint_exec above). */
+struct vterm_paint_exec {
+    uint32_t is_complex; /* 0 = staged prim range, 1 = delegated complex */
+    uint32_t first;      /* prim range start (range entries) */
+    uint32_t count;      /* prim range length (range entries) */
+    struct yetty_ydraw_complex *complex;
+    int32_t top_row; /* block-top viewport row (complex entries) */
+    /* Projection: accumulated ancestor group offset (px) for complex entries. */
+    float offset_x;
+    float offset_y;
+    uint32_t span_rows; /* the owning insertion's row span (the clip window) */
+};
+
+static struct yetty_ycore_void_result vterm_paint_exec_reserve(struct yetty_yvterm_vterm *vterm)
+{
+    if (vterm->paint_exec_count < vterm->paint_exec_capacity) {
+        return YETTY_OK_VOID();
+    }
+    uint32_t new_capacity = vterm->paint_exec_capacity ? vterm->paint_exec_capacity * 2u : 32u;
+    struct vterm_paint_exec *grown =
+        realloc(vterm->paint_exec, (size_t)new_capacity * sizeof(struct vterm_paint_exec));
+    if (!grown) {
+        return YETTY_ERR(yetty_ycore_void, "vterm: paint exec list oom");
+    }
+    vterm->paint_exec = grown;
+    vterm->paint_exec_capacity = new_capacity;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result vterm_paint_exec_push_range(struct yetty_yvterm_vterm *vterm,
+                                                                  uint32_t first, uint32_t count)
+{
+    if (count == 0) {
+        return YETTY_OK_VOID();
+    }
+    struct yetty_ycore_void_result reserve_res = vterm_paint_exec_reserve(vterm);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, reserve_res, "vterm: exec push range");
+    struct vterm_paint_exec *entry = &vterm->paint_exec[vterm->paint_exec_count++];
+    entry->is_complex = 0;
+    entry->first = first;
+    entry->count = count;
+    entry->complex = NULL;
+    entry->top_row = 0;
+    return YETTY_OK_VOID();
+}
+
+static struct yetty_ycore_void_result vterm_paint_exec_push_complex(
+    struct yetty_yvterm_vterm *vterm, struct yetty_ydraw_complex *complex, int32_t top_row,
+    float offset_x, float offset_y, uint32_t span_rows)
+{
+    struct yetty_ycore_void_result reserve_res = vterm_paint_exec_reserve(vterm);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, reserve_res, "vterm: exec push complex");
+    struct vterm_paint_exec *entry = &vterm->paint_exec[vterm->paint_exec_count++];
+    entry->is_complex = 1;
+    entry->first = 0;
+    entry->count = 0;
+    entry->complex = complex;
+    entry->top_row = top_row;
+    entry->offset_x = offset_x;
+    entry->offset_y = offset_y;
+    entry->span_rows = span_rows;
+    return YETTY_OK_VOID();
+}
 
 /* Result wrapper for the vterm handle. Declared here (this TU does not include
  * its own generated header); vterm.h publishes the identical declaration. */
@@ -1161,6 +1242,29 @@ static void vterm_load_font_ranges(struct yetty_yvterm_vterm *vterm,
     vterm->uniforms.face_methods = methods;
 }
 
+/* Push the grid's rich density: the ONE producer-logical → CURRENT
+ * framebuffer multiplier (display density x structural cell zoom). The
+ * grid consumes it for per-node retirement; the terminal reads it back
+ * for reserve/span row conversions — so retained content, new reserves
+ * and rendering all agree at any density and any cell zoom. Re-pushed
+ * whenever density or cell metrics change. Best-effort: a push failure
+ * leaves the previous committed value standing. */
+static void vterm_push_rich_density(struct yetty_yvterm_vterm *vterm)
+{
+    if (!vterm->grid_obj) {
+        return;
+    }
+    float density = vterm->density_scale > 0.0f ? vterm->density_scale : 1.0f;
+    float cell_ratio = (vterm->baseline_cell_height > 0.0f && vterm->cell_size.height > 0.0f)
+                           ? vterm->cell_size.height / vterm->baseline_cell_height
+                           : 1.0f;
+    struct yetty_ycore_void_result density_res =
+        yetty_yvterm_grid_set_rich_density(vterm->grid_obj, density * cell_ratio);
+    if (YETTY_IS_ERR(density_res)) {
+        yetty_ycore_error_destroy(density_res.error);
+    }
+}
+
 /* Best-effort GPU setup. On a soft failure (missing device, font/pipeline/SDF
  * init failure) it leaves gpu_ready=0 and returns OK so the figure still exists
  * (blank pane) rather than failing terminal creation — the inner errors are
@@ -1187,6 +1291,10 @@ static struct yetty_ycore_void_result vterm_gpu_init(struct yetty_yvterm_vterm *
     if (content_scale <= 0.0f) {
         content_scale = 1.0f;
     }
+    /* The density the cell metrics embed — every rich (producer-logical)
+     * spatial value scales by this before meeting a framebuffer cell. */
+    vterm->density_scale = content_scale;
+    vterm_push_rich_density(vterm);
     /* Config carries the font size in logical (CSS-style) pixels; scale once
      * here to framebuffer pixels so the glyphs render at the right physical
      * size on HiDPI displays without every other pipeline stage having to know
@@ -1420,6 +1528,10 @@ static void vterm_gpu_destroy(struct yetty_yvterm_vterm *vterm)
     free(vterm->row_scratch);
     vterm->row_scratch = NULL;
     vterm->row_scratch_cols = 0;
+    free(vterm->paint_exec);
+    vterm->paint_exec = NULL;
+    vterm->paint_exec_count = 0;
+    vterm->paint_exec_capacity = 0;
     for (uint32_t i = 0; i < YVTERM_MAX_FONT_FACES; ++i) {
         if (vterm->faces[i].font) {
             vterm->faces[i].font->ops->destroy(vterm->faces[i].font);
@@ -1657,9 +1769,10 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
      * consumed in the SAME render that clears the dirty flags below, so rich
      * updates are never dropped.
      *
-     * NOTE: raw SDF *primitives* stored in the per-line arena are not drawn
-     * here yet — that needs the ydraw SDF grid/binder pipeline (the deleted
-     * ydraw-scrolling-layer). Complexes cover the common anchored-figure case. */
+     * Raw SDF *primitives* stored in the per-line arena ARE drawn: the unified
+     * SDF layer (vterm->sdf_layer) stages them in paint-plan order and cuts the
+     * primitive batches around visible complex leaves, so primitives and
+     * complexes interleave by their shared (paint_z, sequence) key. */
     float zoom = vterm->visual_zoom_scale > 0.0f ? vterm->visual_zoom_scale : 1.0f;
     float pane_height = rect.max.y - rect.min.y;
     /* Canonical visual-zoom transform, identical to the text shader's, so a
@@ -1672,97 +1785,227 @@ static struct yetty_ycore_void_result vterm_render_grid(struct yetty_yvterm_vter
     float vz_off_y = vterm->visual_zoom_offset_y;
     /* Intrusive (cell-size) zoom grew the cells and reflowed; a figure's reserved
      * rows are now taller, so scale its body by the cell ratio to keep filling
-     * them. Visual zoom multiplies on top. */
+     * them. Visual zoom multiplies on top. The density factor converts the
+     * record's PRODUCER-LOGICAL bounds/offsets to framebuffer pixels at the
+     * creation metrics (cell_ratio then covers later cell growth). */
     float cell_ratio = (vterm->baseline_cell_height > 0.0f)
                            ? vterm->cell_size.height / vterm->baseline_cell_height
                            : 1.0f;
-    float figure_scale = zoom * cell_ratio;
-    /* Rich SDF pass: the raw ydraw records (ycat PDF/SVG/markdown — SDF shapes,
-     * glyphs, text runs) stored per line. Anchored by the same resolved window
-     * as the text, so they scroll in lockstep across all tiers. Drawn after
-     * the text and BEFORE the anchored complexes: producers layer their
-     * figures over the SDF chrome (a browser page's images sit on its
-     * background rectangles; the old complexes-first order painted every
-     * page background OVER its images, blanking them). Best-effort — never
-     * fail the frame on it. */
+    float density = vterm->density_scale > 0.0f ? vterm->density_scale : 1.0f;
+    /* THE rich local scale: producer-local → CURRENT framebuffer. SDF
+     * siblings scale by exactly this in the layer/shader; complexes get
+     * it through figure_scale (visual zoom on top) and their group-chain
+     * offsets below — one factor, so SDF and complex siblings always
+     * translate identically. */
+    float rich_local_scale = density * cell_ratio;
+    float figure_scale = zoom * rich_local_scale;
+    /* Unified rich pass — ONE total paint order over SDF primitives,
+     * expanded text and own-pipeline complexes, from the grid's sorted
+     * paint plan (paint_z, paint_sequence, record_ordinal). The walk
+     * resolves each cached leaf through its generation-checked handle,
+     * culls it against the current rolling view, stages primitive/text
+     * leaves into the sdf-layer in plan order and builds an execution
+     * list of contiguous prim ranges alternating with complex draws — a
+     * range never crosses a rendered complex cut point. One staging
+     * upload serves all ranges; every draw loads/preserves the shared
+     * target and composites source-over, so later keys paint on top.
+     * Best-effort — never fail the frame on it. */
     if (vterm->sdf_layer) {
-        struct yetty_ycore_void_result sdf_res = yetty_yvterm_sdf_layer_render(
-            vterm->sdf_layer, grid, target, rect, vterm->cell_size.width, vterm->cell_size.height,
-            cols, rows, window_slots, window_rows, slot_count, zoom, vz_off_x, vz_off_y,
-            cell_ratio);
-        if (YETTY_IS_ERR(sdf_res)) {
-            ywarn("vterm_render: SDF layer: %s", sdf_res.error.msg);
-            yetty_ycore_error_destroy(sdf_res.error);
+        struct yetty_ycore_void_result begin_res = yetty_yvterm_sdf_layer_begin(
+            vterm->sdf_layer, grid, vterm->cell_size.width, vterm->cell_size.height,
+            vterm->density_scale, cell_ratio, cols, rows, window_slots, window_rows, slot_count);
+        if (YETTY_IS_ERR(begin_res)) {
+            ywarn("vterm_render: SDF layer begin: %s", begin_res.error.msg);
+            yetty_ycore_error_destroy(begin_res.error);
+        }
+    }
+    /* Shaped terminal-cell glyphs staged by begin() form the base range —
+     * terminal text, drawn below every rich leaf. */
+    uint32_t paint_base_count = yetty_yvterm_sdf_layer_prim_count(vterm->sdf_layer);
+
+    const struct yetty_yvterm_paint_plan *paint_plan = NULL;
+    struct yetty_ycore_void_result plan_res =
+        yetty_yvterm_grid_paint_plan_current(grid, &paint_plan);
+    if (YETTY_IS_ERR(plan_res)) {
+        ywarn("vterm_render: paint plan: %s", plan_res.error.msg);
+        yetty_ycore_error_destroy(plan_res.error);
+        paint_plan = NULL;
+    }
+    uint64_t paint_window_top = yetty_yvterm_grid_paint_view_top(grid);
+
+    vterm->paint_exec_count = 0;
+    uint32_t open_run_first = paint_base_count;
+    int have_open_run = 0;
+    for (uint32_t leaf_index = 0; paint_plan && leaf_index < paint_plan->leaf_count; ++leaf_index) {
+        const struct yetty_yvterm_paint_leaf *leaf = &paint_plan->leaves[leaf_index];
+        const uint32_t *leaf_words = NULL;
+        uint32_t leaf_word_count = 0;
+        struct yetty_ydraw_complex *leaf_complex = NULL;
+        uint32_t leaf_span = 0;
+        uint64_t leaf_bottom = 0;
+        int leaf_alive = 0;
+        float leaf_offset_x = 0.0f;
+        float leaf_offset_y = 0.0f;
+        yetty_yvterm_grid_paint_leaf_resolve(grid, leaf, &leaf_words, &leaf_word_count,
+                                             &leaf_complex, &leaf_span, &leaf_bottom, &leaf_alive,
+                                             &leaf_offset_x, &leaf_offset_y);
+        if (!leaf_alive) {
+            continue;
+        }
+        /* Viewport placement: the block anchors on its BOTTOM timeline row
+         * and spans upward. Entirely above or below the pane → cull (a
+         * bottom below the pane with the top poking in survives). */
+        int64_t bottom_row_vp = (int64_t)leaf_bottom - (int64_t)paint_window_top;
+        int64_t top_row_vp = bottom_row_vp - (int64_t)(leaf_span ? leaf_span - 1u : 0u);
+        if (top_row_vp >= (int64_t)rows || bottom_row_vp < 0) {
+            continue;
+        }
+        if (leaf->kind == YETTY_YVTERM_RICH_RECORD_COMPLEX) {
+            if (!leaf_complex) {
+                /* The window resolver's materialization policy already ran;
+                 * no runtime obtainable → skip this leaf for the frame. */
+                continue;
+            }
+            if (have_open_run) {
+                uint32_t staged_count = yetty_yvterm_sdf_layer_prim_count(vterm->sdf_layer);
+                struct yetty_ycore_void_result run_res = vterm_paint_exec_push_range(
+                    vterm, open_run_first, staged_count - open_run_first);
+                if (YETTY_IS_ERR(run_res)) {
+                    /* Best-effort like every sibling step: dropping one
+                     * exec entry degrades the frame, aborting mid-pass
+                     * ships NO rich content and strands the staged layer. */
+                    ywarn("vterm_render: exec run: %s", run_res.error.msg);
+                    yetty_ycore_error_destroy(run_res.error);
+                }
+                have_open_run = 0;
+            }
+            struct yetty_ycore_void_result complex_res = vterm_paint_exec_push_complex(
+                vterm, leaf_complex, (int32_t)top_row_vp, leaf_offset_x, leaf_offset_y,
+                leaf_span ? leaf_span : 1u);
+            if (YETTY_IS_ERR(complex_res)) {
+                ywarn("vterm_render: exec complex: %s", complex_res.error.msg);
+                yetty_ycore_error_destroy(complex_res.error);
+            }
+        } else if (vterm->sdf_layer && leaf_words) {
+            uint32_t before = yetty_yvterm_sdf_layer_prim_count(vterm->sdf_layer);
+            /* The clip window = the owning insertion's row span in viewport
+             * rows (clamped to the pane): the projection detaches content
+             * outside it. */
+            int32_t clip_row_min = top_row_vp < 0 ? 0 : (int32_t)top_row_vp;
+            int32_t clip_row_max =
+                bottom_row_vp >= (int64_t)rows ? (int32_t)rows - 1 : (int32_t)bottom_row_vp;
+            int leaf_clip_valid = 0;
+            float leaf_clip_x = 0.0f, leaf_clip_y = 0.0f, leaf_clip_w = 0.0f, leaf_clip_h = 0.0f;
+            yetty_yvterm_grid_paint_leaf_clip(vterm->grid_obj, leaf, &leaf_clip_valid, &leaf_clip_x,
+                                              &leaf_clip_y, &leaf_clip_w, &leaf_clip_h);
+            struct yetty_ycore_uint32_result staged = yetty_yvterm_sdf_layer_stage_leaf(
+                vterm->sdf_layer, leaf_words, leaf_word_count, (int32_t)top_row_vp, leaf_offset_x,
+                leaf_offset_y, clip_row_min, clip_row_max, leaf_clip_valid ? leaf_clip_x : 0.0f,
+                leaf_clip_valid ? leaf_clip_y : 0.0f, leaf_clip_valid ? leaf_clip_w : 0.0f,
+                leaf_clip_valid ? leaf_clip_h : 0.0f);
+            if (YETTY_IS_ERR(staged)) {
+                ywarn("vterm_render: stage leaf: %s", staged.error.msg);
+                yetty_ycore_error_destroy(staged.error);
+                continue;
+            }
+            if (!have_open_run && staged.value > before) {
+                open_run_first = before;
+                have_open_run = 1;
+            }
+        }
+    }
+    if (have_open_run) {
+        uint32_t staged_count = yetty_yvterm_sdf_layer_prim_count(vterm->sdf_layer);
+        struct yetty_ycore_void_result run_res =
+            vterm_paint_exec_push_range(vterm, open_run_first, staged_count - open_run_first);
+        if (YETTY_IS_ERR(run_res)) {
+            ywarn("vterm_render: exec tail run: %s", run_res.error.msg);
+            yetty_ycore_error_destroy(run_res.error);
         }
     }
 
-    /* Anchored-complex pass — after the SDF records, so figures render
-     * on top of any page chrome sharing their lines (see the SDF pass
-     * comment above; a z-aware unified ordering across both record kinds
-     * is the eventual replacement for this two-pass split).
-     *
-     * A figure is anchored on its BOTTOM line and spans upward, so the scan
-     * runs the whole resolved window: the visible rows plus the look-ahead
-     * BELOW the bottom (already folded into window_rows above) — in a
-     * scrolled-back view a figure whose bottom sits below the viewport may
-     * still have its top poking into the pane. In the live view the window is
-     * exactly the visible rows. */
-    for (int row = 0; row < (int)window_rows; ++row) {
-        uint32_t comp_count = 0;
-        /* Read complexes by the SAME window slot the text pass drew at this
-         * row, so figures scroll in lockstep with the text in both live and
-         * scrolled-back views (including archive rows served from the
-         * materialization cache). */
-        uint32_t comp_slot = window_slots[row];
-        struct yetty_ydraw_complex_const_ptr_ptr_result comps_res =
-            yetty_yvterm_grid_slot_complexes(grid, comp_slot, &comp_count);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, comps_res, "vterm_render: slot complexes");
-        struct yetty_ydraw_complex *const *comps = comps_res.value;
-        if (!comps || comp_count == 0) {
+    if (vterm->sdf_layer) {
+        struct yetty_ycore_void_result finish_res = yetty_yvterm_sdf_layer_finish(
+            vterm->sdf_layer, rect, zoom, vz_off_x, vz_off_y, cell_ratio);
+        if (YETTY_IS_ERR(finish_res)) {
+            ywarn("vterm_render: SDF layer finish: %s", finish_res.error.msg);
+            yetty_ycore_error_destroy(finish_res.error);
+        } else if (paint_base_count > 0) {
+            struct yetty_ycore_void_result base_res = yetty_yvterm_sdf_layer_draw_range(
+                vterm->sdf_layer, target, rect, 0u, paint_base_count);
+            if (YETTY_IS_ERR(base_res)) {
+                ywarn("vterm_render: SDF base range: %s", base_res.error.msg);
+                yetty_ycore_error_destroy(base_res.error);
+            }
+        }
+    }
+
+    /* Execute the visible list in plan order. */
+    for (uint32_t exec_index = 0; exec_index < vterm->paint_exec_count; ++exec_index) {
+        const struct vterm_paint_exec *entry = &vterm->paint_exec[exec_index];
+        if (!entry->is_complex) {
+            struct yetty_ycore_void_result range_res = yetty_yvterm_sdf_layer_draw_range(
+                vterm->sdf_layer, target, rect, entry->first, entry->count);
+            if (YETTY_IS_ERR(range_res)) {
+                ywarn("vterm_render: SDF range: %s", range_res.error.msg);
+                yetty_ycore_error_destroy(range_res.error);
+            }
             continue;
         }
-        /* This row is the block's BOTTOM line; recover its top so the figure
-         * still draws top-down from where its text sits. span 0 → single row. */
-        struct yetty_ycore_uint32_result span_res = yetty_yvterm_grid_slot_span(grid, comp_slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, span_res, "vterm_render: slot span");
-        uint32_t span = span_res.value;
-        int top_row = row - (int)(span ? span - 1u : 0u);
-        float anchor_y = (float)top_row * vterm->cell_size.height;
-        float comp_x = rect.min.x + (0.0f - vz_center_x - vz_off_x) * zoom + vz_center_x;
+        /* Group-chain offsets are producer-local — scale by the SAME rich
+         * local scale the SDF layer applies (density x cell zoom), so
+         * SDF and complex siblings move together; the row anchor stays
+         * in CURRENT framebuffer cells. */
+        float anchor_y =
+            (float)entry->top_row * vterm->cell_size.height + entry->offset_y * rich_local_scale;
+        float comp_x = rect.min.x +
+                       (entry->offset_x * rich_local_scale - vz_center_x - vz_off_x) * zoom +
+                       vz_center_x;
         float comp_y_local = (anchor_y - vz_center_y - vz_off_y) * zoom + vz_center_y;
         float comp_y = rect.min.y + comp_y_local;
-        for (uint32_t ci = 0; ci < comp_count; ++ci) {
-            if (!comps[ci]) {
-                continue;
-            }
-            /* Cull a figure that has fully left the pane: its bottom edge above
-             * the pane top (scrolled off the top), or its top below the pane
-             * bottom (scrolled off / pushed down under zoom). A figure with no
-             * reported height is drawn whenever its top row is on screen. */
-            /* Cull on the figure's BOTTOM extent within its block —
-			 * bounds.max.y, not the bare height: a multi-figure envelope
-			 * (a browser page) positions records deep inside the block, so
-			 * a small figure far down must survive the block top scrolling
-			 * off. A figure with no reported extent draws whenever its
-			 * block top is on screen. */
-            float fig_bottom = yetty_ydraw_complex_pixel_bottom(comps[ci]) * figure_scale;
-            if (fig_bottom > 0.0f && comp_y_local + fig_bottom <= 0.0f) {
-                continue;
-            }
-            if (comp_y_local >= pane_height) {
-                continue;
-            }
-            /* Magnify the figure body to keep filling its reserved rows: the
-             * visual-zoom factor times the cell-size (intrusive-zoom) ratio.
-             * Position (comp_x/comp_y) already carries the visual zoom, and the
-             * row pitch already carries the larger cell. */
-            yetty_ydraw_complex_set_content_scale(comps[ci], figure_scale);
-            struct yetty_ycore_void_result cr =
-                yetty_ydraw_complex_render(comps[ci], target, comp_x, comp_y);
-            if (YETTY_IS_ERR(cr)) {
-                ydebug("vterm complex: render FAILED: %s", cr.error.msg);
-                yetty_ycore_error_destroy(cr.error);
-            }
+        /* Cull a figure that has fully left the pane: its bottom edge
+         * above the pane top (scrolled off the top), or its top below
+         * the pane bottom (scrolled off / pushed down under zoom).
+         * Cull on the figure's BOTTOM extent within its block —
+         * bounds.max.y, not the bare height: a multi-figure envelope
+         * (a browser page) positions records deep inside the block, so
+         * a small figure far down must survive the block top scrolling
+         * off. A figure with no reported extent draws whenever its
+         * block top is on screen. */
+        float fig_bottom = yetty_ydraw_complex_pixel_bottom(entry->complex) * figure_scale;
+        if (fig_bottom > 0.0f && comp_y_local + fig_bottom <= 0.0f) {
+            continue;
+        }
+        if (comp_y_local >= pane_height) {
+            continue;
+        }
+        /* Projection cull against the owning insertion's span window: a
+         * figure panned wholly out of its viewport is DETACHED — no rows, no
+         * rendering. (Partial overlap still draws whole: the complex render
+         * path has no clip rect yet — edge bleed is a known limitation.) */
+        float fig_top = yetty_ydraw_complex_pixel_top(entry->complex) * figure_scale;
+        float span_top_local =
+            ((float)entry->top_row * vterm->cell_size.height - vz_center_y - vz_off_y) * zoom +
+            vz_center_y;
+        float span_bottom_local =
+            ((float)(entry->top_row + (int32_t)entry->span_rows) * vterm->cell_size.height -
+             vz_center_y - vz_off_y) *
+                zoom +
+            vz_center_y;
+        if (comp_y_local + fig_top >= span_bottom_local ||
+            (fig_bottom > 0.0f && comp_y_local + fig_bottom <= span_top_local)) {
+            continue;
+        }
+        /* Magnify the figure body to keep filling its reserved rows:
+         * the visual-zoom factor times the cell-size (intrusive-zoom)
+         * ratio. Position (comp_x/comp_y) already carries the visual
+         * zoom, and the row pitch already carries the larger cell. */
+        yetty_ydraw_complex_set_content_scale(entry->complex, figure_scale);
+        struct yetty_ycore_void_result render_res =
+            yetty_ydraw_complex_render(entry->complex, target, comp_x, comp_y);
+        if (YETTY_IS_ERR(render_res)) {
+            ydebug("vterm complex: render FAILED: %s", render_res.error.msg);
+            yetty_ycore_error_destroy(render_res.error);
         }
     }
 
@@ -1852,13 +2095,18 @@ static struct yetty_ycore_void_result vterm_destroy_slot(struct yetty_yclass_obj
  * the exposed setter references it. */
 typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *userdata);
 
+/* Fired on a terminal reset (RIS hard=1 / DECSTR hard=0), so the terminal can
+ * drop per-session opt-in state (client-input subscriptions) the way libvterm
+ * drops its DEC mouse modes. Identical underlying type to grid.c's field. */
+typedef struct yetty_ycore_void_result (*yetty_yvterm_reset_hook_fn)(int hard, void *userdata);
+
 /* Re-creates one anchored figure from its retained wire envelope when an
  * evicted history line scrolls back into view. Identical underlying type to
  * grid.c's yetty_yvterm_grid_materialize_fn — a vterm-local typedef for the
  * same reason as the clear hook above (codegen reproduces it into vterm.h). */
 typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(
-    const uint32_t *envelope_words, uint32_t envelope_word_count, void *userdata,
-    struct yetty_ydraw_complex **out_instance);
+    const uint32_t *envelope_words, uint32_t envelope_word_count, const uint32_t *journal_words,
+    uint32_t journal_word_count, void *userdata, struct yetty_ydraw_complex **out_instance);
 
 /* Resolve one config colour key to the web-style 0xRRGGBB the grid setters
  * take. Missing / malformed keys fall back to default_hex so a partial
@@ -2166,6 +2414,37 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_resize(struct yetty_yclass_obj
     };
     struct yetty_ycore_void_result rect_res = yetty_yfigure_figure_rect_set(obj, rect);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, rect_res, "yvterm vterm_resize: rect_set");
+    /* Cell metrics moved — recommit the rich density product (density x
+     * structural cell zoom) so retirement and reserve conversions follow
+     * the new cells in the same transition. */
+    vterm_push_rich_density(vterm);
+    return YETTY_OK_VOID();
+}
+
+/* Live display-density transition: the pane geometry path re-derives the
+ * cell metrics at the viewer's NEW content scale in the same pass — this
+ * updates the renderer density and the grid's retained rich density
+ * TOGETHER and rebases the structural-zoom baseline by the same factor,
+ * so density-driven cell growth is a unit change, never misclassified as
+ * cell zoom, and the accumulated structural zoom is preserved. The
+ * committed product only moves once the resize with the re-derived cells
+ * lands (the push here recommits the CURRENT product). */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_content_scale(struct yetty_yclass_object *obj,
+                                                                    float content_scale)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm set_content_scale: from_obj");
+    struct yetty_yvterm_vterm *vterm = vterm_res.value;
+    if (!(isfinite(content_scale) && content_scale > 0.0f)) {
+        return YETTY_ERR(yetty_ycore_void, "yvterm set_content_scale: must be positive finite");
+    }
+    float old_scale = vterm->density_scale > 0.0f ? vterm->density_scale : 1.0f;
+    vterm->density_scale = content_scale;
+    if (vterm->baseline_cell_height > 0.0f) {
+        vterm->baseline_cell_height *= content_scale / old_scale;
+    }
+    vterm_push_rich_density(vterm);
     return YETTY_OK_VOID();
 }
 
@@ -2175,6 +2454,17 @@ struct pixel_size_result yetty_yvterm_vterm_cell_size(struct yetty_yclass_object
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
     YETTY_RETURN_IF_ERR(pixel_size, vterm_res, "yvterm vterm_cell_size: from_obj");
     return YETTY_OK(pixel_size, vterm_res.value->cell_size);
+}
+
+/* The composed grid's committed rich density product — see
+ * yetty_yvterm_grid_rich_density. */
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_density(struct yetty_yclass_object *obj,
+                                                               float *out_density)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_rich_density: from_obj");
+    return yetty_yvterm_grid_rich_density(vterm_res.value->grid_obj, out_density);
 }
 
 YETTY_ANNOTATE("expose")
@@ -2242,6 +2532,17 @@ struct yetty_ycore_void_result yetty_yvterm_vterm_set_clear_hook(struct yetty_yc
                                             (yetty_yvterm_grid_clear_hook_fn)fn, userdata);
 }
 
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_set_reset_hook(struct yetty_yclass_object *obj,
+                                                                 yetty_yvterm_reset_hook_fn fn,
+                                                                 void *userdata)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm vterm_set_reset_hook: from_obj");
+    return yetty_yvterm_grid_set_reset_hook(vterm_res.value->grid_obj,
+                                            (yetty_yvterm_grid_reset_hook_fn)fn, userdata);
+}
+
 /* Register the figure re-materialization hook on the composed grid model: the
  * terminal (which owns the complex factory) supplies a function that replays
  * a retained wire envelope into a fresh figure instance when an evicted
@@ -2301,12 +2602,266 @@ struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive(
 }
 
 YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_append_primitive_extent(
+    struct yetty_yclass_object *obj, uint32_t row, const uint32_t *words, uint32_t word_count,
+    float content_top_px, float content_bottom_px)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm append_primitive_extent: from_obj");
+    return yetty_yvterm_grid_append_primitive_extent(vterm_res.value->grid_obj, row, words,
+                                                     word_count, content_top_px, content_bottom_px);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_rich_group_open(struct yetty_yclass_object *obj,
+                                                                    uint32_t row,
+                                                                    uint64_t group_key)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm rich_group_open: from_obj");
+    return yetty_yvterm_grid_rich_group_open(vterm_res.value->grid_obj, row, group_key);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_group_close(struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_group_close: from_obj");
+    return yetty_yvterm_grid_rich_group_close(vterm_res.value->grid_obj);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_group_delete(struct yetty_yclass_object *obj,
+                                                                    uint64_t group_key)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_group_delete: from_obj");
+    return yetty_yvterm_grid_rich_group_delete(vterm_res.value->grid_obj, group_key);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_rich_group_query(
+    struct yetty_yclass_object *obj, uint64_t group_key, uint32_t *out_span_rows)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm rich_group_query: from_obj");
+    return yetty_yvterm_grid_rich_group_query(vterm_res.value->grid_obj, group_key, out_span_rows);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint64_result yetty_yvterm_vterm_rich_group_token(
+    struct yetty_yclass_object *obj, uint64_t group_key)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, vterm_res, "yvterm rich_group_token: from_obj");
+    return yetty_yvterm_grid_rich_group_token(vterm_res.value->grid_obj, group_key);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_push_paint_z(struct yetty_yclass_object *obj,
+                                                                    int32_t z)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_push_paint_z: from_obj");
+    return yetty_yvterm_grid_rich_push_paint_z(vterm_res.value->grid_obj, z);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_pop_paint_z(struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_pop_paint_z: from_obj");
+    return yetty_yvterm_grid_rich_pop_paint_z(vterm_res.value->grid_obj);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_reset_paint_z(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_reset_paint_z: from_obj");
+    return yetty_yvterm_grid_rich_reset_paint_z(vterm_res.value->grid_obj);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_paint_plan_leaf_count(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm paint_plan_leaf_count: from_obj");
+    return yetty_yvterm_grid_paint_plan_leaf_count(vterm_res.value->grid_obj);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_paint_plan_leaf(
+    struct yetty_yclass_object *obj, uint32_t leaf_index, uint32_t *out_block_slot,
+    uint32_t *out_record_index, uint32_t *out_kind, int32_t *out_paint_z,
+    uint64_t *out_paint_sequence, uint32_t *out_record_ordinal)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm paint_plan_leaf: from_obj");
+    return yetty_yvterm_grid_paint_plan_leaf(vterm_res.value->grid_obj, leaf_index, out_block_slot,
+                                             out_record_index, out_kind, out_paint_z,
+                                             out_paint_sequence, out_record_ordinal);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint64_result yetty_yvterm_vterm_paint_plan_build_count(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint64, vterm_res, "yvterm paint_plan_build_count: from_obj");
+    return yetty_yvterm_grid_paint_plan_build_count(vterm_res.value->grid_obj);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_update_bind(struct yetty_yclass_object *obj,
+                                                                   uint64_t update_key)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_update_bind: from_obj");
+    return yetty_yvterm_grid_rich_update_bind(vterm_res.value->grid_obj, update_key);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_group_offset_set(
+    struct yetty_yclass_object *obj, uint64_t group_key, float offset_x, float offset_y)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_group_offset_set: from_obj");
+    return yetty_yvterm_grid_rich_group_offset_set(vterm_res.value->grid_obj, group_key, offset_x,
+                                                   offset_y);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_update_target(
+    struct yetty_yclass_object *obj, uint64_t update_key, struct yetty_ydraw_complex **out_complex)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_update_target: from_obj");
+    return yetty_yvterm_grid_rich_update_target(vterm_res.value->grid_obj, update_key, out_complex);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_update_journal(
+    struct yetty_yclass_object *obj, uint64_t update_key, uint32_t target_field,
+    const uint32_t *payload_words, uint32_t payload_word_count)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_update_journal: from_obj");
+    return yetty_yvterm_grid_rich_update_journal(vterm_res.value->grid_obj, update_key,
+                                                 target_field, payload_words, payload_word_count);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_update_journal_poison(
+    struct yetty_yclass_object *obj, uint64_t update_key)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_update_journal_poison: from_obj");
+    return yetty_yvterm_grid_rich_update_journal_poison(vterm_res.value->grid_obj, update_key);
+}
+
+/* Borrowed handle to the composed yvterm:grid MODEL object — the
+ * inspection surface (record / paint-key / stats accessors) the headless
+ * ingest round-trip tests assert on. */
+YETTY_ANNOTATE("expose")
+struct yetty_yclass_object_ptr_result yetty_yvterm_vterm_grid_object(
+    struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_yclass_object_ptr, vterm_res, "yvterm grid_object: from_obj");
+    return YETTY_OK(yetty_yclass_object_ptr, vterm_res.value->grid_obj);
+}
+
+/* Grid entry points declared ahead of the regenerated api header so the
+ * first codegen pass resolves them. */
+struct yetty_ycore_void_result yetty_yvterm_grid_rich_update_extent_refresh(
+    struct yetty_yclass_object *obj, uint64_t update_key, float content_top_px,
+    float content_bottom_px);
+struct yetty_ycore_void_result yetty_yvterm_grid_rich_update_paint_z(
+    struct yetty_yclass_object *obj, uint64_t update_key, int32_t *out_paint_z);
+struct yetty_ycore_void_result yetty_yvterm_grid_rich_group_reserve(struct yetty_yclass_object *obj,
+                                                                    uint64_t group_key,
+                                                                    uint32_t extra_records,
+                                                                    uint32_t extra_words);
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_update_extent_refresh(
+    struct yetty_yclass_object *obj, uint64_t update_key, float content_top_px,
+    float content_bottom_px)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_update_extent_refresh: from_obj");
+    return yetty_yvterm_grid_rich_update_extent_refresh(vterm_res.value->grid_obj, update_key,
+                                                        content_top_px, content_bottom_px);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_update_paint_z(
+    struct yetty_yclass_object *obj, uint64_t update_key, int32_t *out_paint_z)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_update_paint_z: from_obj");
+    return yetty_yvterm_grid_rich_update_paint_z(vterm_res.value->grid_obj, update_key,
+                                                 out_paint_z);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_group_reserve(
+    struct yetty_yclass_object *obj, uint64_t group_key, uint32_t extra_records,
+    uint32_t extra_words)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_group_reserve: from_obj");
+    return yetty_yvterm_grid_rich_group_reserve(vterm_res.value->grid_obj, group_key, extra_records,
+                                                extra_words);
+}
+
+YETTY_ANNOTATE("expose")
 struct yetty_ycore_uint32_result yetty_yvterm_vterm_attach_complex(
     struct yetty_yclass_object *obj, uint32_t row, struct yetty_ydraw_complex *complex)
 {
     struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm attach_complex: from_obj");
     return yetty_yvterm_grid_attach_complex(vterm_res.value->grid_obj, row, complex);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_group_clip_set(
+    struct yetty_yclass_object *obj, uint64_t group_key, float clip_x, float clip_y, float clip_w,
+    float clip_h)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_group_clip_set: from_obj");
+    return yetty_yvterm_grid_rich_group_clip_set(vterm_res.value->grid_obj, group_key, clip_x,
+                                                 clip_y, clip_w, clip_h);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_uint32_result yetty_yvterm_vterm_rich_span_declare(
+    struct yetty_yclass_object *obj, uint32_t span_rows)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, vterm_res, "yvterm rich_span_declare: from_obj");
+    return yetty_yvterm_grid_rich_span_declare(vterm_res.value->grid_obj, span_rows);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_reserve_advance(
+    struct yetty_yclass_object *obj, uint32_t advance_rows)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_reserve_advance: from_obj");
+    return yetty_yvterm_grid_rich_reserve_advance(vterm_res.value->grid_obj, advance_rows);
+}
+
+YETTY_ANNOTATE("expose")
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_batch_abort(struct yetty_yclass_object *obj)
+{
+    struct yetty_yvterm_vterm_ptr_result vterm_res = yetty_yvterm_vterm_from(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, vterm_res, "yvterm rich_batch_abort: from_obj");
+    return yetty_yvterm_grid_rich_batch_abort(vterm_res.value->grid_obj);
 }
 
 YETTY_ANNOTATE("expose")

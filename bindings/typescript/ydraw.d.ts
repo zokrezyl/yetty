@@ -35,7 +35,7 @@ export interface ShapeOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -51,7 +51,7 @@ export interface CircleOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -69,7 +69,7 @@ export interface BoxOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -86,7 +86,7 @@ export interface SegmentOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -105,7 +105,7 @@ export interface TriangleOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -122,7 +122,7 @@ export interface EllipseOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -141,7 +141,7 @@ export interface ArcOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -162,7 +162,7 @@ export interface RoundedBoxOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -179,7 +179,7 @@ export interface RhombusOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -195,7 +195,7 @@ export interface PentagonOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -211,7 +211,7 @@ export interface HexagonOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -229,7 +229,7 @@ export interface StarOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -247,7 +247,7 @@ export interface PieOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -266,7 +266,7 @@ export interface RingOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -282,7 +282,7 @@ export interface HeartOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -300,7 +300,7 @@ export interface CrossOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -317,7 +317,7 @@ export interface RoundedXOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -335,7 +335,7 @@ export interface CapsuleOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -353,7 +353,7 @@ export interface MoonOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -370,7 +370,7 @@ export interface EggOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -386,7 +386,7 @@ export interface OctogonOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -402,7 +402,7 @@ export interface HexagramOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -418,7 +418,7 @@ export interface PentagramOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -442,7 +442,7 @@ export interface LinearGradientBoxOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -465,7 +465,7 @@ export interface RadialGradientBoxOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -482,7 +482,7 @@ export interface Sphere3dOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -501,7 +501,7 @@ export interface Box3dOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -519,7 +519,7 @@ export interface Torus3dOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -537,7 +537,7 @@ export interface Cylinder3dOptions {
   fill?: string;
   stroke?: string;
   id?: number | boolean;
-  z?: number | boolean;
+  layer?: number | boolean;
   strokeWidth?: number | boolean;
 }
 
@@ -597,6 +597,9 @@ export interface PlotOptions {
   y?: number | boolean;
   width?: number | boolean;
   height?: number | boolean;
+  layer?: number | boolean;
+  id?: number | boolean;
+  chromeGroup?: number | boolean;
 }
 
 export declare class Plot extends Drawable {
@@ -610,6 +613,8 @@ export interface ImageOptions {
   y?: number | boolean;
   width?: number | boolean;
   height?: number | boolean;
+  layer?: number | boolean;
+  id?: number | boolean;
 }
 
 export declare class Image extends Drawable {
@@ -627,6 +632,8 @@ export interface MeshOptions {
   elevation?: number | boolean;
   zoom?: number | boolean;
   wireframe?: number | boolean;
+  layer?: number | boolean;
+  id?: number | boolean;
 }
 
 export declare class Mesh extends Drawable {
@@ -641,6 +648,8 @@ export interface ShadertoyOptions {
   y?: number | boolean;
   width?: number | boolean;
   height?: number | boolean;
+  layer?: number | boolean;
+  id?: number | boolean;
 }
 
 export declare class Shadertoy extends Drawable {
@@ -660,6 +669,7 @@ export interface VideoOptions {
   videoW?: number | boolean;
   videoH?: number | boolean;
   fps?: number | boolean;
+  layer?: number | boolean;
 }
 
 export declare class Video extends Drawable {
@@ -670,6 +680,7 @@ export declare class Video extends Drawable {
 export declare class DrawableList {
   constructor();
   add(drawable: Drawable): void;
+  endGroup(): void;
   dcsEmit(): void;
   destroy(): void;
 }

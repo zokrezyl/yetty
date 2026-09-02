@@ -195,6 +195,19 @@ struct YETTY_ANNOTATE("class@api_yplot:plot") YETTY_ANNOTATE("parent@ydrawlist2:
      * come from the DSL (@plot.size) as before. */
     YETTY_ANNOTATE("property") float width;
     YETTY_ANNOTATE("property") float height;
+    /* Stacking depth (z-order), uniform with every other drawable's `layer`.
+     * Client-side only — a complex carries no z in its wire record, so pack()
+     * brackets the whole figure in a paint-z scope instead. */
+    YETTY_ANNOTATE("property") int32_t layer;
+    /* Addressable id (0 = anonymous). A nonzero id makes the complex ITSELF
+     * the addressable node at (enclosing path . id) — later CMD_UPDATE at
+     * that path streams data into this exact plot. */
+    YETTY_ANNOTATE("property") uint32_t id;
+    /* Self-owned chrome (0 = off): pack() brackets the label/title/legend
+     * prims in a GROUP with this id and the record grows a chrome-state
+     * tail, so the receiver re-renders the chrome LOCALLY on a geometry /
+     * range op — resize never re-ships the record or its samples. */
+    YETTY_ANNOTATE("property") uint32_t chrome_group;
     char *source; /* accumulating plot-DSL string (owned), NUL-terminated */
     size_t length;
     size_t capacity;
@@ -506,10 +519,33 @@ static struct yetty_ycore_void_result plot_pack(struct yetty_yclass_object *obj,
         .y_min = -1.5f,
         .y_max = 1.5f,
         .flags = YETTY_YPLOT_FLAG_GRID | YETTY_YPLOT_FLAG_AXES | YETTY_YPLOT_FLAG_LABELS,
+        .chrome_group_id = plot->chrome_group,
     };
+    /* Stack the WHOLE figure (complex record + its axis-label / legend
+     * prims) at `layer` by bracketing the emit in a paint-z scope. A
+     * complex carries no z in its wire record; layer 0 is the default
+     * plane and needs no bracket. */
+    if (plot->layer != 0) {
+        struct yetty_ycore_void_result open_res =
+            yetty_ydraw_drawable_list_add_cmd_paint_z(list, plot->layer);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, open_res, "api_yplot pack: paint_z open");
+    }
+    /* A nonzero id makes the complex ITSELF the addressable node (its own
+     * id, no wrapper group): CMD_NODE_ID latches onto the emitted complex
+     * record, so CMD_UPDATE(id, …) streams data here. */
+    if (plot->id != 0) {
+        struct yetty_ycore_void_result node_id_res =
+            yetty_ydraw_drawable_list_add_cmd_node_id(list, plot->id);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, node_id_res, "api_yplot pack: node_id");
+    }
     struct yetty_ycore_void_result emit_r = yetty_yplot_emit_expression(
         source, strlen(source), NULL, 0, &config, list, plot->x, plot->y, NULL, NULL);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_r, "api_yplot pack: emit_expression");
+    if (plot->layer != 0) {
+        struct yetty_ycore_void_result close_res =
+            yetty_ydraw_drawable_list_add_cmd_paint_z_end(list);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, close_res, "api_yplot pack: paint_z close");
+    }
     return YETTY_OK_VOID();
 }
 

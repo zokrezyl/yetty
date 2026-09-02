@@ -167,9 +167,24 @@ static struct rectangle_result text_drawable_list_aabb(const uint32_t *prim)
     return YETTY_OK(rectangle, r);
 }
 
+/* Paint z of a text run — the wire `layer` field, reinterpreted as
+ * signed 32-bit so text can stack below the default plane too. A record
+ * too short to carry the fixed payload prefix reports z 0. */
+static int32_t text_drawable_list_paint_z(const uint32_t *prim)
+{
+    struct yetty_ydraw_text_drawable_list_view view;
+    if (yetty_ydraw_text_drawable_list_parse(prim, &view) < 0) {
+        return 0;
+    }
+    int32_t paint_z;
+    memcpy(&paint_z, &view.layer, sizeof(paint_z));
+    return paint_z;
+}
+
 static const struct yetty_ydraw_drawable_list_entry_ops g_text_drawable_list_base_ops = {
     .size = text_drawable_list_size,
     .aabb = text_drawable_list_aabb,
+    .paint_z = text_drawable_list_paint_z,
 };
 
 struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_text_drawable_list_handler(

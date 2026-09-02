@@ -49,6 +49,12 @@ struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_width_set(struct yetty_
 struct float_result yetty_ycomplex2_shadertoy_height_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_height_set(struct yetty_yclass_object *obj,
                                                                     float value);
+struct yetty_ycore_int_result yetty_ycomplex2_shadertoy_layer_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_layer_set(struct yetty_yclass_object *obj,
+                                                                   int32_t value);
+struct uint32_result yetty_ycomplex2_shadertoy_id_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_id_set(struct yetty_yclass_object *obj,
+                                                                uint32_t value);
 
 /* set_source: the WGSL shader source, inline. Empty/NULL selects the
  * receiver's built-in default shader (animated gradient). */

@@ -507,6 +507,17 @@ float yetty_ydraw_complex_pixel_bottom(const struct yetty_ydraw_complex *instanc
     return instance->bounds.max.y > 0.0f ? instance->bounds.max.y : 0.0f;
 }
 
+/* Top edge of the figure's wire bounds (envelope-local px) — the projection
+ * cull's other half: a figure deep inside a tall panned group must vanish
+ * when its whole extent leaves the insertion's span window. */
+float yetty_ydraw_complex_pixel_top(const struct yetty_ydraw_complex *instance)
+{
+    if (!instance) {
+        return 0.0f;
+    }
+    return instance->bounds.min.y > 0.0f ? instance->bounds.min.y : 0.0f;
+}
+
 void yetty_ydraw_complex_set_content_scale(struct yetty_ydraw_complex *instance, float scale)
 {
     if (!instance) {

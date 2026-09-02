@@ -64,6 +64,7 @@ endif()
 # ydraw-list — serialized draw-command layer.
 if(TARGET yetty_ydraw_list AND TARGET yetty_ysdf)
     add_subdirectory(ut/ydraw-list)
+    add_subdirectory(ut/ygui2)
 endif()
 
 # ydrawlist2/ysdf2 — v2 yclass client interface byte-identity pin.
@@ -84,6 +85,12 @@ endif()
 # yvterm — terminal-core grid model (libvterm-backed), headless.
 if(TARGET yetty_yvterm)
     add_subdirectory(ut/yvterm)
+endif()
+
+# yterminal — the ydraw-ingest round trip through the headless harness
+# (#728): producer envelope bytes in, grid state asserted.
+if(TARGET yetty_yterminal)
+    add_subdirectory(ut/yterminal)
 endif()
 
 # ynotebook — nbformat MIME bundle model (text/binary/json payloads). Pure.

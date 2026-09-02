@@ -117,6 +117,44 @@ class Image(_ydrawlist2.Drawable):
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
+    @property
+    def layer(self) -> int:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_image_layer_get", _t.yetty_ycore_int_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @layer.setter
+    def layer(self, value: int) -> None:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_image_layer_set", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    @property
+    def id(self) -> int:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_image_id_get", _t.uint32_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @id.setter
+    def id(self, value: int) -> None:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_image_id_set", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
 
 class Mesh(_ydrawlist2.Drawable):
     """yclass ycomplex2:mesh"""
@@ -303,6 +341,44 @@ class Mesh(_ydrawlist2.Drawable):
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
+    @property
+    def layer(self) -> int:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_mesh_layer_get", _t.yetty_ycore_int_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @layer.setter
+    def layer(self, value: int) -> None:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_mesh_layer_set", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    @property
+    def id(self) -> int:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_mesh_id_get", _t.uint32_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @id.setter
+    def id(self, value: int) -> None:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_mesh_id_set", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
 
 class Shadertoy(_ydrawlist2.Drawable):
     """yclass ycomplex2:shadertoy"""
@@ -419,6 +495,44 @@ class Shadertoy(_ydrawlist2.Drawable):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycomplex2_shadertoy_height_set", _t.yetty_ycore_void_result, [c_void_p, c_float])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    @property
+    def layer(self) -> int:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_shadertoy_layer_get", _t.yetty_ycore_int_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @layer.setter
+    def layer(self, value: int) -> None:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_shadertoy_layer_set", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    @property
+    def id(self) -> int:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_shadertoy_id_get", _t.uint32_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @id.setter
+    def id(self, value: int) -> None:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_shadertoy_id_set", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
@@ -605,6 +719,25 @@ class Video(_ydrawlist2.Drawable):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ycomplex2_video_fps_set", _t.yetty_ycore_void_result, [c_void_p, c_float])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    @property
+    def layer(self) -> int:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_video_layer_get", _t.yetty_ycore_int_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @layer.setter
+    def layer(self, value: int) -> None:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ycomplex2_video_layer_set", _t.yetty_ycore_void_result, [c_void_p, c_int32])
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)

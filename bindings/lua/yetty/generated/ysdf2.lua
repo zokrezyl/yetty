@@ -393,15 +393,15 @@ Circle.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Circle.__prop_get.z = function(obj)
-  rt.live(obj, "Circle.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Circle.__prop_get.layer = function(obj)
+  rt.live(obj, "Circle.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Circle.__prop_set.z = function(obj, value)
-  rt.live(obj, "Circle.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Circle.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Circle.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Circle.__prop_get.fill = function(obj)
@@ -450,10 +450,10 @@ Circle.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -568,15 +568,15 @@ Box.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Box.__prop_get.z = function(obj)
-  rt.live(obj, "Box.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Box.__prop_get.layer = function(obj)
+  rt.live(obj, "Box.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Box.__prop_set.z = function(obj, value)
-  rt.live(obj, "Box.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Box.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Box.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Box.__prop_get.fill = function(obj)
@@ -628,9 +628,9 @@ Box.__spec = {
     half_height = true,
     half_width = true,
     id = true,
+    layer = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -734,15 +734,15 @@ Segment.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Segment.__prop_get.z = function(obj)
-  rt.live(obj, "Segment.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Segment.__prop_get.layer = function(obj)
+  rt.live(obj, "Segment.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Segment.__prop_set.z = function(obj, value)
-  rt.live(obj, "Segment.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Segment.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Segment.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Segment.__prop_get.fill = function(obj)
@@ -791,11 +791,11 @@ Segment.__spec = {
     end_y = true,
     fill = true,
     id = true,
+    layer = true,
     start_x = true,
     start_y = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -921,15 +921,15 @@ Triangle.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Triangle.__prop_get.z = function(obj)
-  rt.live(obj, "Triangle.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Triangle.__prop_get.layer = function(obj)
+  rt.live(obj, "Triangle.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Triangle.__prop_set.z = function(obj, value)
-  rt.live(obj, "Triangle.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Triangle.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Triangle.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Triangle.__prop_get.fill = function(obj)
@@ -976,6 +976,7 @@ Triangle.__spec = {
   props = {
     fill = true,
     id = true,
+    layer = true,
     stroke = true,
     stroke_width = true,
     vertex_a_x = true,
@@ -984,7 +985,6 @@ Triangle.__spec = {
     vertex_b_y = true,
     vertex_c_x = true,
     vertex_c_y = true,
-    z = true,
   },
   adders = {
   },
@@ -1088,15 +1088,15 @@ Ellipse.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Ellipse.__prop_get.z = function(obj)
-  rt.live(obj, "Ellipse.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Ellipse.__prop_get.layer = function(obj)
+  rt.live(obj, "Ellipse.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Ellipse.__prop_set.z = function(obj, value)
-  rt.live(obj, "Ellipse.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Ellipse.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Ellipse.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Ellipse.__prop_get.fill = function(obj)
@@ -1145,11 +1145,11 @@ Ellipse.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius_x = true,
     radius_y = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -1275,15 +1275,15 @@ Arc.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Arc.__prop_get.z = function(obj)
-  rt.live(obj, "Arc.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Arc.__prop_get.layer = function(obj)
+  rt.live(obj, "Arc.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Arc.__prop_set.z = function(obj, value)
-  rt.live(obj, "Arc.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Arc.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Arc.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Arc.__prop_get.fill = function(obj)
@@ -1334,11 +1334,11 @@ Arc.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
     thickness = true,
-    z = true,
   },
   adders = {
   },
@@ -1486,15 +1486,15 @@ RoundedBox.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-RoundedBox.__prop_get.z = function(obj)
-  rt.live(obj, "RoundedBox.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+RoundedBox.__prop_get.layer = function(obj)
+  rt.live(obj, "RoundedBox.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-RoundedBox.__prop_set.z = function(obj, value)
-  rt.live(obj, "RoundedBox.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+RoundedBox.__prop_set.layer = function(obj, value)
+  rt.live(obj, "RoundedBox.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 RoundedBox.__prop_get.fill = function(obj)
@@ -1545,13 +1545,13 @@ RoundedBox.__spec = {
     half_height = true,
     half_width = true,
     id = true,
+    layer = true,
     radius_bottom_left = true,
     radius_bottom_right = true,
     radius_top_left = true,
     radius_top_right = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -1655,15 +1655,15 @@ Rhombus.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Rhombus.__prop_get.z = function(obj)
-  rt.live(obj, "Rhombus.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Rhombus.__prop_get.layer = function(obj)
+  rt.live(obj, "Rhombus.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Rhombus.__prop_set.z = function(obj, value)
-  rt.live(obj, "Rhombus.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Rhombus.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Rhombus.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Rhombus.__prop_get.fill = function(obj)
@@ -1714,9 +1714,9 @@ Rhombus.__spec = {
     half_height = true,
     half_width = true,
     id = true,
+    layer = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -1809,15 +1809,15 @@ Pentagon.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Pentagon.__prop_get.z = function(obj)
-  rt.live(obj, "Pentagon.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Pentagon.__prop_get.layer = function(obj)
+  rt.live(obj, "Pentagon.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Pentagon.__prop_set.z = function(obj, value)
-  rt.live(obj, "Pentagon.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Pentagon.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Pentagon.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Pentagon.__prop_get.fill = function(obj)
@@ -1866,10 +1866,10 @@ Pentagon.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -1962,15 +1962,15 @@ Hexagon.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Hexagon.__prop_get.z = function(obj)
-  rt.live(obj, "Hexagon.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Hexagon.__prop_get.layer = function(obj)
+  rt.live(obj, "Hexagon.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Hexagon.__prop_set.z = function(obj, value)
-  rt.live(obj, "Hexagon.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Hexagon.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Hexagon.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Hexagon.__prop_get.fill = function(obj)
@@ -2019,10 +2019,10 @@ Hexagon.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -2137,15 +2137,15 @@ Star.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Star.__prop_get.z = function(obj)
-  rt.live(obj, "Star.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Star.__prop_get.layer = function(obj)
+  rt.live(obj, "Star.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Star.__prop_set.z = function(obj, value)
-  rt.live(obj, "Star.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Star.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Star.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Star.__prop_get.fill = function(obj)
@@ -2195,11 +2195,11 @@ Star.__spec = {
     fill = true,
     id = true,
     inner_ratio = true,
+    layer = true,
     num_points = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -2314,15 +2314,15 @@ Pie.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Pie.__prop_get.z = function(obj)
-  rt.live(obj, "Pie.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Pie.__prop_get.layer = function(obj)
+  rt.live(obj, "Pie.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Pie.__prop_set.z = function(obj, value)
-  rt.live(obj, "Pie.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Pie.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Pie.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Pie.__prop_get.fill = function(obj)
@@ -2373,10 +2373,10 @@ Pie.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -2502,15 +2502,15 @@ Ring.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Ring.__prop_get.z = function(obj)
-  rt.live(obj, "Ring.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Ring.__prop_get.layer = function(obj)
+  rt.live(obj, "Ring.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Ring.__prop_set.z = function(obj, value)
-  rt.live(obj, "Ring.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Ring.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Ring.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Ring.__prop_get.fill = function(obj)
@@ -2559,13 +2559,13 @@ Ring.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     normal_x = true,
     normal_y = true,
     radius = true,
     stroke = true,
     stroke_width = true,
     thickness = true,
-    z = true,
   },
   adders = {
   },
@@ -2658,15 +2658,15 @@ Heart.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Heart.__prop_get.z = function(obj)
-  rt.live(obj, "Heart.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Heart.__prop_get.layer = function(obj)
+  rt.live(obj, "Heart.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Heart.__prop_set.z = function(obj, value)
-  rt.live(obj, "Heart.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Heart.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Heart.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Heart.__prop_get.fill = function(obj)
@@ -2715,10 +2715,10 @@ Heart.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     scale = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -2833,15 +2833,15 @@ Cross.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Cross.__prop_get.z = function(obj)
-  rt.live(obj, "Cross.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Cross.__prop_get.layer = function(obj)
+  rt.live(obj, "Cross.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Cross.__prop_set.z = function(obj, value)
-  rt.live(obj, "Cross.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Cross.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Cross.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Cross.__prop_get.fill = function(obj)
@@ -2893,9 +2893,9 @@ Cross.__spec = {
     half_height = true,
     half_width = true,
     id = true,
+    layer = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -2999,15 +2999,15 @@ RoundedX.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-RoundedX.__prop_get.z = function(obj)
-  rt.live(obj, "RoundedX.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+RoundedX.__prop_get.layer = function(obj)
+  rt.live(obj, "RoundedX.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-RoundedX.__prop_set.z = function(obj, value)
-  rt.live(obj, "RoundedX.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+RoundedX.__prop_set.layer = function(obj, value)
+  rt.live(obj, "RoundedX.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 RoundedX.__prop_get.fill = function(obj)
@@ -3056,11 +3056,11 @@ RoundedX.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
     width = true,
-    z = true,
   },
   adders = {
   },
@@ -3175,15 +3175,15 @@ Capsule.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Capsule.__prop_get.z = function(obj)
-  rt.live(obj, "Capsule.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Capsule.__prop_get.layer = function(obj)
+  rt.live(obj, "Capsule.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Capsule.__prop_set.z = function(obj, value)
-  rt.live(obj, "Capsule.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Capsule.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Capsule.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Capsule.__prop_get.fill = function(obj)
@@ -3232,12 +3232,12 @@ Capsule.__spec = {
     end_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     start_x = true,
     start_y = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -3352,15 +3352,15 @@ Moon.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Moon.__prop_get.z = function(obj)
-  rt.live(obj, "Moon.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Moon.__prop_get.layer = function(obj)
+  rt.live(obj, "Moon.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Moon.__prop_set.z = function(obj, value)
-  rt.live(obj, "Moon.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Moon.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Moon.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Moon.__prop_get.fill = function(obj)
@@ -3409,12 +3409,12 @@ Moon.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     offset = true,
     radius_inner = true,
     radius_outer = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -3518,15 +3518,15 @@ Egg.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Egg.__prop_get.z = function(obj)
-  rt.live(obj, "Egg.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Egg.__prop_get.layer = function(obj)
+  rt.live(obj, "Egg.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Egg.__prop_set.z = function(obj, value)
-  rt.live(obj, "Egg.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Egg.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Egg.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Egg.__prop_get.fill = function(obj)
@@ -3575,11 +3575,11 @@ Egg.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius_inner = true,
     radius_outer = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -3672,15 +3672,15 @@ Octogon.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Octogon.__prop_get.z = function(obj)
-  rt.live(obj, "Octogon.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Octogon.__prop_get.layer = function(obj)
+  rt.live(obj, "Octogon.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Octogon.__prop_set.z = function(obj, value)
-  rt.live(obj, "Octogon.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Octogon.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Octogon.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Octogon.__prop_get.fill = function(obj)
@@ -3729,10 +3729,10 @@ Octogon.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -3825,15 +3825,15 @@ Hexagram.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Hexagram.__prop_get.z = function(obj)
-  rt.live(obj, "Hexagram.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Hexagram.__prop_get.layer = function(obj)
+  rt.live(obj, "Hexagram.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Hexagram.__prop_set.z = function(obj, value)
-  rt.live(obj, "Hexagram.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Hexagram.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Hexagram.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Hexagram.__prop_get.fill = function(obj)
@@ -3882,10 +3882,10 @@ Hexagram.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -3978,15 +3978,15 @@ Pentagram.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Pentagram.__prop_get.z = function(obj)
-  rt.live(obj, "Pentagram.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Pentagram.__prop_get.layer = function(obj)
+  rt.live(obj, "Pentagram.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Pentagram.__prop_set.z = function(obj, value)
-  rt.live(obj, "Pentagram.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Pentagram.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Pentagram.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Pentagram.__prop_get.fill = function(obj)
@@ -4035,10 +4035,10 @@ Pentagram.__spec = {
     center_y = true,
     fill = true,
     id = true,
+    layer = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -4219,15 +4219,15 @@ LinearGradientBox.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-LinearGradientBox.__prop_get.z = function(obj)
-  rt.live(obj, "LinearGradientBox.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+LinearGradientBox.__prop_get.layer = function(obj)
+  rt.live(obj, "LinearGradientBox.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-LinearGradientBox.__prop_set.z = function(obj, value)
-  rt.live(obj, "LinearGradientBox.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+LinearGradientBox.__prop_set.layer = function(obj, value)
+  rt.live(obj, "LinearGradientBox.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 LinearGradientBox.__prop_get.fill = function(obj)
@@ -4285,9 +4285,9 @@ LinearGradientBox.__spec = {
     half_height = true,
     half_width = true,
     id = true,
+    layer = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -4457,15 +4457,15 @@ RadialGradientBox.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-RadialGradientBox.__prop_get.z = function(obj)
-  rt.live(obj, "RadialGradientBox.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+RadialGradientBox.__prop_get.layer = function(obj)
+  rt.live(obj, "RadialGradientBox.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-RadialGradientBox.__prop_set.z = function(obj, value)
-  rt.live(obj, "RadialGradientBox.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+RadialGradientBox.__prop_set.layer = function(obj, value)
+  rt.live(obj, "RadialGradientBox.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 RadialGradientBox.__prop_get.fill = function(obj)
@@ -4522,9 +4522,9 @@ RadialGradientBox.__spec = {
     half_height = true,
     half_width = true,
     id = true,
+    layer = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -4628,15 +4628,15 @@ Sphere3d.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Sphere3d.__prop_get.z = function(obj)
-  rt.live(obj, "Sphere3d.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Sphere3d.__prop_get.layer = function(obj)
+  rt.live(obj, "Sphere3d.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Sphere3d.__prop_set.z = function(obj, value)
-  rt.live(obj, "Sphere3d.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Sphere3d.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Sphere3d.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Sphere3d.__prop_get.fill = function(obj)
@@ -4683,13 +4683,13 @@ Sphere3d.__spec = {
   props = {
     fill = true,
     id = true,
+    layer = true,
     position_x = true,
     position_y = true,
     position_z = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -4815,15 +4815,15 @@ Box3d.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Box3d.__prop_get.z = function(obj)
-  rt.live(obj, "Box3d.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Box3d.__prop_get.layer = function(obj)
+  rt.live(obj, "Box3d.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Box3d.__prop_set.z = function(obj, value)
-  rt.live(obj, "Box3d.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Box3d.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Box3d.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Box3d.__prop_get.fill = function(obj)
@@ -4873,12 +4873,12 @@ Box3d.__spec = {
     half_size_y = true,
     half_size_z = true,
     id = true,
+    layer = true,
     position_x = true,
     position_y = true,
     position_z = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -4993,15 +4993,15 @@ Torus3d.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Torus3d.__prop_get.z = function(obj)
-  rt.live(obj, "Torus3d.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Torus3d.__prop_get.layer = function(obj)
+  rt.live(obj, "Torus3d.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Torus3d.__prop_set.z = function(obj, value)
-  rt.live(obj, "Torus3d.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Torus3d.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Torus3d.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Torus3d.__prop_get.fill = function(obj)
@@ -5048,6 +5048,7 @@ Torus3d.__spec = {
   props = {
     fill = true,
     id = true,
+    layer = true,
     major_radius = true,
     minor_radius = true,
     position_x = true,
@@ -5055,7 +5056,6 @@ Torus3d.__spec = {
     position_z = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },
@@ -5170,15 +5170,15 @@ Cylinder3d.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Cylinder3d.__prop_get.z = function(obj)
-  rt.live(obj, "Cylinder3d.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Cylinder3d.__prop_get.layer = function(obj)
+  rt.live(obj, "Cylinder3d.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Cylinder3d.__prop_set.z = function(obj, value)
-  rt.live(obj, "Cylinder3d.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Cylinder3d.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Cylinder3d.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Cylinder3d.__prop_get.fill = function(obj)
@@ -5226,13 +5226,13 @@ Cylinder3d.__spec = {
     fill = true,
     half_height = true,
     id = true,
+    layer = true,
     position_x = true,
     position_y = true,
     position_z = true,
     radius = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },

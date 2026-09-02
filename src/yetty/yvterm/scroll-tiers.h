@@ -23,6 +23,8 @@
 
 #include <yetty/ycore/result.h>
 
+#include "rich-store.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -34,52 +36,34 @@ struct yetty_ycore_memtag;
 
 YETTY_YRESULT_DECLARE(yetty_yvterm_line_ptr, struct yetty_yvterm_line *);
 
-/* A simple primitive anchored on a terminal line. The primitive payload is a
- * span of u32 words in the owning line's arena. */
-struct yetty_yvterm_primitive {
-    uint32_t arena_offset;
-    uint32_t word_count;
-};
-
-/* One slot in the scrolling line ring. The line owns its text cells, its
- * primitive arena/descriptors, and its anchored complexes. Rich content is
- * anchored per LINE (figures/SDF records hang off the line that scrolls them);
- * there is no per-cell coverage metadata. The same struct backs the archive
- * materialization cache, so tier-resolved history lines flow through the very
- * accessors the ring lines use. */
+/* One slot in the scrolling line ring. The line owns its text cells and
+ * anchors zero or more rich BLOCKS by generation-checked handle — a handle
+ * lives on the block's BOTTOM owner line, so a block leaves the scrollback
+ * only when its last covered line is evicted. The blocks themselves (records,
+ * arena bytes, figure runtimes, span) live in the grid's rich store
+ * (rich-store.h). The same struct backs the archive materialization cache, so
+ * tier-resolved history lines flow through the very accessors the ring lines
+ * use. */
 struct yetty_yvterm_line {
     struct yetty_yvterm_text_cell *text_cells;
 
-    struct yetty_yvterm_primitive *primitives;
-    uint32_t primitive_count;
-    uint32_t primitive_capacity;
+    struct yetty_yvterm_rich_handle *rich_blocks;
+    uint32_t rich_block_count;
+    uint32_t rich_block_capacity;
 
-    uint32_t *arena;
-    uint32_t arena_count;
-    uint32_t arena_capacity;
+    /* Number of live rich blocks COVERING this line (their vertical span
+     * includes it — the anchoring bottom line included). The O(1) guard for
+     * the text hot path: putglyph/erase consult the rich model only when
+     * this is nonzero. Maintained by block create/relocate/destroy; a zero
+     * counter guarantees no block covers the line (saturating decrements —
+     * a line recycled out from under a deep block re-enters at zero). Ring
+     * lines only; cache lines stay at 0. */
+    uint32_t rich_coverage_count;
 
-    struct yetty_ydraw_complex **complexes;
-    uint32_t complex_count;
-    uint32_t complex_capacity;
-
-    /* Row-span of the rich-content block whose BOTTOM line this is. A figure
-     * (complex or SDF block) is anchored on its bottom line so it leaves the
-     * scrollback only when its last overlapping line is evicted. The renderer
-     * recovers the block's top row as (this line's row − (rich_span_rows − 1)),
-     * so the figure still draws top-down from where its text sits. 0 means "not
-     * a relocated block" — treated as a single-row anchor (top == bottom). */
-    uint32_t rich_span_rows;
-
-    /* Count of complex wire envelopes among this line's arena records. Each
-     * anchored figure's creating record is retained verbatim in the arena
-     * (the SDF pass skips complex-type records), so an archived line whose
-     * figure runtimes are gone still knows how to rebuild them on demand. */
-    uint32_t envelope_count;
-
-    /* Nonzero when this cache line's complexes were re-created from
-     * envelopes for a scrolled-back view; holds the resolver stamp of the
-     * last window that used them, so the sweep can destroy runtimes whose
-     * lines left the view. Always 0 on ring (hot) lines. */
+    /* Nonzero when this cache line's figure runtimes were re-created from
+     * retained envelopes for a scrolled-back view; holds the resolver stamp
+     * of the last window that used them, so the sweep can destroy runtimes
+     * whose lines left the view. Always 0 on ring (hot) lines. */
     uint32_t view_stamp;
 
     int dirty;
@@ -161,7 +145,23 @@ enum {
     YETTY_YVTERM_TIER_SEGMENT_MAX_LINES = 512,
     YETTY_YVTERM_TIER_SEGMENT_MAX_BYTES = 2u * 1024u * 1024u,
     YETTY_YVTERM_TIER_CACHE_ENTRIES = 4,
-    YETTY_YVTERM_TIER_FORMAT_VERSION = 1,
+    /* v2: per-line rich content is a list of rich BLOCKS (span + records +
+     * arena each) instead of the line-wide primitive/arena/span triple.
+     * v3: record descriptors carry the accepted-update journal length and
+     * the journals trail the block arena, so re-materialized figures replay
+     * their updates.
+     * v4: record descriptors carry the record kind and the complete paint
+     * key (paint_z, paint_sequence, record_ordinal). Materialization
+     * reproduces the stored key exactly — sequences are never re-minted —
+     * and cross-checks the serialized kind against the wire record. Keys
+     * are valid within the session epoch that minted them (archives are
+     * session-scoped).
+     * v5: record descriptors carry the record's FROZEN accumulated group
+     * offset (two f32 words), baked from the group chain at serialize time.
+     * The group tree itself is not archived — sealed content is immutable,
+     * so the final projection is all that must survive; materialization
+     * re-attaches the offset through a synthetic cache-local group. */
+    YETTY_YVTERM_TIER_FORMAT_VERSION = 5,
 };
 
 struct yetty_yvterm_tiers {
@@ -211,11 +211,18 @@ struct yetty_yvterm_tiers {
     /* The live view-window generation (set by the grid each resolution).
      * Cache entries pinned to it are protected from eviction/release. */
     uint32_t live_pin_stamp;
+
+    /* Borrowed from the owning grid: the rich-block store every line handle
+     * resolves through (serialize on push, mint cache-local blocks on
+     * inflate, destroy on cache teardown). */
+    struct yetty_yvterm_rich_store *rich_store;
 };
 
-/* Line helpers owned by grid.c (they know how to destroy complexes). */
-void yetty_yvterm_line_release_rich(struct yetty_yvterm_line *line);
-void yetty_yvterm_line_evict_figures(struct yetty_yvterm_line *line);
+/* Line helpers owned by grid.c (they route through the rich store). */
+void yetty_yvterm_line_release_rich(struct yetty_yvterm_rich_store *store,
+                                    struct yetty_yvterm_line *line);
+void yetty_yvterm_line_evict_figures(struct yetty_yvterm_rich_store *store,
+                                     struct yetty_yvterm_line *line);
 
 void yetty_yvterm_tiers_init(struct yetty_yvterm_tiers *tiers);
 void yetty_yvterm_tiers_destroy(struct yetty_yvterm_tiers *tiers);

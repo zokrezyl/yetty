@@ -1,0 +1,3068 @@
+methods:
+  - slot: constructor
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: destructor
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: widget_paint
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: list
+        type: "struct yetty_ydraw_drawable_list *"
+    doc: "/* Paint the widget's own primitives into `list` in WIDGET-LOCAL pixels
+ * (0,0 = widget top-left; the minted group's offset places them). The base
+ * paints nothing. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: widget_paint_retained
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: list
+        type: "struct yetty_ydraw_drawable_list *"
+    doc: "/* RETAINED content (T5): emitted in the widget's CONTAINMENT group, after
+ * the skin subgroup — hosted complex records whose runtime must survive
+ * skin repaints, theme restyles, movement and ancestor resizes. Replaced
+ * ONLY by an intentional structural reopen (set_record and friends mark
+ * structure dirt). The base emits nothing. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: widget_emit_geometry
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: list
+        type: "struct yetty_ydraw_drawable_list *"
+    doc: "/* Geometry follow-up for retained content: called by the incremental emit
+ * walk when the widget's SIZE changed (dirty_geometry), appending into
+ * the SAME frame envelope. A widget hosting a resizable runtime (plot)
+ * emits its addressed geometry op here — a few dozen bytes; the receiver
+ * re-plans the runtime and its chrome locally, so the record and its
+ * data are NEVER re-shipped on resize. The base emits nothing. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+  - slot: widget_on_press
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: local_x
+        type: float
+      - name: local_y
+        type: float
+      - name: button
+        type: int
+      - name: mods
+        type: int
+    doc: "/* Pointer input (widget-local pixels). Return 1 = consumed, 0 = bubble. */"
+    local: false
+    oneway: false
+    return_payload_type: int
+  - slot: widget_on_release
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: local_x
+        type: float
+      - name: local_y
+        type: float
+      - name: button
+        type: int
+      - name: mods
+        type: int
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: int
+  - slot: widget_on_motion
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: local_x
+        type: float
+      - name: local_y
+        type: float
+      - name: buttons_held
+        type: uint32_t
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: int
+  - slot: widget_on_scroll
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: local_x
+        type: float
+      - name: local_y
+        type: float
+      - name: wheel_dy
+        type: float
+    doc: null
+    local: false
+    oneway: false
+    return_payload_type: int
+  - slot: widget_on_key
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: key
+        type: uint32_t
+      - name: mods
+        type: uint32_t
+    doc: "/* Keyboard input for the focused widget. Return 1 = consumed. */"
+    local: false
+    oneway: false
+    return_payload_type: int
+  - slot: widget_cleanup
+    domain: ygui2
+    owning_class: widget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Subclass teardown hook: release owned heap state (record copies, owned
+ * drawable lists) before the base free. The base owns nothing. */"
+    local: false
+    oneway: false
+    return_payload_type: null
+classes:
+  - name: framework
+    domain: ygui2
+    accessor: yetty_ygui2_framework_class_get
+    type: regular
+    source_file: src/yetty/ygui2/framework.c
+    parent: null
+    mixins: []
+    data: struct yetty_ygui2_framework
+    data_fields:
+      - name: root
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: viewport_w
+        type: float
+        get: false
+        set: false
+      - name: viewport_h
+        type: float
+        get: false
+        set: false
+      - name: content_scale
+        type: float
+        get: false
+        set: false
+      - name: viewport_valid
+        type: int
+        get: false
+        set: false
+      - name: inserted
+        type: int
+        get: false
+        set: false
+      - name: next_node_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: sink
+        type: yetty_ygui2_sink_fn
+        get: false
+        set: false
+      - name: sink_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: write_fd
+        type: int
+        get: false
+        set: false
+      - name: write_fd_valid
+        type: int
+        get: false
+        set: false
+      - name: key_cb
+        type: yetty_ygui2_key_cb
+        get: false
+        set: false
+      - name: key_cb_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: list
+        type: "struct yetty_ydraw_drawable_list *"
+        get: false
+        set: false
+      - name: focused
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: mouse_capture
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: overlay_root
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: orphans
+        type: "struct yetty_yclass_object **"
+        get: false
+        set: false
+      - name: orphan_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: orphan_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: theme
+        type: struct yetty_ygui2_theme
+        get: false
+        set: false
+      - name: input_pending
+        type: "uint8_t[8192]"
+        get: false
+        set: false
+      - name: input_pending_length
+        type: size_t
+        get: false
+        set: false
+      - name: hold_ack_seen
+        type: int
+        get: false
+        set: false
+      - name: reserved_h
+        type: float
+        get: false
+        set: false
+      - name: rebuild_pending
+        type: int
+        get: false
+        set: false
+      - name: viewport_dirty
+        type: int
+        get: false
+        set: false
+      - name: home_before_insert
+        type: int
+        get: false
+        set: false
+      - name: fullscreen
+        type: int
+        get: false
+        set: false
+    ops: []
+    internal: false
+    doc: null
+  - name: widget
+    domain: ygui2
+    accessor: yetty_ygui2_widget_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widget.c
+    parent: null
+    mixins: []
+    data: struct yetty_ygui2_widget
+    data_fields:
+      - name: parent
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: first_child
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: next_sibling
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: framework
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: node_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: skin_node_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: transparent
+        type: int
+        get: false
+        set: false
+      - name: x
+        type: float
+        get: false
+        set: false
+      - name: y
+        type: float
+        get: false
+        set: false
+      - name: w
+        type: float
+        get: false
+        set: false
+      - name: h
+        type: float
+        get: false
+        set: false
+      - name: emitted_offset_x
+        type: float
+        get: false
+        set: false
+      - name: emitted_offset_y
+        type: float
+        get: false
+        set: false
+      - name: ever_emitted
+        type: int
+        get: false
+        set: false
+      - name: layout
+        type: struct yetty_ygui2_layout
+        get: false
+        set: false
+      - name: visible
+        type: int
+        get: false
+        set: false
+      - name: focusable
+        type: int
+        get: false
+        set: false
+      - name: dismiss_on_outside
+        type: int
+        get: false
+        set: false
+      - name: absolute
+        type: int
+        get: false
+        set: false
+      - name: abs_x
+        type: float
+        get: false
+        set: false
+      - name: abs_y
+        type: float
+        get: false
+        set: false
+      - name: abs_w
+        type: float
+        get: false
+        set: false
+      - name: abs_h
+        type: float
+        get: false
+        set: false
+      - name: scroll_x
+        type: float
+        get: false
+        set: false
+      - name: scroll_y
+        type: float
+        get: false
+        set: false
+      - name: clip_enabled
+        type: int
+        get: false
+        set: false
+      - name: emitted_clip_w
+        type: float
+        get: false
+        set: false
+      - name: emitted_clip_h
+        type: float
+        get: false
+        set: false
+      - name: dirty_skin
+        type: int
+        get: false
+        set: false
+      - name: dirty_structure
+        type: int
+        get: false
+        set: false
+      - name: dirty_position
+        type: int
+        get: false
+        set: false
+      - name: dirty_geometry
+        type: int
+        get: false
+        set: false
+    ops:
+      - slot: constructor
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_constructor
+      - slot: destructor
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_destructor
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_paint
+      - slot: widget_paint_retained
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_paint_retained
+      - slot: widget_emit_geometry
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_emit_geometry
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_on_press
+      - slot: widget_on_release
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_on_release
+      - slot: widget_on_motion
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_on_motion
+      - slot: widget_on_scroll
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_on_scroll
+      - slot: widget_on_key
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_on_key
+      - slot: widget_cleanup
+        slot_domain: ygui2
+        slot_class: widget
+        impl: widget_cleanup
+    internal: false
+    doc: null
+  - name: button
+    domain: ygui2
+    accessor: yetty_ygui2_button_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/button.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_button
+    data_fields:
+      - name: label
+        type: "char[64]"
+        get: false
+        set: false
+      - name: label_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: pressed
+        type: int
+        get: false
+        set: false
+      - name: on_click
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_click_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: button_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: button_on_press
+      - slot: widget_on_release
+        slot_domain: ygui2
+        slot_class: widget
+        impl: button_on_release
+    internal: false
+    doc: null
+  - name: checkbox
+    domain: ygui2
+    accessor: yetty_ygui2_checkbox_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/checkbox.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_checkbox
+    data_fields:
+      - name: label
+        type: "char[64]"
+        get: false
+        set: false
+      - name: label_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: checked
+        type: int
+        get: false
+        set: false
+      - name: on_toggle
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_toggle_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: checkbox_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: checkbox_on_press
+    internal: false
+    doc: null
+  - name: chip
+    domain: ygui2
+    accessor: yetty_ygui2_chip_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/chip.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_chip
+    data_fields:
+      - name: label
+        type: "char[48]"
+        get: false
+        set: false
+      - name: label_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: selectable
+        type: int
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
+      - name: on_toggle
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_toggle_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: chip_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: chip_on_press
+    internal: false
+    doc: null
+  - name: complex_host
+    domain: ygui2
+    accessor: yetty_ygui2_complex_host_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/complex_host.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_complex_host
+    data_fields:
+      - name: record_words
+        type: "uint32_t *"
+        get: false
+        set: false
+      - name: record_word_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: child_node_id
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint_retained
+        slot_domain: ygui2
+        slot_class: widget
+        impl: complex_host_paint
+      - slot: widget_cleanup
+        slot_domain: ygui2
+        slot_class: widget
+        impl: complex_host_cleanup
+    internal: false
+    doc: null
+  - name: dialog
+    domain: ygui2
+    accessor: yetty_ygui2_dialog_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/dialog.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_dialog
+    data_fields:
+      - name: title
+        type: "char[64]"
+        get: false
+        set: false
+      - name: title_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: on_close
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_close_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: dialog_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: dialog_on_press
+    internal: false
+    doc: null
+  - name: dropdown
+    domain: ygui2
+    accessor: yetty_ygui2_dropdown_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/dropdown.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_dropdown
+    data_fields:
+      - name: items
+        type: "char[16][48]"
+        get: false
+        set: false
+      - name: item_lengths
+        type: "uint32_t[16]"
+        get: false
+        set: false
+      - name: item_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: selected_plus_one
+        type: uint32_t
+        get: false
+        set: false
+      - name: popup
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: popup_stale
+        type: int
+        get: false
+        set: false
+      - name: on_change
+        type: yetty_ygui2_select_cb
+        get: false
+        set: false
+      - name: on_change_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: dropdown_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: dropdown_on_press
+      - slot: widget_cleanup
+        slot_domain: ygui2
+        slot_class: widget
+        impl: dropdown_cleanup
+    internal: false
+    doc: null
+  - name: label
+    domain: ygui2
+    accessor: yetty_ygui2_label_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/label.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_label
+    data_fields:
+      - name: text
+        type: "char[256]"
+        get: false
+        set: false
+      - name: text_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: color
+        type: uint32_t
+        get: false
+        set: false
+      - name: font_size
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: label_paint
+    internal: false
+    doc: null
+  - name: panel
+    domain: ygui2
+    accessor: yetty_ygui2_panel_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/panel.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_panel
+    data_fields:
+      - name: bg
+        type: uint32_t
+        get: false
+        set: false
+      - name: border
+        type: uint32_t
+        get: false
+        set: false
+      - name: border_width
+        type: float
+        get: false
+        set: false
+      - name: corner_radius
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: panel_paint
+    internal: false
+    doc: null
+  - name: plot
+    domain: ygui2
+    accessor: yetty_ygui2_plot_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/plot.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_plot
+    data_fields:
+      - name: figure
+        type: "struct yetty_yclass_object *"
+        get: false
+        set: false
+      - name: stream_node_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: chrome_node_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: stream_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: stream_cursor
+        type: uint32_t
+        get: false
+        set: false
+      - name: stream_wrapped
+        type: int
+        get: false
+        set: false
+      - name: window
+        type: "float *"
+        get: false
+        set: false
+      - name: window_streamed
+        type: int
+        get: false
+        set: false
+      - name: painted_width
+        type: float
+        get: false
+        set: false
+      - name: painted_height
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint_retained
+        slot_domain: ygui2
+        slot_class: widget
+        impl: plot_paint
+      - slot: widget_emit_geometry
+        slot_domain: ygui2
+        slot_class: widget
+        impl: plot_emit_geometry
+      - slot: widget_cleanup
+        slot_domain: ygui2
+        slot_class: widget
+        impl: plot_cleanup
+    internal: false
+    doc: null
+  - name: popup_menu
+    domain: ygui2
+    accessor: yetty_ygui2_popup_menu_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/popup_menu.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_popup_menu
+    data_fields:
+      - name: items
+        type: "char[16][48]"
+        get: false
+        set: false
+      - name: item_lengths
+        type: "uint32_t[16]"
+        get: false
+        set: false
+      - name: item_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: hover_plus_one
+        type: uint32_t
+        get: false
+        set: false
+      - name: on_select
+        type: yetty_ygui2_select_cb
+        get: false
+        set: false
+      - name: on_select_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: popup_menu_paint
+      - slot: widget_on_motion
+        slot_domain: ygui2
+        slot_class: widget
+        impl: popup_menu_on_motion
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: popup_menu_on_press
+    internal: false
+    doc: null
+  - name: progress
+    domain: ygui2
+    accessor: yetty_ygui2_progress_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/progress.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_progress
+    data_fields:
+      - name: value
+        type: float
+        get: false
+        set: false
+      - name: accent
+        type: uint32_t
+        get: false
+        set: false
+      - name: track
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: progress_paint
+    internal: false
+    doc: null
+  - name: radio
+    domain: ygui2
+    accessor: yetty_ygui2_radio_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/radio.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_radio
+    data_fields:
+      - name: label
+        type: "char[64]"
+        get: false
+        set: false
+      - name: label_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: selected
+        type: int
+        get: false
+        set: false
+      - name: on_select
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_select_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: radio_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: radio_on_press
+    internal: false
+    doc: null
+  - name: scrollarea
+    domain: ygui2
+    accessor: yetty_ygui2_scrollarea_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/scrollarea.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_scrollarea
+    data_fields:
+      - name: wheel_step
+        type: float
+        get: false
+        set: false
+      - name: max_scroll
+        type: float
+        get: false
+        set: false
+    ops:
+      - slot: widget_on_scroll
+        slot_domain: ygui2
+        slot_class: widget
+        impl: scrollarea_on_scroll
+    internal: false
+    doc: null
+  - name: separator
+    domain: ygui2
+    accessor: yetty_ygui2_separator_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/separator.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_separator
+    data_fields:
+      - name: color
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: separator_paint
+    internal: false
+    doc: null
+  - name: slider
+    domain: ygui2
+    accessor: yetty_ygui2_slider_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/slider.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_slider
+    data_fields:
+      - name: minimum
+        type: float
+        get: false
+        set: false
+      - name: maximum
+        type: float
+        get: false
+        set: false
+      - name: value
+        type: float
+        get: false
+        set: false
+      - name: on_change
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_change_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: slider_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: slider_on_press
+      - slot: widget_on_motion
+        slot_domain: ygui2
+        slot_class: widget
+        impl: slider_on_motion
+    internal: false
+    doc: null
+  - name: spinner
+    domain: ygui2
+    accessor: yetty_ygui2_spinner_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/spinner.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_spinner
+    data_fields:
+      - name: minimum
+        type: float
+        get: false
+        set: false
+      - name: maximum
+        type: float
+        get: false
+        set: false
+      - name: step
+        type: float
+        get: false
+        set: false
+      - name: value
+        type: float
+        get: false
+        set: false
+      - name: on_change
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_change_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: spinner_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: spinner_on_press
+    internal: false
+    doc: null
+  - name: statusbar
+    domain: ygui2
+    accessor: yetty_ygui2_statusbar_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/statusbar.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_statusbar
+    data_fields:
+      - name: left_text
+        type: "char[96]"
+        get: false
+        set: false
+      - name: left_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: right_text
+        type: "char[96]"
+        get: false
+        set: false
+      - name: right_length
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: statusbar_paint
+    internal: false
+    doc: null
+  - name: stepper
+    domain: ygui2
+    accessor: yetty_ygui2_stepper_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/stepper.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_stepper
+    data_fields:
+      - name: step_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: current
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: stepper_paint
+    internal: false
+    doc: null
+  - name: table
+    domain: ygui2
+    accessor: yetty_ygui2_table_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/table.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_table
+    data_fields:
+      - name: column_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: headers
+        type: "char[8][32]"
+        get: false
+        set: false
+      - name: column_widths
+        type: "float[8]"
+        get: false
+        set: false
+      - name: row_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: cells
+        type: "char[64][8][32]"
+        get: false
+        set: false
+      - name: row_height
+        type: float
+        get: false
+        set: false
+      - name: font_size
+        type: float
+        get: false
+        set: false
+      - name: text_color
+        type: uint32_t
+        get: false
+        set: false
+      - name: header_color
+        type: uint32_t
+        get: false
+        set: false
+      - name: stripe
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: table_paint
+    internal: false
+    doc: null
+  - name: textinput
+    domain: ygui2
+    accessor: yetty_ygui2_textinput_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/textinput.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_textinput
+    data_fields:
+      - name: text
+        type: "char[256]"
+        get: false
+        set: false
+      - name: text_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: placeholder
+        type: "char[256]"
+        get: false
+        set: false
+      - name: placeholder_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: on_submit
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_submit_userdata
+        type: "void *"
+        get: false
+        set: false
+      - name: on_change
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_change_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: textinput_paint
+      - slot: widget_on_key
+        slot_domain: ygui2
+        slot_class: widget
+        impl: textinput_on_key
+    internal: false
+    doc: null
+  - name: toggle
+    domain: ygui2
+    accessor: yetty_ygui2_toggle_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/toggle.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_toggle
+    data_fields:
+      - name: label
+        type: "char[64]"
+        get: false
+        set: false
+      - name: label_length
+        type: uint32_t
+        get: false
+        set: false
+      - name: checked
+        type: int
+        get: false
+        set: false
+      - name: on_toggle
+        type: yetty_ygui2_click_cb
+        get: false
+        set: false
+      - name: on_toggle_userdata
+        type: "void *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: toggle_paint
+      - slot: widget_on_press
+        slot_domain: ygui2
+        slot_class: widget
+        impl: toggle_on_press
+    internal: false
+    doc: null
+  - name: tooltip
+    domain: ygui2
+    accessor: yetty_ygui2_tooltip_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/tooltip.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_tooltip
+    data_fields:
+      - name: text
+        type: "char[96]"
+        get: false
+        set: false
+      - name: text_length
+        type: uint32_t
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: tooltip_paint
+    internal: false
+    doc: null
+  - name: ydraw_embed
+    domain: ygui2
+    accessor: yetty_ygui2_ydraw_embed_class_get
+    type: regular
+    source_file: src/yetty/ygui2/widgets/ydraw_embed.c
+    parent:
+      domain: ygui2
+      name: widget
+    mixins: []
+    data: struct yetty_ygui2_ydraw_embed
+    data_fields:
+      - name: buffer
+        type: "struct yetty_ydraw_drawable_list *"
+        get: false
+        set: false
+    ops:
+      - slot: widget_paint
+        slot_domain: ygui2
+        slot_class: widget
+        impl: ydraw_embed_paint
+      - slot: widget_cleanup
+        slot_domain: ygui2
+        slot_class: widget
+        impl: ydraw_embed_cleanup
+    internal: false
+    doc: null
+exposed:
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_make
+    return_type: struct yetty_yclass_object_ptr_result
+    args: []
+    doc: "/* Explicit lifecycle (the grid pattern): make allocates + initializes,
+ * dispose tears down + frees. No virtual ctor/dtor — the widget base owns
+ * those slot names for the whole module. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_dispose
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_root_create
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cls
+        type: "const struct yetty_yclass *"
+    doc: "/* Create the ROOT widget of the tree (wire GROUP id 1) and the overlay
+ * root beside it (wire GROUP id 2, always present so popups can mount
+ * later without a fresh top-level insertion). */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_widget_add
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: parent
+        type: "struct yetty_yclass_object *"
+      - name: cls
+        type: "const struct yetty_yclass *"
+    doc: "/* Add a child widget under `parent` (any widget of this framework). */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_set_sink
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: sink
+        type: yetty_ygui2_sink_fn
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_set_viewport
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: width
+        type: float
+      - name: height
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_set_fullscreen
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fullscreen
+        type: int
+    doc: "/* Reservation mode (strategy.md §5): fullscreen (default) reserves the
+ * full supported viewport range so every accepted resize is in-budget
+ * relayout; inline (`fullscreen = 0`) reserves the declared viewport
+ * height only — the insertion lives in the scrollback flow, and growth
+ * past that reservation is an explicit set_viewport rejection (the app
+ * re-inserts via clear() + emit). Must be chosen BEFORE the first
+ * insertion: the reservation is immutable for the insertion's life. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_content_scale
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_scale
+        type: "float *"
+    doc: "/* The committed HiDPI input divisor. The pane-resize envelope path
+ * commits it only after a successful viewport transition, so this always
+ * matches the projection mouse coordinates are divided against. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_set_key_cb
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_key_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_row_add
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: parent
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_column_add
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: parent
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_attach
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: read_fd
+        type: int
+      - name: write_fd
+        type: int
+    doc: "/* Attach the framework to a PTY: envelopes ship to write_fd; the app keeps
+ * owning its read loop and forwards bytes through feed_input. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_send_hold
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Arm the terminal's exit-window input barrier: the host holds keystrokes
+ * host-side until this client's PTY closes, and answers with a HOLD-ACK
+ * envelope (watch hold_ack_seen while pumping feed_input). */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_hold_ack_seen
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Nonzero once the host's HOLD-ACK envelope has been parsed — its arrival
+ * proves the input barrier is armed and teardown may proceed. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_detach
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Detach: unsubscribe from pane input (flags=0 clears every bit in the
+ * terminal). MUST run on every app exit path — a subscription that
+ * outlives its client leaves the pane spraying mouse envelopes at the
+ * shell, and no amount of `stty sane` can cure that from outside. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_clear
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Clear the surface: delete both top-level groups; the next emit homes the
+ * cursor and re-inserts from scratch. Local state is only committed after
+ * the delete envelope actually shipped. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_theme_copy
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_theme
+        type: "struct yetty_ygui2_theme *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_set_theme
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: theme
+        type: "const struct yetty_ygui2_theme *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_overlay_add
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cls
+        type: "const struct yetty_yclass *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_widget_is_focused
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: widget_obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_focus_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: widget_obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_forget_subtree
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: widget_obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Focus/capture hygiene for a subtree leaving the live tree (removal). */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_feed_input
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: bytes
+        type: "const uint8_t *"
+      - name: byte_count
+        type: size_t
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_feed_input_flush
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Idle flush: a retained LONE Escape byte is a real Escape keypress, not
+ * the start of a sequence — the host calls this on its select timeout so
+ * a bare Esc does not wait for the next unrelated key. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_is_dirty
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_feed_mouse_button
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: button
+        type: int
+      - name: pressed
+        type: int
+      - name: mods
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_feed_mouse_motion
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: buttons_held
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_feed_mouse_scroll
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: wheel_dy
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_widget_scroll_limit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_limit
+        type: "float *"
+    doc: "/* Available scroll range of a scrollarea along its flow axis: the
+ * MEASURED content extent minus the viewport, floored at 0 — the shared
+ * measure sizing the content group also clamps the wheel, so users can
+ * always reach the last rows and never scroll into blank space. */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_stream_update
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: widget_obj
+        type: "struct yetty_yclass_object *"
+      - name: child_node_id
+        type: uint32_t
+      - name: payload
+        type: "const void *"
+      - name: payload_size
+        type: size_t
+    doc: "/* Ship ONE addressed update for a node inside `widget_obj`'s group:
+ * CMD_PATH(widget's full path incl. its own group) + UPDATE(child_id).
+ * Its own tiny envelope — the streaming path (complex data without any
+ * repaint). */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_append_addressed_update
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: widget_obj
+        type: "struct yetty_yclass_object *"
+      - name: list
+        type: "struct yetty_ydraw_drawable_list *"
+      - name: child_node_id
+        type: uint32_t
+      - name: payload
+        type: "const void *"
+      - name: payload_size
+        type: size_t
+    doc: "/* Append ONE addressed update for a node inside `widget_obj`'s group into
+ * a CALLER-OWNED list (no ship): CMD_PATH(widget path incl. its own
+ * group) + UPDATE(child_id). The building block for per-widget follow-ups
+ * that must ride the frame envelope being assembled (widget_emit_geometry
+ * — the framework's own list is in use during emit, so the streaming path
+ * above cannot be taken). */"
+  - source_file: src/yetty/ygui2/framework.c
+    name: yetty_ygui2_framework_emit
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_mark_skin_dirty
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_mark_structure_dirty
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_layout_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: spec
+        type: "const struct yetty_ygui2_layout *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_rect
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_x
+        type: "float *"
+      - name: out_y
+        type: "float *"
+      - name: out_w
+        type: "float *"
+      - name: out_h
+        type: "float *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_init_base
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: framework
+        type: "struct yetty_yclass_object *"
+      - name: parent
+        type: "struct yetty_yclass_object *"
+      - name: node_id
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_link_child
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: parent
+        type: "struct yetty_yclass_object *"
+      - name: child
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_first_child
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_next_sibling
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_parent_obj
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_framework_obj
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_node_id
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_skin_node_id
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_skin_node_id
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: skin_node_id
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_node_id
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: node_id
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_transparent
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_is_transparent
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_is_visible
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_focusable
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: focusable
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_is_focusable
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_dismiss_on_outside
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: dismiss
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_dismiss_on_outside
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_has_focus
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_theme_copy
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_theme
+        type: "struct yetty_ygui2_theme *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_rect
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+      - name: w
+        type: float
+      - name: h
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_layout_copy
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_spec
+        type: "struct yetty_ygui2_layout *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_geometry_dirty
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_geometry
+        type: "int *"
+    doc: "/* Size dirt for the geometry follow-up (see widget_emit_geometry). Read
+ * by the incremental walk; consumed alongside the other classes by
+ * clear_dirty. */"
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_dirty_flags
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_skin
+        type: "int *"
+      - name: out_structure
+        type: "int *"
+      - name: out_position
+        type: "int *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_clear_dirty
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_position
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    doc: "/* Absolute placement (compatibility with ytop-style hand layout). A move is
+ * position dirt (one offset update on the wire); a size change repaints. */"
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: w
+        type: float
+      - name: h
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_absolute_rect
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_absolute
+        type: "int *"
+      - name: out_x
+        type: "float *"
+      - name: out_y
+        type: "float *"
+      - name: out_w
+        type: "float *"
+      - name: out_h
+        type: "float *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_visible
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: visible
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_emitted_offset
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_x
+        type: "float *"
+      - name: out_y
+        type: "float *"
+      - name: out_ever
+        type: "int *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_emitted_offset
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: x
+        type: float
+      - name: y
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_clip_enabled
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_clip_state
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_enabled
+        type: "int *"
+      - name: out_w
+        type: "float *"
+      - name: out_h
+        type: "float *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_emitted_clip
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: w
+        type: float
+      - name: h
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_reset_emitted
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Forget everything ever emitted for this widget's group instance. Called
+ * when that wire instance is (about to be) destroyed — clear, rebuild, or
+ * an ancestor reopen that recreates descendants with default group state —
+ * so the next emission re-sends all non-default projection state instead
+ * of trusting a cache describing the dead instance. */"
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_set_scroll
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: scroll_x
+        type: float
+      - name: scroll_y
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_scroll
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_x
+        type: "float *"
+      - name: out_y
+        type: "float *"
+    doc: null
+  - source_file: src/yetty/ygui2/widget.c
+    name: yetty_ygui2_widget_remove
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Remove a widget from the live tree: unlink from the parent chain, mark
+ * the parent structure-dirty (the next emit reopens it without this
+ * subtree), invalidate focus/capture pointers into the subtree, run the
+ * cleanup chain, free. The roots cannot be removed (dispose owns them). */"
+  - source_file: src/yetty/ygui2/widgets/button.c
+    name: yetty_ygui2_button_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/button.c
+    name: yetty_ygui2_button_on_click_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/checkbox.c
+    name: yetty_ygui2_checkbox_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/checkbox.c
+    name: yetty_ygui2_checkbox_set_checked
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: checked
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/checkbox.c
+    name: yetty_ygui2_checkbox_checked
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/checkbox.c
+    name: yetty_ygui2_checkbox_on_toggle_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/chip.c
+    name: yetty_ygui2_chip_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/chip.c
+    name: yetty_ygui2_chip_set_selectable
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: selectable
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/chip.c
+    name: yetty_ygui2_chip_set_selected
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: selected
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/chip.c
+    name: yetty_ygui2_chip_selected
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/chip.c
+    name: yetty_ygui2_chip_on_toggle_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/complex_host.c
+    name: yetty_ygui2_complex_host_set_record
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+      - name: child_node_id
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/complex_host.c
+    name: yetty_ygui2_complex_host_stream
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: payload
+        type: "const void *"
+      - name: payload_size
+        type: size_t
+    doc: "/* Stream a runtime payload to the hosted complex: ONE addressed update on
+ * the wire (its own tiny envelope, shipped immediately) — no repaint, no
+ * reopen, the geometry stays frozen. */"
+  - source_file: src/yetty/ygui2/widgets/dialog.c
+    name: yetty_ygui2_dialog_set_title
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/dialog.c
+    name: yetty_ygui2_dialog_on_close_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/dropdown.c
+    name: yetty_ygui2_dropdown_item_add
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/dropdown.c
+    name: yetty_ygui2_dropdown_set_selected
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: selected_index
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/dropdown.c
+    name: yetty_ygui2_dropdown_selected
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/dropdown.c
+    name: yetty_ygui2_dropdown_on_change_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_select_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/label.c
+    name: yetty_ygui2_label_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/label.c
+    name: yetty_ygui2_label_set_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: packed_rgba
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/label.c
+    name: yetty_ygui2_label_set_font_size
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: font_size
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/panel.c
+    name: yetty_ygui2_panel_set_bg
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: packed_rgba
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/panel.c
+    name: yetty_ygui2_panel_set_border
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: packed_rgba
+        type: uint32_t
+      - name: width_px
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/plot.c
+    name: yetty_ygui2_plot_set_title
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: title
+        type: "const char *"
+    doc: "/* Figure/axis configuration — thin forwarders to the wrapped api_yplot
+ * object (each appends its DSL directive; last one wins on the wire). */"
+  - source_file: src/yetty/ygui2/widgets/plot.c
+    name: yetty_ygui2_plot_set_expression
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: source
+        type: "const char *"
+    doc: "/* Append a raw plot-DSL fragment — curves (\"sin(3*x) * 0.8\"), per-curve
+ * colors, axis attributes. The full expression language of yplot. */"
+  - source_file: src/yetty/ygui2/widgets/plot.c
+    name: yetty_ygui2_plot_set_y_range
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: min
+        type: float
+      - name: max
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/plot.c
+    name: yetty_ygui2_plot_set_x_range
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: min
+        type: float
+      - name: max
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/plot.c
+    name: yetty_ygui2_plot_add_stream_buffer
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: name
+        type: "const char *"
+      - name: capacity
+        type: uint32_t
+      - name: color
+        type: "const char *"
+    doc: "/* Declare the STREAMING buffer: a named, SIZE-ONLY (zero-filled) slot of
+ * `capacity` samples plus its reference-curve color. Exactly one such
+ * buffer per plot widget — its samples arrive via plot_stream_samples. */"
+  - source_file: src/yetty/ygui2/widgets/plot.c
+    name: yetty_ygui2_plot_stream_samples
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: samples
+        type: "const float *"
+      - name: count
+        type: uint32_t
+    doc: "/* Bulk-load the streamed window: ships the FULL capacity every time —
+ * `count` samples plus a zeroed tail — followed by a linear ring-head
+ * op, in one envelope. Cache and runtime are identical afterwards. For
+ * live feeds use plot_append_samples (O(new samples) on the wire). */"
+  - source_file: src/yetty/ygui2/widgets/plot.c
+    name: yetty_ygui2_plot_append_samples
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: samples
+        type: "const float *"
+      - name: count
+        type: uint32_t
+    doc: "/* APPEND samples — the low-bandwidth streaming primitive. Steady state
+ * ships ONLY the new samples plus a ring-head op (~40 bytes for one
+ * sample) in one envelope; the receiver's shader unwraps the ring so
+ * the display scrolls with nothing re-sent. The one deliberate re-send
+ * is replacement recovery: an intentional structural reopen carries the
+ * cached window inside its own insertion envelope (plot_paint). */"
+  - source_file: src/yetty/ygui2/widgets/popup_menu.c
+    name: yetty_ygui2_popup_menu_item_add
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/popup_menu.c
+    name: yetty_ygui2_popup_menu_items_clear
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/popup_menu.c
+    name: yetty_ygui2_popup_menu_content_height
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Content height for the current item count — the app sizes the popup with
+ * this before showing it. */"
+  - source_file: src/yetty/ygui2/widgets/popup_menu.c
+    name: yetty_ygui2_popup_menu_on_select_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_select_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/progress.c
+    name: yetty_ygui2_progress_set_value
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: value
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/progress.c
+    name: yetty_ygui2_progress_set_accent
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: packed_rgba
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/radio.c
+    name: yetty_ygui2_radio_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/radio.c
+    name: yetty_ygui2_radio_set_selected
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: selected
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/radio.c
+    name: yetty_ygui2_radio_selected
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/radio.c
+    name: yetty_ygui2_radio_on_select_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/scrollarea.c
+    name: yetty_ygui2_scrollarea_configure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: wheel_step
+        type: float
+      - name: max_scroll
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/separator.c
+    name: yetty_ygui2_separator_set_color
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: packed_rgba
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/slider.c
+    name: yetty_ygui2_slider_set_range
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: minimum
+        type: float
+      - name: maximum
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/slider.c
+    name: yetty_ygui2_slider_set_value
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: value
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/slider.c
+    name: yetty_ygui2_slider_value
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/slider.c
+    name: yetty_ygui2_slider_on_change_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/spinner.c
+    name: yetty_ygui2_spinner_configure
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: minimum
+        type: float
+      - name: maximum
+        type: float
+      - name: step
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/spinner.c
+    name: yetty_ygui2_spinner_set_value
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: value
+        type: float
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/spinner.c
+    name: yetty_ygui2_spinner_value
+    return_type: struct yetty_ycore_float_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/spinner.c
+    name: yetty_ygui2_spinner_on_change_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/statusbar.c
+    name: yetty_ygui2_statusbar_set_left
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/statusbar.c
+    name: yetty_ygui2_statusbar_set_right
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/stepper.c
+    name: yetty_ygui2_stepper_set_count
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: step_count
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/stepper.c
+    name: yetty_ygui2_stepper_set_current
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: current
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/stepper.c
+    name: yetty_ygui2_stepper_current
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/table.c
+    name: yetty_ygui2_table_set_columns
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: headers
+        type: "const char *const *"
+      - name: widths
+        type: "const float *"
+      - name: count
+        type: uint32_t
+    doc: "/* columns: parallel arrays of header text + widths (0 = flexible). */"
+  - source_file: src/yetty/ygui2/widgets/table.c
+    name: yetty_ygui2_table_clear_rows
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/table.c
+    name: yetty_ygui2_table_add_row
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: cells
+        type: "const char *const *"
+      - name: count
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/textinput.c
+    name: yetty_ygui2_textinput_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/textinput.c
+    name: yetty_ygui2_textinput_set_placeholder
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/textinput.c
+    name: yetty_ygui2_textinput_text_copy
+    return_type: struct yetty_ycore_size_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_text
+        type: "char *"
+      - name: out_capacity
+        type: size_t
+    doc: "/* Copy the current text into `out_text` (NUL-terminated, truncating to
+ * `out_capacity`). Returns the full length. */"
+  - source_file: src/yetty/ygui2/widgets/textinput.c
+    name: yetty_ygui2_textinput_on_submit_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/textinput.c
+    name: yetty_ygui2_textinput_on_change_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/toggle.c
+    name: yetty_ygui2_toggle_set_label
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/toggle.c
+    name: yetty_ygui2_toggle_set_checked
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: checked
+        type: int
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/toggle.c
+    name: yetty_ygui2_toggle_checked
+    return_type: struct yetty_ycore_int_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/toggle.c
+    name: yetty_ygui2_toggle_on_toggle_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: callback
+        type: yetty_ygui2_click_cb
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/tooltip.c
+    name: yetty_ygui2_tooltip_set_text
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: text
+        type: "const char *"
+    doc: null
+  - source_file: src/yetty/ygui2/widgets/ydraw_embed.c
+    name: yetty_ygui2_ydraw_embed_set_buffer
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: buffer
+        type: "struct yetty_ydraw_drawable_list *"
+    doc: "/* Takes ownership of `buffer` (destroys the previous one). NULL clears.
+ * The buffer is validated leaf-only; a rejected buffer is NOT adopted (the
+ * caller keeps ownership) and the previous content stays. */"
+types:
+  - name: yetty_yclass_object_ptr_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: "struct yetty_yclass_object *"
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_error
+    kind: struct
+    fields:
+      - name: msg
+        type: "const char *"
+      - name: file
+        type: "const char *"
+      - name: func
+        type: "const char *"
+      - name: line
+        type: int
+      - name: cause
+        type: "struct yetty_ycore_error *"
+  - name: yetty_ycore_float_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: float
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_int_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_size_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: size_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_uint32_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: uint32_t
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ycore_void_result
+    kind: result
+    fields:
+      - name: ok
+        type: int
+      - name: ""
+        kind: union
+        fields:
+          - name: value
+            type: int
+          - name: error
+            type: struct yetty_ycore_error
+  - name: yetty_ygui2_layout
+    kind: struct
+    fields:
+      - name: basis
+        type: float
+      - name: grow
+        type: float
+      - name: cross_size
+        type: float
+      - name: min_main
+        type: float
+      - name: direction
+        type: uint32_t
+      - name: gap
+        type: float
+      - name: pad_left
+        type: float
+      - name: pad_top
+        type: float
+      - name: pad_right
+        type: float
+      - name: pad_bottom
+        type: float
+  - name: yetty_ygui2_theme
+    kind: struct
+    fields:
+      - name: bg
+        type: uint32_t
+      - name: bg_lifted
+        type: uint32_t
+      - name: bg_row
+        type: uint32_t
+      - name: border
+        type: uint32_t
+      - name: text_muted
+        type: uint32_t
+      - name: text_secondary
+        type: uint32_t
+      - name: text_primary
+        type: uint32_t
+      - name: accent_deep
+        type: uint32_t
+      - name: accent
+        type: uint32_t
+      - name: accent_bright
+        type: uint32_t
+local_types:
+  yetty_ygui2_framework: src/yetty/ygui2/framework.c
+  yetty_ygui2_framework_ptr_result: src/yetty/ygui2/framework.c
+  ygui2_pointer_slot: src/yetty/ygui2/framework.c
+  yetty_ygui2_widget: src/yetty/ygui2/widget.c
+  yetty_ygui2_widget_ptr_result: src/yetty/ygui2/widget.c
+  yetty_ygui2_button_ptr_result: src/yetty/ygui2/widgets/button.c
+  yetty_ygui2_button: src/yetty/ygui2/widgets/button.c
+  yetty_ygui2_checkbox_ptr_result: src/yetty/ygui2/widgets/checkbox.c
+  yetty_ygui2_checkbox: src/yetty/ygui2/widgets/checkbox.c
+  yetty_ygui2_chip_ptr_result: src/yetty/ygui2/widgets/chip.c
+  yetty_ygui2_chip: src/yetty/ygui2/widgets/chip.c
+  yetty_ygui2_complex_host_ptr_result: src/yetty/ygui2/widgets/complex_host.c
+  yetty_ygui2_complex_host: src/yetty/ygui2/widgets/complex_host.c
+  yetty_ygui2_dialog_ptr_result: src/yetty/ygui2/widgets/dialog.c
+  yetty_ygui2_dialog: src/yetty/ygui2/widgets/dialog.c
+  yetty_ygui2_dropdown_ptr_result: src/yetty/ygui2/widgets/dropdown.c
+  yetty_ygui2_dropdown: src/yetty/ygui2/widgets/dropdown.c
+  yetty_ygui2_label_ptr_result: src/yetty/ygui2/widgets/label.c
+  yetty_ygui2_label: src/yetty/ygui2/widgets/label.c
+  yetty_ygui2_panel_ptr_result: src/yetty/ygui2/widgets/panel.c
+  yetty_ygui2_panel: src/yetty/ygui2/widgets/panel.c
+  yetty_ygui2_plot_ptr_result: src/yetty/ygui2/widgets/plot.c
+  yetty_ygui2_plot: src/yetty/ygui2/widgets/plot.c
+  yetty_ygui2_popup_menu_ptr_result: src/yetty/ygui2/widgets/popup_menu.c
+  yetty_ygui2_popup_menu: src/yetty/ygui2/widgets/popup_menu.c
+  yetty_ygui2_progress_ptr_result: src/yetty/ygui2/widgets/progress.c
+  yetty_ygui2_progress: src/yetty/ygui2/widgets/progress.c
+  yetty_ygui2_radio_ptr_result: src/yetty/ygui2/widgets/radio.c
+  yetty_ygui2_radio: src/yetty/ygui2/widgets/radio.c
+  yetty_ygui2_scrollarea_ptr_result: src/yetty/ygui2/widgets/scrollarea.c
+  yetty_ygui2_scrollarea: src/yetty/ygui2/widgets/scrollarea.c
+  yetty_ygui2_separator_ptr_result: src/yetty/ygui2/widgets/separator.c
+  yetty_ygui2_separator: src/yetty/ygui2/widgets/separator.c
+  yetty_ygui2_slider_ptr_result: src/yetty/ygui2/widgets/slider.c
+  yetty_ygui2_slider: src/yetty/ygui2/widgets/slider.c
+  yetty_ygui2_spinner_ptr_result: src/yetty/ygui2/widgets/spinner.c
+  yetty_ygui2_spinner: src/yetty/ygui2/widgets/spinner.c
+  yetty_ygui2_statusbar_ptr_result: src/yetty/ygui2/widgets/statusbar.c
+  yetty_ygui2_statusbar: src/yetty/ygui2/widgets/statusbar.c
+  yetty_ygui2_stepper_ptr_result: src/yetty/ygui2/widgets/stepper.c
+  yetty_ygui2_stepper: src/yetty/ygui2/widgets/stepper.c
+  yetty_ygui2_table_ptr_result: src/yetty/ygui2/widgets/table.c
+  yetty_ygui2_table: src/yetty/ygui2/widgets/table.c
+  yetty_ygui2_textinput_ptr_result: src/yetty/ygui2/widgets/textinput.c
+  yetty_ygui2_textinput: src/yetty/ygui2/widgets/textinput.c
+  yetty_ygui2_toggle_ptr_result: src/yetty/ygui2/widgets/toggle.c
+  yetty_ygui2_toggle: src/yetty/ygui2/widgets/toggle.c
+  yetty_ygui2_tooltip_ptr_result: src/yetty/ygui2/widgets/tooltip.c
+  yetty_ygui2_tooltip: src/yetty/ygui2/widgets/tooltip.c
+  yetty_ygui2_ydraw_embed_ptr_result: src/yetty/ygui2/widgets/ydraw_embed.c
+  yetty_ygui2_ydraw_embed: src/yetty/ygui2/widgets/ydraw_embed.c
+local_typedefs:
+  __int128_t:
+    source_file: src/yetty/ygui2/framework.c
+    text: typedef __int128 __int128_t;
+  __uint128_t:
+    source_file: src/yetty/ygui2/framework.c
+    text: typedef unsigned __int128 __uint128_t;
+  __NSConstantString:
+    source_file: src/yetty/ygui2/framework.c
+    text: typedef struct __NSConstantString_tag __NSConstantString;
+  __builtin_ms_va_list:
+    source_file: src/yetty/ygui2/framework.c
+    text: "typedef char *__builtin_ms_va_list;"
+  __builtin_va_list:
+    source_file: src/yetty/ygui2/framework.c
+    text: "typedef struct __va_list_tag[1] __builtin_va_list;"
+  yetty_ygui2_sink_fn:
+    source_file: include/yetty/ygui2/defs.h
+    text: "typedef void (*yetty_ygui2_sink_fn)(const uint8_t *, size_t, void *);"
+  yetty_ygui2_click_cb:
+    source_file: include/yetty/ygui2/defs.h
+    text: "typedef void (*yetty_ygui2_click_cb)(struct yetty_yclass_object *, void *);"
+  yetty_ygui2_select_cb:
+    source_file: include/yetty/ygui2/defs.h
+    text: "typedef void (*yetty_ygui2_select_cb)(struct yetty_yclass_object *, uint32_t, void *);"
+  yetty_ygui2_key_cb:
+    source_file: include/yetty/ygui2/defs.h
+    text: "typedef int (*yetty_ygui2_key_cb)(uint32_t, uint32_t, void *);"
+  yetty_ygui2_constructor_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui2_constructor_fn)(struct yetty_yclass_object *);"
+  yetty_ygui2_destructor_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui2_destructor_fn)(struct yetty_yclass_object *);"
+  yetty_ygui2_widget_paint_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui2_widget_paint_fn)(struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *);"
+  yetty_ygui2_widget_paint_retained_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui2_widget_paint_retained_fn)(struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *);"
+  yetty_ygui2_widget_emit_geometry_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui2_widget_emit_geometry_fn)(struct yetty_yclass_object *, struct yetty_ydraw_drawable_list *);"
+  yetty_ygui2_widget_on_press_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui2_widget_on_press_fn)(struct yetty_yclass_object *, float, float, int, int);"
+  yetty_ygui2_widget_on_release_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui2_widget_on_release_fn)(struct yetty_yclass_object *, float, float, int, int);"
+  yetty_ygui2_widget_on_motion_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui2_widget_on_motion_fn)(struct yetty_yclass_object *, float, float, uint32_t);"
+  yetty_ygui2_widget_on_scroll_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui2_widget_on_scroll_fn)(struct yetty_yclass_object *, float, float, float);"
+  yetty_ygui2_widget_on_key_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_int_result (*yetty_ygui2_widget_on_key_fn)(struct yetty_yclass_object *, uint32_t, uint32_t);"
+  yetty_ygui2_widget_cleanup_fn:
+    source_file: src/yetty/gen/impl/ygui2/widget.h
+    text: "typedef struct yetty_ycore_void_result (*yetty_ygui2_widget_cleanup_fn)(struct yetty_yclass_object *);"

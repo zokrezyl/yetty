@@ -43,9 +43,9 @@ struct yetty_yclass_object_ptr_result yetty_ydrawlist2_shape_to(
 struct uint32_result yetty_ydrawlist2_shape_id_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ydrawlist2_shape_id_set(struct yetty_yclass_object *obj,
                                                              uint32_t value);
-struct uint32_result yetty_ydrawlist2_shape_z_get(struct yetty_yclass_object *obj);
-struct yetty_ycore_void_result yetty_ydrawlist2_shape_z_set(struct yetty_yclass_object *obj,
-                                                            uint32_t value);
+struct yetty_ycore_int_result yetty_ydrawlist2_shape_layer_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ydrawlist2_shape_layer_set(struct yetty_yclass_object *obj,
+                                                                int32_t value);
 struct uint32_result yetty_ydrawlist2_shape_fill_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ydrawlist2_shape_fill_set(struct yetty_yclass_object *obj,
                                                                uint32_t value);

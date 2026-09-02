@@ -173,7 +173,27 @@ classes:
         type: int
         get: false
         set: false
+      - name: pane_mouse_click_subscribed
+        type: int
+        get: false
+        set: false
+      - name: pane_mouse_move_subscribed
+        type: int
+        get: false
+        set: false
+      - name: pane_mouse_wheel_subscribed
+        type: int
+        get: false
+        set: false
       - name: mouse_buttons_held
+        type: int
+        get: false
+        set: false
+      - name: mouse_capture_figure_id
+        type: uint32_t
+        get: false
+        set: false
+      - name: mouse_capture_pane
         type: int
         get: false
         set: false
@@ -209,8 +229,12 @@ classes:
         type: "struct yetty_ydraw_drawable_list_registry *"
         get: false
         set: false
-      - name: stream_targets
-        type: struct yetty_ydraw_stream_registry
+      - name: rechrome_retry
+        type: "struct (unnamed struct at src/yetty/yterminal/terminal.c:342:5)[8]"
+        get: false
+        set: false
+      - name: rechrome_retry_count
+        type: uint32_t
         get: false
         set: false
       - name: figure_args
@@ -334,11 +358,6 @@ types:
         type: float
       - name: height
         type: float
-  - name: yetty_ydraw_stream_registry
-    kind: struct
-    fields:
-      - name: targets
-        type: "struct yetty_ydraw_complex *[16]"
   - name: yetty_yevent_event_listener
     kind: struct
     fields:
@@ -391,6 +410,7 @@ local_types:
   yetty_yterminal_terminal_context: src/yetty/yterminal/terminal.c
   yetty_yterminal_terminal: src/yetty/yterminal/terminal.c
   terminal_ydraw_ingest_state: src/yetty/yterminal/terminal.c
+  terminal_rechrome_staged_record: src/yetty/yterminal/terminal.c
 local_typedefs:
   __int128_t:
     source_file: src/yetty/yterminal/terminal.c

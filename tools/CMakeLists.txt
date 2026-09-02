@@ -89,6 +89,8 @@ endif()
 
 if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
+add_subdirectory(ytop2)
+add_subdirectory(ygreeter2)
 endif()
 
 # yetty_ygit (the reusable component) only exists on desktop — gate on the

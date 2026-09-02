@@ -20,15 +20,30 @@ class Grid(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_yvterm_grid_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_yvterm_grid_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Grid':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_yvterm_grid_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_yvterm_grid_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Vterm(_yfigure.Figure):
     """yclass yvterm:vterm"""
@@ -62,6 +77,8 @@ def grid_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_yvterm_grid_dispose`."""
     _fn = _rt.cfn("yetty_yvterm_grid_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def grid_set_sink(obj: Any, sink: Any) -> _rt.Result[None]:
@@ -73,6 +90,12 @@ def grid_set_sink(obj: Any, sink: Any) -> _rt.Result[None]:
 def grid_set_clear_hook(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
     """Call `yetty_yvterm_grid_set_clear_hook`."""
     _fn = _rt.cfn("yetty_yvterm_grid_set_clear_hook", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
+    return _rt.result_from_c(res)
+
+def grid_set_reset_hook(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_set_reset_hook`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_set_reset_hook", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
     res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
     return _rt.result_from_c(res)
 
@@ -92,6 +115,18 @@ def grid_set_pixel_size(obj: Any, width_px: int, height_px: int) -> _rt.Result[N
     """Call `yetty_yvterm_grid_set_pixel_size`."""
     _fn = _rt.cfn("yetty_yvterm_grid_set_pixel_size", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32])
     res = _fn(_rt.handle(obj), width_px, height_px)
+    return _rt.result_from_c(res)
+
+def grid_set_rich_density(obj: Any, density_scale: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_set_rich_density`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_set_rich_density", _t.yetty_ycore_void_result, [c_void_p, c_float])
+    res = _fn(_rt.handle(obj), density_scale)
+    return _rt.result_from_c(res)
+
+def grid_rich_density(obj: Any, out_density: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_density`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_density", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(out_density))
     return _rt.result_from_c(res)
 
 def grid_resize(obj: Any, cols: int, rows: int) -> _rt.Result[None]:
@@ -118,10 +153,34 @@ def grid_scroll_origin(obj: Any) -> _rt.Result[Any]:
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
+def grid_rich_push_paint_z(obj: Any, z: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_push_paint_z`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_push_paint_z", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+    res = _fn(_rt.handle(obj), z)
+    return _rt.result_from_c(res)
+
+def grid_rich_pop_paint_z(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_pop_paint_z`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_pop_paint_z", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def grid_rich_reset_paint_z(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_reset_paint_z`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_reset_paint_z", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
 def grid_append_primitive(obj: Any, row: int, words: Any, word_count: int) -> _rt.Result[int]:
     """Call `yetty_yvterm_grid_append_primitive`."""
     _fn = _rt.cfn("yetty_yvterm_grid_append_primitive", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p, c_uint32])
     res = _fn(_rt.handle(obj), row, _rt.handle(words), word_count)
+    return _rt.result_from_c(res)
+
+def grid_append_primitive_extent(obj: Any, row: int, words: Any, word_count: int, content_top_px: float, content_bottom_px: float) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_append_primitive_extent`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_append_primitive_extent", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p, c_uint32, c_float, c_float])
+    res = _fn(_rt.handle(obj), row, _rt.handle(words), word_count, content_top_px, content_bottom_px)
     return _rt.result_from_c(res)
 
 def grid_attach_complex(obj: Any, row: int, complex: Any) -> _rt.Result[int]:
@@ -130,10 +189,124 @@ def grid_attach_complex(obj: Any, row: int, complex: Any) -> _rt.Result[int]:
     res = _fn(_rt.handle(obj), row, _rt.handle(complex))
     return _rt.result_from_c(res)
 
+def grid_rich_span_declare(obj: Any, span_rows: int) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_rich_span_declare`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_span_declare", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), span_rows)
+    return _rt.result_from_c(res)
+
+def grid_rich_batch_abort(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_batch_abort`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_batch_abort", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def grid_rich_reserve_advance(obj: Any, advance_rows: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_reserve_advance`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_reserve_advance", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), advance_rows)
+    return _rt.result_from_c(res)
+
 def grid_relocate_rich_to_bottom(obj: Any, span_rows: int) -> _rt.Result[None]:
     """Call `yetty_yvterm_grid_relocate_rich_to_bottom`."""
     _fn = _rt.cfn("yetty_yvterm_grid_relocate_rich_to_bottom", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
     res = _fn(_rt.handle(obj), span_rows)
+    return _rt.result_from_c(res)
+
+def grid_rich_group_open(obj: Any, row: int, group_key: int) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_rich_group_open`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_group_open", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_uint64])
+    res = _fn(_rt.handle(obj), row, group_key)
+    return _rt.result_from_c(res)
+
+def grid_rich_group_close(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_group_close`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_group_close", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def grid_rich_group_delete(obj: Any, group_key: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_group_delete`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_group_delete", _t.yetty_ycore_void_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), group_key)
+    return _rt.result_from_c(res)
+
+def grid_rich_update_bind(obj: Any, update_key: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_update_bind`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_update_bind", _t.yetty_ycore_void_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), update_key)
+    return _rt.result_from_c(res)
+
+def grid_rich_group_offset_set(obj: Any, group_key: int, offset_x: float, offset_y: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_group_offset_set`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_group_offset_set", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_float, c_float])
+    res = _fn(_rt.handle(obj), group_key, offset_x, offset_y)
+    return _rt.result_from_c(res)
+
+def grid_rich_group_clip_set(obj: Any, group_key: int, clip_x: float, clip_y: float, clip_w: float, clip_h: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_group_clip_set`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_group_clip_set", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_float, c_float, c_float, c_float])
+    res = _fn(_rt.handle(obj), group_key, clip_x, clip_y, clip_w, clip_h)
+    return _rt.result_from_c(res)
+
+def grid_rich_update_target(obj: Any, update_key: int, out_complex: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_update_target`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_update_target", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_void_p])
+    res = _fn(_rt.handle(obj), update_key, _rt.handle(out_complex))
+    return _rt.result_from_c(res)
+
+def grid_rich_update_journal(obj: Any, update_key: int, target_field: int, payload_words: Any, payload_word_count: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_update_journal`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_update_journal", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_uint32, c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), update_key, target_field, _rt.handle(payload_words), payload_word_count)
+    return _rt.result_from_c(res)
+
+def grid_rich_update_journal_poison(obj: Any, update_key: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_update_journal_poison`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_update_journal_poison", _t.yetty_ycore_void_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), update_key)
+    return _rt.result_from_c(res)
+
+def grid_rich_update_extent_refresh(obj: Any, update_key: int, content_top_px: float, content_bottom_px: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_update_extent_refresh`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_update_extent_refresh", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_float, c_float])
+    res = _fn(_rt.handle(obj), update_key, content_top_px, content_bottom_px)
+    return _rt.result_from_c(res)
+
+def grid_rich_update_extent(obj: Any, update_key: int, out_top_px: Any, out_bottom_px: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_update_extent`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_update_extent", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), update_key, _rt.handle(out_top_px), _rt.handle(out_bottom_px))
+    return _rt.result_from_c(res)
+
+def grid_rich_update_paint_z(obj: Any, update_key: int, out_paint_z: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_update_paint_z`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_update_paint_z", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_void_p])
+    res = _fn(_rt.handle(obj), update_key, _rt.handle(out_paint_z))
+    return _rt.result_from_c(res)
+
+def grid_rich_group_reserve(obj: Any, group_key: int, extra_records: int, extra_words: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_group_reserve`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_group_reserve", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_uint32, c_uint32])
+    res = _fn(_rt.handle(obj), group_key, extra_records, extra_words)
+    return _rt.result_from_c(res)
+
+def grid_rich_group_token(obj: Any, group_key: int) -> _rt.Result[Any]:
+    """Call `yetty_yvterm_grid_rich_group_token`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_group_token", _t.yetty_ycore_uint64_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), group_key)
+    return _rt.result_from_c(res)
+
+def grid_rich_group_query(obj: Any, group_key: int, out_span_rows: Any) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_rich_group_query`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_group_query", _t.yetty_ycore_uint32_result, [c_void_p, c_uint64, c_void_p])
+    res = _fn(_rt.handle(obj), group_key, _rt.handle(out_span_rows))
+    return _rt.result_from_c(res)
+
+def grid_set_update_journal_budget(obj: Any, budget_bytes: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_set_update_journal_budget`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_set_update_journal_budget", _t.yetty_ycore_void_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), budget_bytes)
     return _rt.result_from_c(res)
 
 def grid_clear_rich_line(obj: Any, row: int) -> _rt.Result[None]:
@@ -202,34 +375,94 @@ def grid_line_dirty(obj: Any, row: int) -> _rt.Result[int]:
     res = _fn(_rt.handle(obj), row)
     return _rt.result_from_c(res)
 
-def grid_line_complexes(obj: Any, row: int, out_count: Any) -> _rt.Result[Any]:
-    """Call `yetty_yvterm_grid_line_complexes`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_line_complexes", _t.yetty_ydraw_complex_const_ptr_ptr_result, [c_void_p, c_uint32, c_void_p])
-    res = _fn(_rt.handle(obj), row, _rt.handle(out_count))
+def grid_paint_plan_leaf_clip(obj: Any, leaf_index: int, out_valid: Any, out_x: Any, out_y: Any, out_w: Any, out_h: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_paint_plan_leaf_clip`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_paint_plan_leaf_clip", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), leaf_index, _rt.handle(out_valid), _rt.handle(out_x), _rt.handle(out_y), _rt.handle(out_w), _rt.handle(out_h))
     return _rt.result_from_c(res)
 
-def grid_slot_complexes(obj: Any, slot: int, out_count: Any) -> _rt.Result[Any]:
-    """Call `yetty_yvterm_grid_slot_complexes`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_slot_complexes", _t.yetty_ydraw_complex_const_ptr_ptr_result, [c_void_p, c_uint32, c_void_p])
-    res = _fn(_rt.handle(obj), slot, _rt.handle(out_count))
+def grid_paint_plan_leaf_count(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_paint_plan_leaf_count`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_paint_plan_leaf_count", _t.yetty_ycore_uint32_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
-def grid_slot_primitive_count(obj: Any, slot: int) -> _rt.Result[int]:
-    """Call `yetty_yvterm_grid_slot_primitive_count`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_slot_primitive_count", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32])
+def grid_paint_plan_leaf(obj: Any, leaf_index: int, out_block_slot: Any, out_record_index: Any, out_kind: Any, out_paint_z: Any, out_paint_sequence: Any, out_record_ordinal: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_paint_plan_leaf`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_paint_plan_leaf", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), leaf_index, _rt.handle(out_block_slot), _rt.handle(out_record_index), _rt.handle(out_kind), _rt.handle(out_paint_z), _rt.handle(out_paint_sequence), _rt.handle(out_record_ordinal))
+    return _rt.result_from_c(res)
+
+def grid_paint_plan_leaf_offset(obj: Any, leaf_index: int, out_offset_x: Any, out_offset_y: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_paint_plan_leaf_offset`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_paint_plan_leaf_offset", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), leaf_index, _rt.handle(out_offset_x), _rt.handle(out_offset_y))
+    return _rt.result_from_c(res)
+
+def grid_paint_plan_leaf_anchor(obj: Any, leaf_index: int, out_bottom_owner_row: Any, out_span_rows: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_paint_plan_leaf_anchor`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_paint_plan_leaf_anchor", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), leaf_index, _rt.handle(out_bottom_owner_row), _rt.handle(out_span_rows))
+    return _rt.result_from_c(res)
+
+def grid_paint_plan_build_count(obj: Any) -> _rt.Result[Any]:
+    """Call `yetty_yvterm_grid_paint_plan_build_count`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_paint_plan_build_count", _t.yetty_ycore_uint64_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def grid_slot_rich_block_count(obj: Any, slot: int) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_slot_rich_block_count`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_rich_block_count", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32])
     res = _fn(_rt.handle(obj), slot)
     return _rt.result_from_c(res)
 
-def grid_slot_span(obj: Any, slot: int) -> _rt.Result[int]:
-    """Call `yetty_yvterm_grid_slot_span`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_slot_span", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32])
-    res = _fn(_rt.handle(obj), slot)
+def grid_slot_rich_block(obj: Any, slot: int, block_index: int, out_span_rows: Any, out_record_count: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_slot_rich_block`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_rich_block", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), slot, block_index, _rt.handle(out_span_rows), _rt.handle(out_record_count))
     return _rt.result_from_c(res)
 
-def grid_slot_primitive_words(obj: Any, slot: int, index: int, out_word_count: Any) -> _rt.Result[Any]:
-    """Call `yetty_yvterm_grid_slot_primitive_words`."""
-    _fn = _rt.cfn("yetty_yvterm_grid_slot_primitive_words", _t.yetty_ycore_const_uint32_ptr_result, [c_void_p, c_uint32, c_uint32, c_void_p])
-    res = _fn(_rt.handle(obj), slot, index, _rt.handle(out_word_count))
+def grid_slot_rich_block_stats(obj: Any, slot: int, block_index: int, out_record_count: Any, out_group_count: Any, out_arena_words: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_slot_rich_block_stats`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_rich_block_stats", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32, c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), slot, block_index, _rt.handle(out_record_count), _rt.handle(out_group_count), _rt.handle(out_arena_words))
+    return _rt.result_from_c(res)
+
+def grid_slot_rich_reusable_scans(obj: Any, slot: int, block_index: int, out_scans: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_slot_rich_reusable_scans`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_rich_reusable_scans", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32, c_void_p])
+    res = _fn(_rt.handle(obj), slot, block_index, _rt.handle(out_scans))
+    return _rt.result_from_c(res)
+
+def grid_rich_change_stamp(obj: Any, out_stamp: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_change_stamp`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_change_stamp", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(out_stamp))
+    return _rt.result_from_c(res)
+
+def grid_rich_binding_occupancy(obj: Any, out_live: Any, out_capacity: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_rich_binding_occupancy`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_rich_binding_occupancy", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(out_live), _rt.handle(out_capacity))
+    return _rt.result_from_c(res)
+
+def grid_slot_rich_block_sealed(obj: Any, slot: int, block_index: int) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_slot_rich_block_sealed`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_rich_block_sealed", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_uint32])
+    res = _fn(_rt.handle(obj), slot, block_index)
+    return _rt.result_from_c(res)
+
+def grid_slot_rich_block_record(obj: Any, slot: int, block_index: int, record_index: int, out_word_count: Any, out_complex: Any) -> _rt.Result[Any]:
+    """Call `yetty_yvterm_grid_slot_rich_block_record`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_rich_block_record", _t.yetty_ycore_const_uint32_ptr_result, [c_void_p, c_uint32, c_uint32, c_uint32, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), slot, block_index, record_index, _rt.handle(out_word_count), _rt.handle(out_complex))
+    return _rt.result_from_c(res)
+
+def grid_slot_rich_block_record_paint_key(obj: Any, slot: int, block_index: int, record_index: int, out_paint_z: Any, out_paint_sequence: Any, out_record_ordinal: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_grid_slot_rich_block_record_paint_key`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_rich_block_record_paint_key", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_uint32, c_uint32, c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), slot, block_index, record_index, _rt.handle(out_paint_z), _rt.handle(out_paint_sequence), _rt.handle(out_record_ordinal))
     return _rt.result_from_c(res)
 
 def grid_live_anchor(obj: Any) -> _rt.Result[Any]:
@@ -333,6 +566,12 @@ def grid_slot_dirty(obj: Any, slot: int) -> _rt.Result[int]:
     res = _fn(_rt.handle(obj), slot)
     return _rt.result_from_c(res)
 
+def grid_slot_rich_coverage(obj: Any, slot: int) -> _rt.Result[int]:
+    """Call `yetty_yvterm_grid_slot_rich_coverage`."""
+    _fn = _rt.cfn("yetty_yvterm_grid_slot_rich_coverage", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), slot)
+    return _rt.result_from_c(res)
+
 def vterm_figure_create(cols: int, rows: int, context: Any, sink: Any) -> _rt.Result[Any]:
     """Call `yetty_yvterm_vterm_figure_create`."""
     _fn = _rt.cfn("yetty_yvterm_vterm_figure_create", _t.yetty_yclass_object_ptr_result, [c_uint32, c_uint32, c_void_p, c_void_p])
@@ -357,10 +596,22 @@ def vterm_resize(obj: Any, grid_size: _t.yetty_ycore_grid_size, cell_size: _t.ye
     res = _fn(_rt.handle(obj), grid_size, cell_size)
     return _rt.result_from_c(res)
 
+def vterm_set_content_scale(obj: Any, content_scale: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_set_content_scale`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_set_content_scale", _t.yetty_ycore_void_result, [c_void_p, c_float])
+    res = _fn(_rt.handle(obj), content_scale)
+    return _rt.result_from_c(res)
+
 def vterm_cell_size(obj: Any) -> _rt.Result[int]:
     """Call `yetty_yvterm_vterm_cell_size`."""
     _fn = _rt.cfn("yetty_yvterm_vterm_cell_size", _t.pixel_size_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def vterm_rich_density(obj: Any, out_density: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_density`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_density", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(out_density))
     return _rt.result_from_c(res)
 
 def vterm_is_dirty(obj: Any) -> _rt.Result[int]:
@@ -384,6 +635,12 @@ def vterm_get_content_rect(obj: Any, out_x: Any, out_y: Any, out_width: Any, out
 def vterm_set_clear_hook(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
     """Call `yetty_yvterm_vterm_set_clear_hook`."""
     _fn = _rt.cfn("yetty_yvterm_vterm_set_clear_hook", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
+    return _rt.result_from_c(res)
+
+def vterm_set_reset_hook(obj: Any, fn: Any, userdata: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_set_reset_hook`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_set_reset_hook", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_void_p])
     res = _fn(_rt.handle(obj), _rt.handle(fn), _rt.handle(userdata))
     return _rt.result_from_c(res)
 
@@ -417,10 +674,160 @@ def vterm_append_primitive(obj: Any, row: int, words: Any, word_count: int) -> _
     res = _fn(_rt.handle(obj), row, _rt.handle(words), word_count)
     return _rt.result_from_c(res)
 
+def vterm_append_primitive_extent(obj: Any, row: int, words: Any, word_count: int, content_top_px: float, content_bottom_px: float) -> _rt.Result[int]:
+    """Call `yetty_yvterm_vterm_append_primitive_extent`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_append_primitive_extent", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p, c_uint32, c_float, c_float])
+    res = _fn(_rt.handle(obj), row, _rt.handle(words), word_count, content_top_px, content_bottom_px)
+    return _rt.result_from_c(res)
+
+def vterm_rich_group_open(obj: Any, row: int, group_key: int) -> _rt.Result[int]:
+    """Call `yetty_yvterm_vterm_rich_group_open`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_group_open", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_uint64])
+    res = _fn(_rt.handle(obj), row, group_key)
+    return _rt.result_from_c(res)
+
+def vterm_rich_group_close(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_group_close`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_group_close", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def vterm_rich_group_delete(obj: Any, group_key: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_group_delete`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_group_delete", _t.yetty_ycore_void_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), group_key)
+    return _rt.result_from_c(res)
+
+def vterm_rich_group_query(obj: Any, group_key: int, out_span_rows: Any) -> _rt.Result[int]:
+    """Call `yetty_yvterm_vterm_rich_group_query`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_group_query", _t.yetty_ycore_uint32_result, [c_void_p, c_uint64, c_void_p])
+    res = _fn(_rt.handle(obj), group_key, _rt.handle(out_span_rows))
+    return _rt.result_from_c(res)
+
+def vterm_rich_group_token(obj: Any, group_key: int) -> _rt.Result[Any]:
+    """Call `yetty_yvterm_vterm_rich_group_token`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_group_token", _t.yetty_ycore_uint64_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), group_key)
+    return _rt.result_from_c(res)
+
+def vterm_rich_push_paint_z(obj: Any, z: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_push_paint_z`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_push_paint_z", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+    res = _fn(_rt.handle(obj), z)
+    return _rt.result_from_c(res)
+
+def vterm_rich_pop_paint_z(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_pop_paint_z`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_pop_paint_z", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def vterm_rich_reset_paint_z(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_reset_paint_z`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_reset_paint_z", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def vterm_paint_plan_leaf_count(obj: Any) -> _rt.Result[int]:
+    """Call `yetty_yvterm_vterm_paint_plan_leaf_count`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_paint_plan_leaf_count", _t.yetty_ycore_uint32_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def vterm_paint_plan_leaf(obj: Any, leaf_index: int, out_block_slot: Any, out_record_index: Any, out_kind: Any, out_paint_z: Any, out_paint_sequence: Any, out_record_ordinal: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_paint_plan_leaf`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_paint_plan_leaf", _t.yetty_ycore_void_result, [c_void_p, c_uint32, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), leaf_index, _rt.handle(out_block_slot), _rt.handle(out_record_index), _rt.handle(out_kind), _rt.handle(out_paint_z), _rt.handle(out_paint_sequence), _rt.handle(out_record_ordinal))
+    return _rt.result_from_c(res)
+
+def vterm_paint_plan_build_count(obj: Any) -> _rt.Result[Any]:
+    """Call `yetty_yvterm_vterm_paint_plan_build_count`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_paint_plan_build_count", _t.yetty_ycore_uint64_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def vterm_rich_update_bind(obj: Any, update_key: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_update_bind`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_update_bind", _t.yetty_ycore_void_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), update_key)
+    return _rt.result_from_c(res)
+
+def vterm_rich_group_offset_set(obj: Any, group_key: int, offset_x: float, offset_y: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_group_offset_set`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_group_offset_set", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_float, c_float])
+    res = _fn(_rt.handle(obj), group_key, offset_x, offset_y)
+    return _rt.result_from_c(res)
+
+def vterm_rich_update_target(obj: Any, update_key: int, out_complex: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_update_target`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_update_target", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_void_p])
+    res = _fn(_rt.handle(obj), update_key, _rt.handle(out_complex))
+    return _rt.result_from_c(res)
+
+def vterm_rich_update_journal(obj: Any, update_key: int, target_field: int, payload_words: Any, payload_word_count: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_update_journal`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_update_journal", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_uint32, c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), update_key, target_field, _rt.handle(payload_words), payload_word_count)
+    return _rt.result_from_c(res)
+
+def vterm_rich_update_journal_poison(obj: Any, update_key: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_update_journal_poison`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_update_journal_poison", _t.yetty_ycore_void_result, [c_void_p, c_uint64])
+    res = _fn(_rt.handle(obj), update_key)
+    return _rt.result_from_c(res)
+
+def vterm_grid_object(obj: Any) -> _rt.Result[Any]:
+    """Call `yetty_yvterm_vterm_grid_object`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_grid_object", _t.yetty_yclass_object_ptr_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def vterm_rich_update_extent_refresh(obj: Any, update_key: int, content_top_px: float, content_bottom_px: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_update_extent_refresh`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_update_extent_refresh", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_float, c_float])
+    res = _fn(_rt.handle(obj), update_key, content_top_px, content_bottom_px)
+    return _rt.result_from_c(res)
+
+def vterm_rich_update_paint_z(obj: Any, update_key: int, out_paint_z: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_update_paint_z`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_update_paint_z", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_void_p])
+    res = _fn(_rt.handle(obj), update_key, _rt.handle(out_paint_z))
+    return _rt.result_from_c(res)
+
+def vterm_rich_group_reserve(obj: Any, group_key: int, extra_records: int, extra_words: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_group_reserve`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_group_reserve", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_uint32, c_uint32])
+    res = _fn(_rt.handle(obj), group_key, extra_records, extra_words)
+    return _rt.result_from_c(res)
+
 def vterm_attach_complex(obj: Any, row: int, complex: Any) -> _rt.Result[int]:
     """Call `yetty_yvterm_vterm_attach_complex`."""
     _fn = _rt.cfn("yetty_yvterm_vterm_attach_complex", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p])
     res = _fn(_rt.handle(obj), row, _rt.handle(complex))
+    return _rt.result_from_c(res)
+
+def vterm_rich_group_clip_set(obj: Any, group_key: int, clip_x: float, clip_y: float, clip_w: float, clip_h: float) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_group_clip_set`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_group_clip_set", _t.yetty_ycore_void_result, [c_void_p, c_uint64, c_float, c_float, c_float, c_float])
+    res = _fn(_rt.handle(obj), group_key, clip_x, clip_y, clip_w, clip_h)
+    return _rt.result_from_c(res)
+
+def vterm_rich_span_declare(obj: Any, span_rows: int) -> _rt.Result[int]:
+    """Call `yetty_yvterm_vterm_rich_span_declare`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_span_declare", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), span_rows)
+    return _rt.result_from_c(res)
+
+def vterm_rich_reserve_advance(obj: Any, advance_rows: int) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_reserve_advance`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_reserve_advance", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), advance_rows)
+    return _rt.result_from_c(res)
+
+def vterm_rich_batch_abort(obj: Any) -> _rt.Result[None]:
+    """Call `yetty_yvterm_vterm_rich_batch_abort`."""
+    _fn = _rt.cfn("yetty_yvterm_vterm_rich_batch_abort", _t.yetty_ycore_void_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
 def vterm_relocate_rich_to_bottom(obj: Any, span_rows: int) -> _rt.Result[None]:

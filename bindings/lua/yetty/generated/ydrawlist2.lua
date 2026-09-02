@@ -17,8 +17,8 @@ struct float_result yetty_ydrawlist2_text_font_size_get(struct yetty_yclass_obje
 struct yetty_ycore_void_result yetty_ydrawlist2_text_font_size_set(struct yetty_yclass_object *, float);
 struct uint32_result yetty_ydrawlist2_text_color_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ydrawlist2_text_color_set(struct yetty_yclass_object *, uint32_t);
-struct uint32_result yetty_ydrawlist2_text_layer_get(struct yetty_yclass_object *);
-struct yetty_ycore_void_result yetty_ydrawlist2_text_layer_set(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_int_result yetty_ydrawlist2_text_layer_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ydrawlist2_text_layer_set(struct yetty_yclass_object *, int32_t);
 struct yetty_ycore_int_result yetty_ydrawlist2_text_font_id_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ydrawlist2_text_font_id_set(struct yetty_yclass_object *, int32_t);
 struct float_result yetty_ydrawlist2_text_rotation_get(struct yetty_yclass_object *);
@@ -27,8 +27,8 @@ struct yetty_yclass_object_ptr_result yetty_ydrawlist2_drawable_list_create(stru
 struct yetty_yclass_object_ptr_result yetty_ydrawlist2_shape_create(struct yetty_yclass_ctx *);
 struct uint32_result yetty_ydrawlist2_shape_id_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ydrawlist2_shape_id_set(struct yetty_yclass_object *, uint32_t);
-struct uint32_result yetty_ydrawlist2_shape_z_get(struct yetty_yclass_object *);
-struct yetty_ycore_void_result yetty_ydrawlist2_shape_z_set(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_int_result yetty_ydrawlist2_shape_layer_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ydrawlist2_shape_layer_set(struct yetty_yclass_object *, int32_t);
 struct uint32_result yetty_ydrawlist2_shape_fill_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ydrawlist2_shape_fill_set(struct yetty_yclass_object *, uint32_t);
 struct uint32_result yetty_ydrawlist2_shape_stroke_get(struct yetty_yclass_object *);
@@ -40,6 +40,12 @@ struct yetty_ycore_void_result yetty_ydrawlist2_set_name(struct yetty_yclass_obj
 struct yetty_ycore_void_result yetty_ydrawlist2_set_body(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_ydrawlist2_set_color(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_ydrawlist2_add(struct yetty_yclass_object *, struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ydrawlist2_begin_group(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_void_result yetty_ydrawlist2_end_group(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ydrawlist2_delete_group(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_void_result yetty_ydrawlist2_update(struct yetty_yclass_object *, uint32_t, struct yetty_ycore_buffer);
+struct yetty_ycore_void_result yetty_ydrawlist2_path(struct yetty_yclass_object *, struct yetty_ycore_buffer);
+struct yetty_ycore_void_result yetty_ydrawlist2_reserve(struct yetty_yclass_object *, uint32_t);
 struct yetty_ycore_void_result yetty_ydrawlist2_dcs_emit(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ydrawlist2_destroy(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ydrawlist2_set_fill(struct yetty_yclass_object *, const char *);
@@ -324,6 +330,36 @@ function DrawableList:add(drawable)
   local res = rt.C().yetty_ydrawlist2_add(self.handle, rt.unwrap(drawable))
   rt.check(res)
 end
+function DrawableList:begin_group(group_id)
+  rt.live(self, "DrawableList:begin_group")
+  local res = rt.C().yetty_ydrawlist2_begin_group(self.handle, group_id)
+  rt.check(res)
+end
+function DrawableList:end_group()
+  rt.live(self, "DrawableList:end_group")
+  local res = rt.C().yetty_ydrawlist2_end_group(self.handle)
+  rt.check(res)
+end
+function DrawableList:delete_group(group_id)
+  rt.live(self, "DrawableList:delete_group")
+  local res = rt.C().yetty_ydrawlist2_delete_group(self.handle, group_id)
+  rt.check(res)
+end
+function DrawableList:update(id, payload)
+  rt.live(self, "DrawableList:update")
+  local res = rt.C().yetty_ydrawlist2_update(self.handle, id, rt.as_buffer(payload))
+  rt.check(res)
+end
+function DrawableList:path(prefix)
+  rt.live(self, "DrawableList:path")
+  local res = rt.C().yetty_ydrawlist2_path(self.handle, rt.as_buffer(prefix))
+  rt.check(res)
+end
+function DrawableList:reserve(height_px)
+  rt.live(self, "DrawableList:reserve")
+  local res = rt.C().yetty_ydrawlist2_reserve(self.handle, height_px)
+  rt.check(res)
+end
 function DrawableList:dcs_emit()
   rt.live(self, "DrawableList:dcs_emit")
   local res = rt.C().yetty_ydrawlist2_dcs_emit(self.handle)
@@ -400,15 +436,15 @@ Shape.__prop_set.id = function(obj, value)
   local res = rt.C().yetty_ydrawlist2_shape_id_set(obj.handle, value)
   rt.check(res)
 end
-Shape.__prop_get.z = function(obj)
-  rt.live(obj, "Shape.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_get(obj.handle)
+Shape.__prop_get.layer = function(obj)
+  rt.live(obj, "Shape.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_get(obj.handle)
   rt.check(res)
   return res.value
 end
-Shape.__prop_set.z = function(obj, value)
-  rt.live(obj, "Shape.z")
-  local res = rt.C().yetty_ydrawlist2_shape_z_set(obj.handle, value)
+Shape.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Shape.layer")
+  local res = rt.C().yetty_ydrawlist2_shape_layer_set(obj.handle, value)
   rt.check(res)
 end
 Shape.__prop_get.fill = function(obj)
@@ -455,9 +491,9 @@ Shape.__spec = {
   props = {
     fill = true,
     id = true,
+    layer = true,
     stroke = true,
     stroke_width = true,
-    z = true,
   },
   adders = {
   },

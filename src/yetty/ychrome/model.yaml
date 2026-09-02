@@ -120,6 +120,10 @@ classes:
         type: float
         get: false
         set: false
+      - name: content_scale
+        type: float
+        get: false
+        set: false
       - name: flags
         type: uint32_t
         get: false

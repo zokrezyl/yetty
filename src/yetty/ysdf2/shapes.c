@@ -34,8 +34,8 @@ static struct yetty_ycore_void_result ysdf2_circle_pack(struct yetty_yclass_obje
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 circle pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 circle pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 circle pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 circle pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -58,7 +58,7 @@ static struct yetty_ycore_void_result ysdf2_circle_pack(struct yetty_yclass_obje
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -92,8 +92,8 @@ static struct yetty_ycore_void_result ysdf2_box_pack(struct yetty_yclass_object 
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 box pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 box pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 box pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 box pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -116,7 +116,7 @@ static struct yetty_ycore_void_result ysdf2_box_pack(struct yetty_yclass_object 
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -152,8 +152,8 @@ static struct yetty_ycore_void_result ysdf2_segment_pack(struct yetty_yclass_obj
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 segment pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 segment pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 segment pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 segment pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -176,7 +176,7 @@ static struct yetty_ycore_void_result ysdf2_segment_pack(struct yetty_yclass_obj
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -213,8 +213,8 @@ static struct yetty_ycore_void_result ysdf2_triangle_pack(struct yetty_yclass_ob
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 triangle pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 triangle pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 triangle pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 triangle pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -237,7 +237,7 @@ static struct yetty_ycore_void_result ysdf2_triangle_pack(struct yetty_yclass_ob
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -274,8 +274,8 @@ static struct yetty_ycore_void_result ysdf2_ellipse_pack(struct yetty_yclass_obj
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 ellipse pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 ellipse pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 ellipse pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 ellipse pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -298,7 +298,7 @@ static struct yetty_ycore_void_result ysdf2_ellipse_pack(struct yetty_yclass_obj
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -334,8 +334,8 @@ static struct yetty_ycore_void_result ysdf2_arc_pack(struct yetty_yclass_object 
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 arc pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 arc pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 arc pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 arc pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -358,7 +358,7 @@ static struct yetty_ycore_void_result ysdf2_arc_pack(struct yetty_yclass_object 
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -399,8 +399,8 @@ static struct yetty_ycore_void_result ysdf2_rounded_box_pack(struct yetty_yclass
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 rounded_box pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 rounded_box pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 rounded_box pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 rounded_box pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -424,7 +424,7 @@ static struct yetty_ycore_void_result ysdf2_rounded_box_pack(struct yetty_yclass
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -463,8 +463,8 @@ static struct yetty_ycore_void_result ysdf2_rhombus_pack(struct yetty_yclass_obj
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 rhombus pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 rhombus pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 rhombus pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 rhombus pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -487,7 +487,7 @@ static struct yetty_ycore_void_result ysdf2_rhombus_pack(struct yetty_yclass_obj
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -521,8 +521,8 @@ static struct yetty_ycore_void_result ysdf2_pentagon_pack(struct yetty_yclass_ob
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 pentagon pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 pentagon pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 pentagon pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 pentagon pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -545,7 +545,7 @@ static struct yetty_ycore_void_result ysdf2_pentagon_pack(struct yetty_yclass_ob
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -578,8 +578,8 @@ static struct yetty_ycore_void_result ysdf2_hexagon_pack(struct yetty_yclass_obj
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 hexagon pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 hexagon pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 hexagon pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 hexagon pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -602,7 +602,7 @@ static struct yetty_ycore_void_result ysdf2_hexagon_pack(struct yetty_yclass_obj
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -637,8 +637,8 @@ static struct yetty_ycore_void_result ysdf2_star_pack(struct yetty_yclass_object
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 star pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 star pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 star pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 star pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -661,7 +661,7 @@ static struct yetty_ycore_void_result ysdf2_star_pack(struct yetty_yclass_object
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -697,8 +697,8 @@ static struct yetty_ycore_void_result ysdf2_pie_pack(struct yetty_yclass_object 
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 pie pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 pie pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 pie pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 pie pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -721,7 +721,7 @@ static struct yetty_ycore_void_result ysdf2_pie_pack(struct yetty_yclass_object 
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -759,8 +759,8 @@ static struct yetty_ycore_void_result ysdf2_ring_pack(struct yetty_yclass_object
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 ring pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 ring pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 ring pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 ring pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -783,7 +783,7 @@ static struct yetty_ycore_void_result ysdf2_ring_pack(struct yetty_yclass_object
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -819,8 +819,8 @@ static struct yetty_ycore_void_result ysdf2_heart_pack(struct yetty_yclass_objec
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 heart pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 heart pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 heart pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 heart pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -843,7 +843,7 @@ static struct yetty_ycore_void_result ysdf2_heart_pack(struct yetty_yclass_objec
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -878,8 +878,8 @@ static struct yetty_ycore_void_result ysdf2_cross_pack(struct yetty_yclass_objec
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 cross pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 cross pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 cross pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 cross pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -902,7 +902,7 @@ static struct yetty_ycore_void_result ysdf2_cross_pack(struct yetty_yclass_objec
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -938,8 +938,8 @@ static struct yetty_ycore_void_result ysdf2_rounded_x_pack(struct yetty_yclass_o
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 rounded_x pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 rounded_x pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 rounded_x pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 rounded_x pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -963,7 +963,7 @@ static struct yetty_ycore_void_result ysdf2_rounded_x_pack(struct yetty_yclass_o
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -999,8 +999,8 @@ static struct yetty_ycore_void_result ysdf2_capsule_pack(struct yetty_yclass_obj
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 capsule pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 capsule pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 capsule pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 capsule pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1023,7 +1023,7 @@ static struct yetty_ycore_void_result ysdf2_capsule_pack(struct yetty_yclass_obj
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1060,8 +1060,8 @@ static struct yetty_ycore_void_result ysdf2_moon_pack(struct yetty_yclass_object
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 moon pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 moon pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 moon pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 moon pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1084,7 +1084,7 @@ static struct yetty_ycore_void_result ysdf2_moon_pack(struct yetty_yclass_object
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1119,8 +1119,8 @@ static struct yetty_ycore_void_result ysdf2_egg_pack(struct yetty_yclass_object 
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 egg pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 egg pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 egg pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 egg pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1143,7 +1143,7 @@ static struct yetty_ycore_void_result ysdf2_egg_pack(struct yetty_yclass_object 
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1177,8 +1177,8 @@ static struct yetty_ycore_void_result ysdf2_octogon_pack(struct yetty_yclass_obj
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 octogon pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 octogon pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 octogon pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 octogon pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1201,7 +1201,7 @@ static struct yetty_ycore_void_result ysdf2_octogon_pack(struct yetty_yclass_obj
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1234,8 +1234,8 @@ static struct yetty_ycore_void_result ysdf2_hexagram_pack(struct yetty_yclass_ob
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 hexagram pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 hexagram pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 hexagram pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 hexagram pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1258,7 +1258,7 @@ static struct yetty_ycore_void_result ysdf2_hexagram_pack(struct yetty_yclass_ob
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1291,8 +1291,8 @@ static struct yetty_ycore_void_result ysdf2_pentagram_pack(struct yetty_yclass_o
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 pentagram pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 pentagram pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 pentagram pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 pentagram pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1316,7 +1316,7 @@ static struct yetty_ycore_void_result ysdf2_pentagram_pack(struct yetty_yclass_o
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1358,8 +1358,8 @@ static struct yetty_ycore_void_result ysdf2_linear_gradient_box_pack(
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 linear_gradient_box pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 linear_gradient_box pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 linear_gradient_box pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 linear_gradient_box pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1384,7 +1384,7 @@ static struct yetty_ycore_void_result ysdf2_linear_gradient_box_pack(
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1433,8 +1433,8 @@ static struct yetty_ycore_void_result ysdf2_radial_gradient_box_pack(
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 radial_gradient_box pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 radial_gradient_box pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 radial_gradient_box pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 radial_gradient_box pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1459,7 +1459,7 @@ static struct yetty_ycore_void_result ysdf2_radial_gradient_box_pack(
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1500,8 +1500,8 @@ static struct yetty_ycore_void_result ysdf2_sphere_3d_pack(struct yetty_yclass_o
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 sphere_3d pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 sphere_3d pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 sphere_3d pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 sphere_3d pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1525,7 +1525,7 @@ static struct yetty_ycore_void_result ysdf2_sphere_3d_pack(struct yetty_yclass_o
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1562,8 +1562,8 @@ static struct yetty_ycore_void_result ysdf2_box_3d_pack(struct yetty_yclass_obje
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 box_3d pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 box_3d pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 box_3d pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 box_3d pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1586,7 +1586,7 @@ static struct yetty_ycore_void_result ysdf2_box_3d_pack(struct yetty_yclass_obje
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1624,8 +1624,8 @@ static struct yetty_ycore_void_result ysdf2_torus_3d_pack(struct yetty_yclass_ob
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 torus_3d pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 torus_3d pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 torus_3d pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 torus_3d pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1648,7 +1648,7 @@ static struct yetty_ycore_void_result ysdf2_torus_3d_pack(struct yetty_yclass_ob
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));
@@ -1685,8 +1685,8 @@ static struct yetty_ycore_void_result ysdf2_cylinder_3d_pack(struct yetty_yclass
 {
     struct uint32_result id_r = yetty_ydrawlist2_shape_id_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, id_r, "ysdf2 cylinder_3d pack: id");
-    struct uint32_result z_r = yetty_ydrawlist2_shape_z_get(obj);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_r, "ysdf2 cylinder_3d pack: z");
+    struct yetty_ycore_int_result z_res = yetty_ydrawlist2_shape_layer_get(obj);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, z_res, "ysdf2 cylinder_3d pack: layer");
     struct uint32_result fill_r = yetty_ydrawlist2_shape_fill_get(obj);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, fill_r, "ysdf2 cylinder_3d pack: fill");
     struct uint32_result stroke_r = yetty_ydrawlist2_shape_stroke_get(obj);
@@ -1710,7 +1710,7 @@ static struct yetty_ycore_void_result ysdf2_cylinder_3d_pack(struct yetty_yclass
     if (id_r.value != 0u) {
         data[off++] = id_r.value;
     }
-    data[off++] = z_r.value;
+    data[off++] = (uint32_t)z_res.value; /* signed layer, raw wire bits */
     data[off++] = fill_r.value;
     data[off++] = stroke_r.value;
     memcpy(&data[off++], &stroke_width_r.value, sizeof(float));

@@ -1,6 +1,10 @@
 add_library(yetty_yvterm STATIC
     grid.c
     vterm.c
+    # Rich-block store: blocks + records + generation-checked handles — the
+    # rolling rich-content model the line rings anchor by handle. Free of
+    # libvterm and GPU types.
+    rich-store.c
     # Tiered scroll buffer archive engine: line serialization, lz4 warm
     # segments, the session-scoped cold spill file, materialization cache.
     scroll-tiers.c

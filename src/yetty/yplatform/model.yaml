@@ -750,6 +750,10 @@ classes:
         type: "struct yetty_ycore_xthread_event_pipe *"
         get: false
         set: false
+      - name: wake_main
+        type: "void (*)(void)"
+        get: false
+        set: false
     ops:
       - slot: window_chrome_configure
         slot_domain: yplatform

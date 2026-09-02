@@ -284,6 +284,38 @@ struct yetty_ydraw_drawable_iterator_status_result yetty_ydraw_drawable_iterator
                                  "drawable_iter: update record exceeds max size");
             }
             iter->total_size = (uint32_t)record_bytes;
+        } else if (drawable_type == YETTY_YDRAW_CMD_PATH) {
+            /* [type][count][ids...] — variable, sized by the count word. */
+            struct yetty_ycore_void_result path_ensure = iter_ensure_scratch(iter, 8u);
+            if (YETTY_IS_ERR(path_ensure)) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: ensure_scratch path header", path_ensure);
+            }
+            struct yetty_ycore_void_result path_pull = iter_pull(iter, 8u);
+            if (YETTY_IS_ERR(path_pull)) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: path header pull", path_pull);
+            }
+            if (iter->filled < 8u) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: truncated path header at envelope end");
+            }
+            uint32_t path_count;
+            memcpy(&path_count, iter->scratch + 4, sizeof(path_count));
+            if (path_count == 0u || path_count > YETTY_YDRAW_CMD_PATH_MAX_IDS) {
+                return YETTY_ERR(yetty_ydraw_drawable_iterator_status,
+                                 "drawable_iter: CMD_PATH bad id count");
+            }
+            iter->total_size = 8u + path_count * 4u;
+        } else if (drawable_type == YETTY_YDRAW_CMD_GROUP_REF ||
+                   drawable_type == YETTY_YDRAW_CMD_PAINT_Z ||
+                   drawable_type == YETTY_YDRAW_CMD_PAINT_Z_END ||
+                   drawable_type == YETTY_YDRAW_CMD_NODE_ID ||
+                   drawable_type == YETTY_YDRAW_CMD_RESERVE) {
+            /* Fixed two-word layout (type | value) — no payload_size word, so
+             * they must NOT fall into generic FAM parsing (which would read
+             * the value as a byte count and desynchronize the stream). */
+            iter->total_size = 8u;
         } else if (drawable_type == YETTY_YDRAW_CMD_GROUP) {
             /* GROUP: HAS_ID layout (type | id | payload_size | payload).
              * Size is determined by the wire bytes — no ops->size needed.
@@ -471,6 +503,48 @@ struct yetty_ycore_size_result yetty_ydraw_drawable_command_parse(
         out_command->update.data = (payload_size > 0) ? (bytes + 12) : NULL;
         out_command->update.size = payload_size;
         return YETTY_OK(yetty_ycore_size, (size_t)total);
+    }
+
+    if (drawable_type == YETTY_YDRAW_CMD_PATH) {
+        /* Variable [type][count][ids...] — surfaced as an ADD with the record
+         * bytes; the receiver folds the ids into the next command's scope. */
+        if (bytes_len < 8u) {
+            return YETTY_ERR(yetty_ycore_size, "command_parse: CMD_PATH truncated");
+        }
+        const uint32_t *path_words = (const uint32_t *)bytes;
+        uint32_t path_count = path_words[1];
+        if (path_count == 0u || path_count > YETTY_YDRAW_CMD_PATH_MAX_IDS) {
+            return YETTY_ERR(yetty_ycore_size, "command_parse: CMD_PATH bad id count");
+        }
+        size_t path_total = 8u + (size_t)path_count * 4u;
+        if (bytes_len < path_total) {
+            return YETTY_ERR(yetty_ycore_size, "command_parse: CMD_PATH truncated ids");
+        }
+        out_command->kind = YETTY_YDRAW_COMMAND_ADD;
+        out_command->entry.data = path_words;
+        struct yetty_ydraw_drawable_list_entry_ptr_result path_ops_res =
+            yetty_ydraw_drawable_list_registry_get(reg, path_words);
+        out_command->entry.ops = YETTY_IS_OK(path_ops_res) ? path_ops_res.value->ops : NULL;
+        return YETTY_OK(yetty_ycore_size, path_total);
+    }
+
+    if (drawable_type == YETTY_YDRAW_CMD_GROUP_REF || drawable_type == YETTY_YDRAW_CMD_PAINT_Z ||
+        drawable_type == YETTY_YDRAW_CMD_PAINT_Z_END || drawable_type == YETTY_YDRAW_CMD_NODE_ID ||
+        drawable_type == YETTY_YDRAW_CMD_RESERVE) {
+        /* Fixed two-word structural marker (type | value). Exact-matched so
+         * the value is never misread as a FAM byte count; surfaced as an ADD
+         * with the record bytes so the receiver dispatches on the type
+         * word (GROUP_REF is rejected; PAINT_Z / PAINT_Z_END push/pop the
+         * ambient paint-z). */
+        if (bytes_len < 8u) {
+            return YETTY_ERR(yetty_ycore_size, "command_parse: structural marker truncated");
+        }
+        out_command->kind = YETTY_YDRAW_COMMAND_ADD;
+        out_command->entry.data = (const uint32_t *)bytes;
+        struct yetty_ydraw_drawable_list_entry_ptr_result ref_ops_res =
+            yetty_ydraw_drawable_list_registry_get(reg, (const uint32_t *)bytes);
+        out_command->entry.ops = YETTY_IS_OK(ref_ops_res) ? ref_ops_res.value->ops : NULL;
+        return YETTY_OK(yetty_ycore_size, (size_t)8u);
     }
 
     if (drawable_type == YETTY_YDRAW_CMD_GROUP) {

@@ -61,6 +61,13 @@ bool yetty_ydraw_is_complex(uint32_t type);
 // Get AABB (reads bounds from standard offset 0-15 in payload)
 struct rectangle_result yetty_ydraw_complex_record_aabb(const void *data);
 
+// Paint z (stacking order) of a complex creation record. The current
+// complex wire formats carry no z field, so every complex sits at z 0;
+// when a versioned complex format adds one, this helper decodes it and
+// normalizes width/signedness — consumers must never infer a complex's
+// z from its runtime type or force complexes above primitives.
+int32_t yetty_ydraw_complex_record_paint_z(const void *data);
+
 //=============================================================================
 // Base ops for complexes (for drawable-list registry)
 // Returns base ops pointer for buffer iteration

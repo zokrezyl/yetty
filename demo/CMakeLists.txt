@@ -28,3 +28,9 @@ endif()
 # The client half is GPU-free and builds everywhere; the server half
 # self-gates on YETTY_ENABLE_LIB_WEBGPU.
 add_subdirectory(ydummy)
+
+# ydraw demos — C clients of the v2 drawable interface (ydrawlist2/ysdf2/
+# ycomplex2/api_yplot). GPU-free; gated on the client-side targets.
+if(TARGET yetty_ydrawlist2 AND TARGET yetty_ycomplex2 AND TARGET yetty_api_yplot)
+    add_subdirectory(ydraw)
+endif()

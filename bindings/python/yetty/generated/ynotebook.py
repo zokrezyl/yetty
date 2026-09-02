@@ -42,7 +42,7 @@ class MimeBundle(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ynotebook_mime_bundle_to_json_text", _t.yetty_ycore_char_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -87,7 +87,7 @@ class MimeBundle(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ynotebook_mime_bundle_json_at", _t.yetty_ycore_char_ptr_result, [c_void_p, c_size_t])
-        res = _rt.result_from_c(_fn(self._handle, index), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle, index), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -145,7 +145,7 @@ class Output(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ynotebook_output_text", _t.yetty_ycore_char_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -239,7 +239,7 @@ class Cell(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ynotebook_cell_source", _t.yetty_ycore_char_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -284,7 +284,7 @@ class Cell(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ynotebook_cell_metadata_json", _t.yetty_ycore_char_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -351,7 +351,7 @@ class Notebook(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ynotebook_notebook_to_text", _t.yetty_ycore_char_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -405,7 +405,7 @@ class Notebook(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ynotebook_notebook_metadata_json", _t.yetty_ycore_char_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value

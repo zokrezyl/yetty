@@ -18,10 +18,19 @@
 #include <yetty/yplatform/pty.h>
 
 /* Version probe the bindings can call to confirm they loaded the expected
- * library. Bumped alongside the binding ABI. */
+ * library. Bumped alongside the binding ABI surface: 0.2.0 = ygui2 widget
+ * toolkit exported (frameworks, widgets, overlay, input feeds). */
 const char *yetty_ffi_version(void)
 {
-    return "0.0.1";
+    return "0.2.0";
+}
+
+/* Release an OWNED `char *` Result value (result.h: the caller owns the
+ * heap string). Exported so bindings free through the LIBRARY's allocator
+ * instead of whatever `free` their runtime happens to resolve. */
+void yetty_ffi_string_release(char *owned)
+{
+    free(owned);
 }
 
 /*

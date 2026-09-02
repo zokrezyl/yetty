@@ -93,6 +93,16 @@ struct yetty_yplot_render_config {
     enum yetty_yplot_colormap colormap;
     float field_min;
     float field_max;
+
+    /* Nonzero = SELF-OWNED CHROME: the chrome prims (tick labels, title,
+     * axis names, legend, colorbar) are emitted bracketed in a wire GROUP
+     * with this id, and the record itself grows a chrome-state tail
+     * (title/label strings, legend, the pre-inset figure rect). A
+     * receiving host can then re-render the chrome LOCALLY after a
+     * geometry or axis-range update op — nothing but the tiny op crosses
+     * the wire on resize. 0 = legacy behavior: bare chrome prims, no
+     * tail. */
+    uint32_t chrome_group_id;
 };
 
 /* Uncertainty display style for a curve's envelope. */
@@ -184,6 +194,48 @@ struct yetty_ydraw_drawable_list_result yetty_yplot_render_program(
  * Returns bytes written; ERR on failure. */
 struct yetty_ycore_size_result yetty_yplot_dcs_bin_emit(
     const struct yetty_ydraw_drawable_list *buffer, FILE *out);
+
+/* CMD_UPDATE `sample_offset` sentinels (dispatch in yplot-update.c). The
+ * generic payload is [buffer_index][sample_offset][count][samples...];
+ * a sentinel in the sample_offset slot selects an op instead:
+ *   RING_HEAD — count = physical index of the OLDEST sample; no samples.
+ *   GEOMETRY  — count slot = new figure width (f32 bits), one following
+ *               word = new figure height (f32 bits). Patches the record
+ *               in place (re-planned insets + tick steps); sample data
+ *               is untouched and NOTHING is re-shipped.
+ *   RANGES    — count slot = axis selector (0 = x, 1 = y), two following
+ *               words = new min/max (f32 bits). Same in-place re-plan.
+ * GEOMETRY and RANGES set the instance's chrome_dirty flag; the hosting
+ * ingest then regenerates the chrome group locally via ops->emit_chrome. */
+#define YETTY_YPLOT_UPDATE_OP_RING_HEAD 0xFFFFFFFFu
+#define YETTY_YPLOT_UPDATE_OP_GEOMETRY 0xFFFFFFFEu
+#define YETTY_YPLOT_UPDATE_OP_RANGES 0xFFFFFFFDu
+
+/* Re-plan a serialized yplot record IN PLACE for a new figure size and/or
+ * the axis ranges currently in its uniform words: re-runs the label plan
+ * at the record's retained figure rect (the chrome tail written when the
+ * record was emitted with a nonzero chrome_group_id), rewrites the inset
+ * plot bounds and tick steps, and — when `dest` is non-NULL — emits the
+ * fresh chrome prims (tick labels, title, axis names, legend, colorbar)
+ * into `dest` at the figure origin. new_width/new_height <= 0 keep the
+ * current figure extent. Errors when the record carries no chrome tail. */
+struct yetty_ycore_void_result yetty_yplot_record_rechrome(uint8_t *record_bytes,
+                                                           size_t record_size, float new_width,
+                                                           float new_height,
+                                                           struct yetty_ydraw_drawable_list *dest);
+
+/* The chrome-group id retained in the record's chrome tail; 0 when the
+ * record carries none (legacy producer). */
+uint32_t yetty_yplot_record_chrome_group(const uint8_t *record_bytes, size_t record_size);
+
+/* Patch one axis range into a serialized record and re-plan its chrome
+ * layout, ATOMICALLY: on ANY failure (invalid range, a log axis with a
+ * non-positive minimum, a legacy record without the chrome tail, a
+ * layout rejection) the record is byte-identical to before the call.
+ * axis 0 = x, 1 = y. The RANGES update op is a thin wrapper over this. */
+struct yetty_ycore_void_result yetty_yplot_record_patch_ranges(uint8_t *record_bytes,
+                                                               size_t record_size, uint32_t axis,
+                                                               float new_min, float new_max);
 
 #ifdef __cplusplus
 }

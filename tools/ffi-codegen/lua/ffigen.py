@@ -122,7 +122,13 @@ def classify(type_str: str) -> tuple[str, str | None]:
 
 
 def is_char_ptr(type_str: str) -> bool:
-    t = (type_str or "").replace("const", "").replace("volatile", "").strip()
+    """CONST char* only — read-only C strings. A MUTABLE `char *` is a
+    writable OUT buffer and must stay an opaque pointer argument."""
+    import re
+    t = (type_str or "").strip()
+    if not re.match(r"^const\b", t):
+        return False
+    t = t.replace("const", "").replace("volatile", "").strip()
     return t in ("char *", "char*")
 
 

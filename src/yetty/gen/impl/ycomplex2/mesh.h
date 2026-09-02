@@ -59,6 +59,12 @@ struct yetty_ycore_void_result yetty_ycomplex2_mesh_zoom_set(struct yetty_yclass
 struct uint32_result yetty_ycomplex2_mesh_wireframe_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ycomplex2_mesh_wireframe_set(struct yetty_yclass_object *obj,
                                                                   uint32_t value);
+struct yetty_ycore_int_result yetty_ycomplex2_mesh_layer_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ycomplex2_mesh_layer_set(struct yetty_yclass_object *obj,
+                                                              int32_t value);
+struct uint32_result yetty_ycomplex2_mesh_id_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ycomplex2_mesh_id_set(struct yetty_yclass_object *obj,
+                                                           uint32_t value);
 
 /* set_glb: the glTF 2.0 binary file. */
 struct yetty_ycore_void_result yetty_ycomplex2_set_glb(struct yetty_yclass_object *obj,

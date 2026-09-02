@@ -47,6 +47,12 @@ struct yetty_ycore_void_result yetty_ycomplex2_image_width_set(struct yetty_ycla
 struct float_result yetty_ycomplex2_image_height_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ycomplex2_image_height_set(struct yetty_yclass_object *obj,
                                                                 float value);
+struct yetty_ycore_int_result yetty_ycomplex2_image_layer_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ycomplex2_image_layer_set(struct yetty_yclass_object *obj,
+                                                               int32_t value);
+struct uint32_result yetty_ycomplex2_image_id_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ycomplex2_image_id_set(struct yetty_yclass_object *obj,
+                                                            uint32_t value);
 
 /* set_path: the image file (PNG/JPG/… — whatever stb decodes). */
 struct yetty_ycore_void_result yetty_ycomplex2_set_path(struct yetty_yclass_object *obj,

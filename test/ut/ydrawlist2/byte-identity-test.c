@@ -56,7 +56,7 @@ static void test_circle_identity(struct ytest *test)
     struct yetty_yclass_object_ptr_result circle_res = yetty_ysdf2_circle_create(NULL);
     YTEST_REQUIRE_OK(test, circle_res);
     struct yetty_yclass_object *circle = circle_res.value;
-    YTEST_REQUIRE_OK(test, yetty_ydrawlist2_shape_z_set(circle, 3u));
+    YTEST_REQUIRE_OK(test, yetty_ydrawlist2_shape_layer_set(circle, 3u));
     YTEST_REQUIRE_OK(test, yetty_ydrawlist2_shape_fill_set(circle, 0xFF6BA892u));
     YTEST_REQUIRE_OK(test, yetty_ydrawlist2_shape_stroke_set(circle, 0xFF364A47u));
     YTEST_REQUIRE_OK(test, yetty_ydrawlist2_shape_stroke_width_set(circle, 2.0f));
