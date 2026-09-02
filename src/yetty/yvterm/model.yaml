@@ -41,6 +41,78 @@ classes:
         type: struct yetty_yvterm_tiers
         get: false
         set: false
+      - name: rich_store
+        type: struct yetty_yvterm_rich_store
+        get: false
+        set: false
+      - name: paint_plans
+        type: "struct yetty_yvterm_paint_plan[2]"
+        get: false
+        set: false
+      - name: open_block
+        type: struct yetty_yvterm_rich_handle
+        get: false
+        set: false
+      - name: open_block_row
+        type: uint32_t
+        get: false
+        set: false
+      - name: open_block_valid
+        type: int
+        get: false
+        set: false
+      - name: batch_block
+        type: struct yetty_yvterm_rich_handle
+        get: false
+        set: false
+      - name: batch_block_valid
+        type: int
+        get: false
+        set: false
+      - name: batch_block_row
+        type: int
+        get: false
+        set: false
+      - name: cell_height_px
+        type: float
+        get: false
+        set: false
+      - name: rich_density_scale
+        type: float
+        get: false
+        set: false
+      - name: open_group_slot
+        type: uint32_t
+        get: false
+        set: false
+      - name: group_scope_stack
+        type: "uint32_t[8]"
+        get: false
+        set: false
+      - name: group_scope_depth
+        type: uint32_t
+        get: false
+        set: false
+      - name: group_bindings
+        type: "struct yetty_yvterm_rich_binding *"
+        get: false
+        set: false
+      - name: group_binding_capacity
+        type: uint32_t
+        get: false
+        set: false
+      - name: retire_sweep_id
+        type: uint64_t
+        get: false
+        set: false
+      - name: group_binding_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: max_resident_span
+        type: uint32_t
+        get: false
+        set: false
       - name: view_active
         type: int
         get: false
@@ -181,6 +253,14 @@ classes:
         type: "void *"
         get: false
         set: false
+      - name: reset_hook_fn
+        type: yetty_yvterm_grid_reset_hook_fn
+        get: false
+        set: false
+      - name: reset_hook_userdata
+        type: "void *"
+        get: false
+        set: false
       - name: sink
         type: "struct yetty_yclass_object *"
         get: false
@@ -304,6 +384,10 @@ classes:
         get: false
         set: false
       - name: baseline_cell_height
+        type: float
+        get: false
+        set: false
+      - name: density_scale
         type: float
         get: false
         set: false
@@ -479,6 +563,18 @@ classes:
         type: "struct yetty_yvterm_shader_glyph_layer *"
         get: false
         set: false
+      - name: paint_exec
+        type: "struct vterm_paint_exec *"
+        get: false
+        set: false
+      - name: paint_exec_count
+        type: uint32_t
+        get: false
+        set: false
+      - name: paint_exec_capacity
+        type: uint32_t
+        get: false
+        set: false
     ops:
       - slot: render
         slot_domain: yfigure
@@ -572,6 +668,17 @@ exposed:
         type: "void *"
     doc: null
   - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_reset_hook
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_grid_reset_hook_fn
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_set_materialize
     return_type: struct yetty_ycore_void_result
     args:
@@ -608,6 +715,30 @@ exposed:
     doc: "/* Feed the current text-area pixel size to libvterm so DEC mode 2048 (in-band
  * window resize) can report it, then drain any notification the size change
  * produced. Called by the terminal on every resize (and once initially). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_rich_density
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: density_scale
+        type: float
+    doc: "/* The rich content density: producer-logical → framebuffer multiplier
+ * (the committed content scale the cell metrics were derived at). Pushed
+ * by the owning figure at creation; per-node retirement multiplies the
+ * stored logical footprints by it before the framebuffer-cell row math.
+ * Non-positive values are rejected. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_density
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_density
+        type: "float *"
+    doc: "/* The committed rich density product (1.0 while unset) — the ingest's
+ * reserve/span conversions read it back so they always agree with the
+ * retirement math on the same value. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_resize
     return_type: struct yetty_ycore_void_result
@@ -650,6 +781,36 @@ exposed:
  * anchored rich content on the rolling-row scroll. Each screen carries its own
  * origin; the alternate one restarts at 0 on every entry. */"
   - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_push_paint_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: z
+        type: int32_t
+    doc: "/* Open an explicit paint-z scope (CMD_PAINT_Z): every record ingested until
+ * the matching pop paints at `z`, overriding any wire z — the way a complex
+ * (which has no wire z) is placed at an arbitrary depth. Scopes nest. A
+ * push past the bounded depth is IGNORED (the matching pop stays balanced)
+ * and reported as an error, so a caller that REQUIRES its z to take effect
+ * (local chrome replacement) can abort instead of stamping records with
+ * whatever scope happens to be innermost. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_pop_paint_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Close the innermost paint-z scope (CMD_PAINT_Z_END). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_reset_paint_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Drop the whole paint-z stack — the ingest calls this at the envelope
+ * boundary so an unbalanced scope cannot leak into later output. */"
+  - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_append_primitive
     return_type: struct yetty_ycore_uint32_result
     args:
@@ -663,6 +824,26 @@ exposed:
         type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_append_primitive_extent
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+      - name: content_top_px
+        type: float
+      - name: content_bottom_px
+        type: float
+    doc: "/* append_primitive plus the record's content-space vertical extent (its
+ * effective AABB, pre-offset pixels) — what per-node scroll retirement
+ * projects into rows. The plain append leaves the extent unknown, which
+ * exempts the node from retirement (conservative). */"
+  - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_attach_complex
     return_type: struct yetty_ycore_uint32_result
     args:
@@ -674,6 +855,55 @@ exposed:
         type: "struct yetty_ydraw_complex *"
     doc: null
   - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_span_declare
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: span_rows
+        type: uint32_t
+    doc: "/* Declare the open block's final row span BEFORE the reserve cursor advance.
+ * Placement must be installed first because the advance itself can scroll:
+ * with the span still 0 every lifecycle path treats the fresh block as
+ * one-row, so a full-height reservation would seal it (primary) or recycle
+ * its owner line and destroy it (alternate) DURING its own insertion.
+ * Stamps span + bottom owner + max resident span (coverage follows in
+ * relocate, once the covered rows exist) and returns the row count the
+ * cursor may actually advance: the declared span on the primary screen, but
+ * clamped on the ALTERNATE screen so the advance never scrolls — a
+ * no-history screen has nowhere to move departing content except oblivion,
+ * so an insertion there must not scroll away its own top. The stamped span
+ * is clamped to the alternate screen's remaining rows for the same reason:
+ * rows below its bottom can never exist. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_batch_abort
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Abort the batch's provisional insertion: remove its handle from the
+ * tracked line, destroy the block (records, figure runtimes, groups) and
+ * close the batch. The recovery path when the reserve advance failed
+ * partway — the declared placement can no longer be realized, and
+ * finalizing the full span against a partial advance would let later text
+ * start inside the claimed insertion. Safe no-op without a live batch. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_reserve_advance
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: advance_rows
+        type: uint32_t
+    doc: "/* Advance the cursor for a batch's reservation — `advance_rows` newlines
+ * through libvterm — while keeping the provisional block's handle alive: an
+ * advance longer than the ring's history capacity would recycle the
+ * insertion's top line (destroying the block, or archiving it from a line
+ * the tier decoder would wrongly treat as the bottom owner) BEFORE
+ * relocation runs. The feed is chunked to under one screenful with the
+ * handle re-homed onto the cursor line around every chunk, so the line
+ * carrying it can never age out mid-advance. */"
+  - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_relocate_rich_to_bottom
     return_type: struct yetty_ycore_void_result
     args:
@@ -682,16 +912,255 @@ exposed:
       - name: span_rows
         type: uint32_t
     doc: "/* Re-home a freshly-ingested rich block from its TOP line onto its BOTTOM line
- * and stamp the block's row span there, so a figure (complex or SDF block)
- * leaves the scrollback only when its LAST overlapping line is evicted, not its
- * first. Called once after the reserve newlines that allocated the block's rows:
- * the cursor then sits on the line just BELOW the block, so the bottom line is
- * cursor_row − 1 and the top is cursor_row − span_rows. span_rows is the row
- * height the block reserved. A span of 1 is a single-row block (top == bottom):
- * only the span is recorded, nothing moves. The content was attached on the top
- * line via attach_complex / append_primitive during ingestion; those rows are
- * never recycled during their own reserve (the scroll blanks the rows below the
- * block), so the top line still holds the content here. */"
+ * and complete its coverage accounting, so a figure (complex or SDF block)
+ * leaves the scrollback only when its LAST overlapping line is evicted, not
+ * its first. Called once after the reserve cursor advance; the block's rows
+ * are derived from its own timeline anchors (insertion row + bottom owner
+ * stamped by rich_span_declare), NOT from the cursor — the advance may have
+ * been clamped on a no-history screen, where the cursor ends ON the last
+ * block row instead of below it. Callers that skipped rich_span_declare
+ * (direct API use, tests) get the span stamped here from the argument, as
+ * before. A span of 1 is a single-row block (top == bottom): nothing moves. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_group_open
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: group_key
+        type: uint64_t
+    doc: "/* Open (or reopen) the group node at path key `group_key` — the `insert`
+ * of the contract (drawable-use-cases.md). A live GROUP binding means
+ * REOPEN with EXACT-SUBTREE semantics: the group's whole old subtree dies
+ * in place (descendant groups included), a fresh scope opens in the SAME
+ * block (original anchor, span and paint position preserved), and the
+ * binding stays — replacement content then appends into that scope. A live
+ * COMPLEX binding at the key is a kind change: the old complex record dies
+ * and a fresh group is created. No live binding means a new group scope in
+ * the open block at cursor row `row` (nested opens hang under the current
+ * scope). Returns 1 when it reopened, 0 when it created. The caller pairs
+ * every open with rich_group_close. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_group_close
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Close the innermost open group scope (pairs with rich_group_open). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_group_delete
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+    doc: "/* delete(path): remove the node at the path key and its whole subtree —
+ * a GROUP node's subtree dies; a COMPLEX node's record dies. The owning
+ * block, its anchor and its terminal row span remain — deleting rich
+ * content does not pull later text upward. Unknown (or sealed — lazily
+ * purged) paths answer with an error the caller may log (a no-op on the
+ * wire). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_update_bind
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+    doc: "/* Bind the newest alive complex record carrying a runtime in the OPEN block
+ * as the COMPLEX node at path key `update_key` — this is how an id-bearing
+ * complex (`Plot(id=7)`) becomes addressable. If the path is already live it
+ * is a replacement: the old node (group subtree or complex record) dies
+ * first, per the contract's create-or-exact-replace. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_group_offset_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+      - name: offset_x
+        type: float
+      - name: offset_y
+        type: float
+    doc: "/* Set the GROUP node's translation offset (pixels, absolute) at the path
+ * key — the group-state write behind update(path, GROUP_FIELD_OFFSET, x, y).
+ * Rendering-only state: placement bookkeeping (span, coverage, sealing)
+ * never sees it. Errors when the path is not a live GROUP node, or when the
+ * value is not a finite in-range coordinate — offsets come straight off the
+ * wire and are later SUMMED across ancestors and floored to integers in the
+ * SDF bucketing, so a NaN/infinity/overflow here would reach an invalid
+ * float-to-int conversion. The bound keeps an 8-deep ancestor sum well
+ * inside both float precision and int range. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_group_clip_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+      - name: clip_x
+        type: float
+      - name: clip_y
+        type: float
+      - name: clip_w
+        type: float
+      - name: clip_h
+        type: float
+    doc: "/* Set the GROUP node's CLIP rectangle (local content space, pre-offset) —
+ * the group-state write behind update(path, GROUP_FIELD_CLIP, x,y,w,h).
+ * Non-layout PROJECTION state: placement bookkeeping never sees it; a
+ * zero-size rect disables clipping. Same validation stance as the offset:
+ * wire-controlled floats must be finite and in range. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_update_target
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: out_complex
+        type: "struct yetty_ydraw_complex **"
+    doc: "/* The live figure runtime behind `update_id`, or NULL when the binding is
+ * gone (never minted, replaced, deleted, or sealed away — the lazy purge in
+ * the lookup). The grid hands out the pointer only; the caller (which owns
+ * the complex factory layer) performs the update call. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_update_journal
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: target_field
+        type: uint32_t
+      - name: payload_words
+        type: "const uint32_t *"
+      - name: payload_word_count
+        type: uint32_t
+    doc: "/* Retain one ACCEPTED update for future re-materialization (live-first
+ * budget policy — see the store). Call after the runtime applied it. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_update_journal_poison
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+    doc: "/* Poison the journal behind `update_id`: a live update was applied whose
+ * payload cannot round-trip the journal framing (ragged byte tail) — from
+ * now on the record re-materializes from its creation envelope only, never
+ * from a partial journal. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_update_extent_refresh
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: content_top_px
+        type: float
+      - name: content_bottom_px
+        type: float
+    doc: "/* Refresh the retained scroll-retirement footprint of the COMPLEX record
+ * bound at `update_key` from its runtime's CURRENT effective AABB — the
+ * post-mutation half of a geometry/range update. Only the record's
+ * content-space extent moves (retirement and the ancestor group's
+ * subtree union judge what is actually drawn); the block's immutable row
+ * span never changes. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_update_extent
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: out_top_px
+        type: "float *"
+      - name: out_bottom_px
+        type: "float *"
+    doc: "/* Read back the retained scroll-retirement footprint of the COMPLEX
+ * record bound at `update_key` — the assertion mirror of extent_refresh
+ * for the ingest round-trip tests. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_update_paint_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: out_paint_z
+        type: "int32_t *"
+    doc: "/* The effective paint-z of the COMPLEX record bound at `update_key` — the
+ * depth the whole figure (runtime + chrome) was minted at. A receiver-
+ * local chrome replacement pushes this as the ambient scope so the
+ * regenerated prims keep the figure's original stacking, independent of
+ * the envelope being processed. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_group_reserve
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+      - name: extra_records
+        type: uint32_t
+      - name: extra_words
+        type: uint32_t
+    doc: "/* Pre-grow the block behind the GROUP at `group_key` so the next
+ * `extra_records` appends totalling `extra_words` words cannot fail on
+ * allocation, AND preflight the group's replacement-ordinal headroom —
+ * together the full staging half of an atomic in-place replacement: a
+ * successful reserve makes the later replace-open + appends infallible
+ * (see yetty_yvterm_rich_store_block_group_reserve). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_group_token
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+    doc: "/* Opaque block identity for a live group id: 0 when unbound, otherwise a
+ * token equal for two ids exactly when they are bound to the same block.
+ * Lets the envelope validator reject cross-block nested reopens BEFORE any
+ * mutation, without exposing handles. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_group_query
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+      - name: out_span_rows
+        type: "uint32_t *"
+    doc: "/* Live-group query for producers/validators: *out_span_rows receives the
+ * bound block's reserved span (0 = single-row). Returns 1 when the id is
+ * live, 0 otherwise. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_set_update_journal_budget
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: budget_bytes
+        type: uint64_t
+    doc: "/* Aggregate journal budget in bytes (scrollback/update-journal-bytes; 0 =
+ * unlimited). */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_clear_rich_line
     return_type: struct yetty_ycore_void_result
@@ -815,71 +1284,243 @@ exposed:
         type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_line_complexes
-    return_type: struct yetty_ydraw_complex_const_ptr_ptr_result
+    name: yetty_yvterm_grid_paint_plan_leaf_clip
+    return_type: struct yetty_ycore_void_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: row
+      - name: leaf_index
         type: uint32_t
-      - name: out_count
-        type: "uint32_t *"
-    doc: "/* Complex array anchored on visible row `row`. Sets *out_count; value may be
- * NULL. */"
+      - name: out_valid
+        type: "int *"
+      - name: out_x
+        type: "float *"
+      - name: out_y
+        type: "float *"
+      - name: out_w
+        type: "float *"
+      - name: out_h
+        type: "float *"
+    doc: "/* Test/introspection accessor: the plan leaf's resolved clip. */"
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_slot_complexes
-    return_type: struct yetty_ydraw_complex_const_ptr_ptr_result
+    name: yetty_yvterm_grid_paint_plan_leaf_count
+    return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
-      - name: slot
-        type: uint32_t
-      - name: out_count
-        type: "uint32_t *"
-    doc: "/* Complex array on RAW ring slot `slot` (0..slot_count) or an extended
- * view-window id. Distinct from the visible-row accessor above: the text
- * upload + shader address the ring by raw slot via the resolved window, so
- * the complex pass must read by the SAME slot to scroll in lockstep (live
- * AND scrolled-back). Sets *out_count; may be NULL. */"
+    doc: "/* Leaf count of the ACTIVE screen's plan (rebuilding it if stale). */"
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_slot_primitive_count
+    name: yetty_yvterm_grid_paint_plan_leaf
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: leaf_index
+        type: uint32_t
+      - name: out_block_slot
+        type: "uint32_t *"
+      - name: out_record_index
+        type: "uint32_t *"
+      - name: out_kind
+        type: "uint32_t *"
+      - name: out_paint_z
+        type: "int32_t *"
+      - name: out_paint_sequence
+        type: "uint64_t *"
+      - name: out_record_ordinal
+        type: "uint32_t *"
+    doc: "/* One leaf of the ACTIVE screen's sorted plan: the block slot + record
+ * index it addresses, its kind and its complete paint key, in paint
+ * order. The (slot, record index) tuple is a SNAPSHOT — valid until the
+ * next rich mutation (live compaction re-packs indices); re-query the
+ * plan afterwards instead of retaining leaves across mutations. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_paint_plan_leaf_offset
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: leaf_index
+        type: uint32_t
+      - name: out_offset_x
+        type: "float *"
+      - name: out_offset_y
+        type: "float *"
+    doc: "/* The accumulated PROJECTION offset (ancestor group offsets summed) of one
+ * plan leaf — the value the renderer shifts the leaf by. Exposed so the
+ * accumulation contract is testable without the render stack. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_paint_plan_leaf_anchor
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: leaf_index
+        type: uint32_t
+      - name: out_bottom_owner_row
+        type: "uint64_t *"
+      - name: out_span_rows
+        type: "uint32_t *"
+    doc: "/* Rolling placement of one plan leaf's block — the renderer's exact
+ * per-frame inputs (viewport bottom row = bottom_owner_row − view top).
+ * Errors when the leaf index is out of range or its handle went stale. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_paint_plan_build_count
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* How many times the ACTIVE screen's plan has been rebuilt — lets tests
+ * pin that scrolling/view changes reuse the cached order. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_rich_block_count
     return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: slot
         type: uint32_t
-    doc: "/* Number of raw drawable records (SDF / glyph / TEXT_DRAWABLE_LIST / FONT) stored
- * on RAW ring slot `slot`. The SDF render pass walks these by slot — same raw-slot
- * addressing the complex + text passes use — so figures and text scroll together. */"
+    doc: "/* Number of rich blocks anchored (bottom-owned) on RAW ring slot `slot` or an
+ * extended view-window id. Both render passes iterate blocks per slot — the
+ * same raw-slot addressing the text pass uses — so every block scrolls in
+ * lockstep with its text, live and scrolled-back alike. */"
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_slot_span
+    name: yetty_yvterm_grid_slot_rich_block
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+      - name: block_index
+        type: uint32_t
+      - name: out_span_rows
+        type: "uint32_t *"
+      - name: out_record_count
+        type: "uint32_t *"
+    doc: "/* Geometry + record count of one block on a slot. span_rows 0 = single-row
+ * anchor; otherwise the block's top row is (slot's row − (span_rows − 1)) —
+ * it draws top-down from where its text sits while staying owned (and
+ * evicted) by this bottom line. record_count 0 doubles as the out-of-range
+ * answer. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_rich_block_stats
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+      - name: block_index
+        type: uint32_t
+      - name: out_record_count
+        type: "uint32_t *"
+      - name: out_group_count
+        type: "uint32_t *"
+      - name: out_arena_words
+        type: "uint32_t *"
+    doc: "/* Physical retention counters of one block — record slots, group slots
+ * and arena words currently HELD (live plus not-yet-reclaimed). Snapshot
+ * values: any rich mutation may change them (and live reclamation may
+ * shrink them). The boundedness tests pin these against replacement
+ * churn. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_rich_reusable_scans
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+      - name: block_index
+        type: uint32_t
+      - name: out_scans
+        type: "uint64_t *"
+    doc: "/* Reuse-cache rebuild count of one block — the complexity pin for the
+ * group-slot recycler: an exact-subtree replacement window pays ONE
+ * reachability scan however many nodes it recreates. The churn tests
+ * assert scans stay proportional to replacement WINDOWS, not to
+ * recreated NODES. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_change_stamp
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_stamp
+        type: "uint64_t *"
+    doc: "/* Monotone change stamp over ALL screens' rich content (sum of the
+ * per-screen paint generations): any append, kill, replacement or
+ * compaction moves it. Change-gated sweeps (the SDF layer's font
+ * install pass) skip their walk while it holds still. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_rich_binding_occupancy
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_live
+        type: "uint32_t *"
+      - name: out_capacity
+        type: "uint32_t *"
+    doc: "/* Debug/inspection: live entries + physical capacity of the path-binding
+ * table. Snapshot values; the boundedness tests pin these against
+ * record-less replacement churn (the growth-time sweep). */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_rich_block_sealed
     return_type: struct yetty_ycore_uint32_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: slot
         type: uint32_t
-    doc: "/* Row-span of the rich-content block whose BOTTOM line is RAW ring slot `slot`.
- * The renderer recovers the block's top row as (slot's row − (span − 1)) so the
- * figure draws top-down from where its text sits, while the block is owned (and
- * evicted) by its bottom line. 0 means the slot carries no relocated block —
- * the renderer then treats it as a single-row anchor. */"
+      - name: block_index
+        type: uint32_t
+    doc: "/* 1 once the block's insertion row crossed into primary scrollback: the
+ * content is immutable history — still rendered, no longer addressable.
+ * 0 for live blocks and out-of-range slot/indices. */"
   - source_file: src/yetty/yvterm/grid.c
-    name: yetty_yvterm_grid_slot_primitive_words
+    name: yetty_yvterm_grid_slot_rich_block_record
     return_type: struct yetty_ycore_const_uint32_ptr_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
       - name: slot
         type: uint32_t
-      - name: index
+      - name: block_index
+        type: uint32_t
+      - name: record_index
         type: uint32_t
       - name: out_word_count
         type: "uint32_t *"
-    doc: "/* Words of primitive `index` on RAW ring slot `slot`. *out_word_count is set to the
- * record's u32 length. Returns NULL (and *out_word_count 0) if slot/index are out of
- * range. The returned span aliases the line's arena — read it, do not retain it. */"
+      - name: out_complex
+        type: "struct yetty_ydraw_complex **"
+    doc: "/* One record of one block on a slot: the verbatim wire words (aliasing the
+ * block's arena — read, do not retain) and, for a complex record with a live
+ * runtime, the figure instance. *out_complex may be NULL for primitive
+ * records, evicted complexes, and bytes-less runtime-only records (which
+ * report *out_word_count 0). Out-of-range slot/indices answer NULL/0. */"
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_rich_block_record_paint_key
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+      - name: block_index
+        type: uint32_t
+      - name: record_index
+        type: uint32_t
+      - name: out_paint_z
+        type: "int32_t *"
+      - name: out_paint_sequence
+        type: "uint64_t *"
+      - name: out_record_ordinal
+        type: "uint32_t *"
+    doc: "/* The record's paint key — its position in the one total paint order
+ * (paint_z, paint_sequence, record_ordinal). Errors on a dead or missing
+ * record: dead records have no paint position. */"
   - source_file: src/yetty/yvterm/grid.c
     name: yetty_yvterm_grid_live_anchor
     return_type: struct yetty_ycore_uint64_result
@@ -1080,6 +1721,18 @@ exposed:
       - name: slot
         type: uint32_t
     doc: null
+  - source_file: src/yetty/yvterm/grid.c
+    name: yetty_yvterm_grid_slot_rich_coverage
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: slot
+        type: uint32_t
+    doc: "/* The line's rich coverage counter — the constant-time gate consulted by
+ * putglyph/erase. Test observable: the counter must return to zero when the
+ * blocks covering the line are gone, or every later write on the row pays
+ * the rich invalidation walk for nothing. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_figure_create
     return_type: struct yetty_yclass_object_ptr_result
@@ -1130,12 +1783,38 @@ exposed:
         type: struct yetty_ycore_pixel_size
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_content_scale
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: content_scale
+        type: float
+    doc: "/* Live display-density transition: the pane geometry path re-derives the
+ * cell metrics at the viewer's NEW content scale in the same pass — this
+ * updates the renderer density and the grid's retained rich density
+ * TOGETHER and rebases the structural-zoom baseline by the same factor,
+ * so density-driven cell growth is a unit change, never misclassified as
+ * cell zoom, and the accumulated structural zoom is preserved. The
+ * committed product only moves once the resize with the re-derived cells
+ * lands (the push here recommits the CURRENT product). */"
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_cell_size
     return_type: struct pixel_size_result
     args:
       - name: obj
         type: "struct yetty_yclass_object *"
     doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_density
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: out_density
+        type: "float *"
+    doc: "/* The composed grid's committed rich density product — see
+ * yetty_yvterm_grid_rich_density. */"
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_is_dirty
     return_type: struct yetty_ycore_int_result
@@ -1184,6 +1863,17 @@ exposed:
         type: "struct yetty_yclass_object *"
       - name: fn
         type: yetty_yvterm_clear_hook_fn
+      - name: userdata
+        type: "void *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_set_reset_hook
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: fn
+        type: yetty_yvterm_reset_hook_fn
       - name: userdata
         type: "void *"
     doc: null
@@ -1250,6 +1940,231 @@ exposed:
         type: uint32_t
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_append_primitive_extent
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: words
+        type: "const uint32_t *"
+      - name: word_count
+        type: uint32_t
+      - name: content_top_px
+        type: float
+      - name: content_bottom_px
+        type: float
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_group_open
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: row
+        type: uint32_t
+      - name: group_key
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_group_close
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_group_delete
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_group_query
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+      - name: out_span_rows
+        type: "uint32_t *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_group_token
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_push_paint_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: z
+        type: int32_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_pop_paint_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_reset_paint_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_paint_plan_leaf_count
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_paint_plan_leaf
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: leaf_index
+        type: uint32_t
+      - name: out_block_slot
+        type: "uint32_t *"
+      - name: out_record_index
+        type: "uint32_t *"
+      - name: out_kind
+        type: "uint32_t *"
+      - name: out_paint_z
+        type: "int32_t *"
+      - name: out_paint_sequence
+        type: "uint64_t *"
+      - name: out_record_ordinal
+        type: "uint32_t *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_paint_plan_build_count
+    return_type: struct yetty_ycore_uint64_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_update_bind
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_group_offset_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+      - name: offset_x
+        type: float
+      - name: offset_y
+        type: float
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_update_target
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: out_complex
+        type: "struct yetty_ydraw_complex **"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_update_journal
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: target_field
+        type: uint32_t
+      - name: payload_words
+        type: "const uint32_t *"
+      - name: payload_word_count
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_update_journal_poison
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_grid_object
+    return_type: struct yetty_yclass_object_ptr_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+    doc: "/* Borrowed handle to the composed yvterm:grid MODEL object — the
+ * inspection surface (record / paint-key / stats accessors) the headless
+ * ingest round-trip tests assert on. */"
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_update_extent_refresh
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: content_top_px
+        type: float
+      - name: content_bottom_px
+        type: float
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_update_paint_z
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: update_key
+        type: uint64_t
+      - name: out_paint_z
+        type: "int32_t *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_group_reserve
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+      - name: extra_records
+        type: uint32_t
+      - name: extra_words
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_attach_complex
     return_type: struct yetty_ycore_uint32_result
     args:
@@ -1259,6 +2174,48 @@ exposed:
         type: uint32_t
       - name: complex
         type: "struct yetty_ydraw_complex *"
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_group_clip_set
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: group_key
+        type: uint64_t
+      - name: clip_x
+        type: float
+      - name: clip_y
+        type: float
+      - name: clip_w
+        type: float
+      - name: clip_h
+        type: float
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_span_declare
+    return_type: struct yetty_ycore_uint32_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: span_rows
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_reserve_advance
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
+      - name: advance_rows
+        type: uint32_t
+    doc: null
+  - source_file: src/yetty/yvterm/vterm.c
+    name: yetty_yvterm_vterm_rich_batch_abort
+    return_type: struct yetty_ycore_void_result
+    args:
+      - name: obj
+        type: "struct yetty_yclass_object *"
     doc: null
   - source_file: src/yetty/yvterm/vterm.c
     name: yetty_yvterm_vterm_relocate_rich_to_bottom
@@ -1676,18 +2633,6 @@ types:
             type: int
           - name: error
             type: struct yetty_ycore_error
-  - name: yetty_ydraw_complex_const_ptr_ptr_result
-    kind: result
-    fields:
-      - name: ok
-        type: int
-      - name: ""
-        kind: union
-        fields:
-          - name: value
-            type: "struct yetty_ydraw_complex *const *"
-          - name: error
-            type: struct yetty_ycore_error
   - name: yetty_yfigure_figure_ptr_result
     kind: result
     fields:
@@ -1705,27 +2650,13 @@ types:
     fields:
       - name: text_cells
         type: "struct yetty_yvterm_text_cell *"
-      - name: primitives
-        type: "struct yetty_yvterm_primitive *"
-      - name: primitive_count
+      - name: rich_blocks
+        type: "struct yetty_yvterm_rich_handle *"
+      - name: rich_block_count
         type: uint32_t
-      - name: primitive_capacity
+      - name: rich_block_capacity
         type: uint32_t
-      - name: arena
-        type: "uint32_t *"
-      - name: arena_count
-        type: uint32_t
-      - name: arena_capacity
-        type: uint32_t
-      - name: complexes
-        type: "struct yetty_ydraw_complex **"
-      - name: complex_count
-        type: uint32_t
-      - name: complex_capacity
-        type: uint32_t
-      - name: rich_span_rows
-        type: uint32_t
-      - name: envelope_count
+      - name: rich_coverage_count
         type: uint32_t
       - name: view_stamp
         type: uint32_t
@@ -1733,6 +2664,57 @@ types:
         type: int
       - name: continuation
         type: int
+  - name: yetty_yvterm_paint_plan
+    kind: struct
+    fields:
+      - name: leaves
+        type: "struct yetty_yvterm_paint_leaf *"
+      - name: leaf_count
+        type: uint32_t
+      - name: leaf_capacity
+        type: uint32_t
+      - name: built_stamp
+        type: uint64_t
+      - name: built
+        type: int
+      - name: build_count
+        type: uint64_t
+  - name: yetty_yvterm_rich_handle
+    kind: struct
+    fields:
+      - name: slot
+        type: uint32_t
+      - name: generation
+        type: uint32_t
+  - name: yetty_yvterm_rich_store
+    kind: struct
+    fields:
+      - name: blocks
+        type: "struct yetty_yvterm_rich_block *"
+      - name: block_capacity
+        type: uint32_t
+      - name: free_slots
+        type: "uint32_t *"
+      - name: free_count
+        type: uint32_t
+      - name: free_capacity
+        type: uint32_t
+      - name: next_paint_sequence
+        type: uint64_t
+      - name: live_count
+        type: uint32_t
+      - name: ambient_paint_z
+        type: "int32_t[8]"
+      - name: ambient_paint_z_depth
+        type: uint32_t
+      - name: ambient_paint_z_overflow
+        type: uint32_t
+      - name: paint_generation
+        type: "uint64_t[3]"
+      - name: journal_bytes_used
+        type: size_t
+      - name: journal_bytes_budget
+        type: size_t
   - name: yetty_yvterm_screen
     kind: struct
     fields:
@@ -1831,6 +2813,8 @@ types:
         type: "struct yetty_ycore_memtag *"
       - name: live_pin_stamp
         type: uint32_t
+      - name: rich_store
+        type: "struct yetty_yvterm_rich_store *"
   - name: yvterm_font_face
     kind: struct
     fields:
@@ -1882,6 +2866,10 @@ local_types:
   yetty_yvterm_grid_ptr_result: src/yetty/yvterm/grid.c
   yetty_yvterm_text_cell_const_ptr_result: src/yetty/yvterm/grid.c
   yetty_ydraw_complex_const_ptr_ptr_result: src/yetty/yvterm/grid.c
+  yetty_yvterm_rich_binding_state: src/yetty/yvterm/grid.c
+  yetty_yvterm_rich_node_kind: src/yetty/yvterm/grid.c
+  yetty_yvterm_rich_binding: src/yetty/yvterm/grid.c
+  grid_retire_fold: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_source: src/yetty/yvterm/grid.c
   yetty_yvterm_reflow_logical: src/yetty/yvterm/grid.c
   grid_view_sweep_state: src/yetty/yvterm/grid.c
@@ -1890,6 +2878,7 @@ local_types:
   yvterm_font_range: src/yetty/yvterm/vterm.c
   vterm_uniforms: src/yetty/yvterm/vterm.c
   yetty_yvterm_vterm: src/yetty/yvterm/vterm.c
+  vterm_paint_exec: src/yetty/yvterm/vterm.c
   yetty_yvterm_vterm_ptr_result: src/yetty/yvterm/vterm.c
 local_typedefs:
   __int128_t:
@@ -1922,15 +2911,21 @@ local_typedefs:
   yetty_yvterm_grid_clear_hook_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_clear_hook_fn)(void *);"
+  yetty_yvterm_grid_reset_hook_fn:
+    source_file: src/yetty/yvterm/grid.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_reset_hook_fn)(int, void *);"
   yetty_yvterm_grid_materialize_fn:
     source_file: src/yetty/yvterm/grid.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_complex **);"
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_materialize_fn)(const uint32_t *, uint32_t, const uint32_t *, uint32_t, void *, struct yetty_ydraw_complex **);"
   yetty_yvterm_grid_card_sub_fn:
     source_file: src/yetty/yvterm/grid.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_grid_card_sub_fn)(int, int, int, void *);"
   yetty_yvterm_clear_hook_fn:
     source_file: src/yetty/yvterm/vterm.c
     text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_clear_hook_fn)(void *);"
+  yetty_yvterm_reset_hook_fn:
+    source_file: src/yetty/yvterm/vterm.c
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_reset_hook_fn)(int, void *);"
   yetty_yvterm_materialize_fn:
     source_file: src/yetty/yvterm/vterm.c
-    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(const uint32_t *, uint32_t, void *, struct yetty_ydraw_complex **);"
+    text: "typedef struct yetty_ycore_void_result (*yetty_yvterm_materialize_fn)(const uint32_t *, uint32_t, const uint32_t *, uint32_t, void *, struct yetty_ydraw_complex **);"

@@ -2875,7 +2875,8 @@ struct yetty_ycore_int_result yetty_yui_on_event(struct yetty_yui *yui,
          * on every mouse move. */
         if (chrome_in_gesture) {
             struct yetty_ycore_int_result cf = yui_chrome_fallback(yui, event);
-            YETTY_RETURN_IF_ERR(yetty_ycore_int, cf, "on_event: chrome fallback (move, in_gesture)");
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, cf,
+                                "on_event: chrome fallback (move, in_gesture)");
             return YETTY_OK(yetty_ycore_int, 1);
         }
         struct yetty_ycore_int_result feed_r = yetty_ygui_framework_feed_mouse_motion(

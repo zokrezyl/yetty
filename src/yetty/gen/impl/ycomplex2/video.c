@@ -253,6 +253,26 @@ struct yetty_ycore_void_result yetty_ycomplex2_video_fps_set(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_int_result yetty_ycomplex2_video_layer_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_ycomplex2_video_ptr_result data = yetty_ycomplex2_video_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ycomplex2_video_layer_get: data block", data);
+    }
+    return YETTY_OK(yetty_ycore_int, data.value->layer);
+}
+
+struct yetty_ycore_void_result yetty_ycomplex2_video_layer_set(struct yetty_yclass_object *obj,
+                                                               int32_t value)
+{
+    struct yetty_ycomplex2_video_ptr_result data = yetty_ycomplex2_video_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ycomplex2_video_layer_set: data block", data);
+    }
+    data.value->layer = value;
+    return YETTY_OK_VOID();
+}
+
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_video_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_video_create(struct yetty_yclass_ctx *ctx)
 {

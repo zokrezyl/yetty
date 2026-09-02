@@ -59,7 +59,7 @@ The full startup/ownership chain and context structs are in
 | Module | Purpose | |
 |---|---|---|
 | `yterminal` | Terminal view: owns one composite content layer plus the root `yfigure` compositor; handles PTY, scrollback, selection, input forwarding | ✓ |
-| `yvterm` | Terminal content internals: libvterm text grid, scrolling ydraw canvas, shader-glyph figure, scroll/alt-screen cross-wiring | ✓ |
+| `yvterm` | Terminal content internals: libvterm text grid, the rolling rich store (addressable blocks/groups with GROUP/DELETE/UPDATE), shader-glyph figure, scroll/alt-screen cross-wiring | ✓ |
 | `ytrace` | Switchable trace points, near-zero cost when off ([ytrace](../src/yetty/ytrace/README.md)) | ✓ |
 | `ycore` | Result/error types, math, buffers, util — the foundation everything builds on ([result](result.md)) | ✓ |
 | `yconfig` | YAML config parser with path-based key/value API | ✓ |

@@ -25,7 +25,10 @@
 struct YETTY_ANNOTATE("class@ydrawlist2:shape") YETTY_ANNOTATE("parent@ydrawlist2:drawable")
     yetty_ydrawlist2_shape {
     YETTY_ANNOTATE("property") uint32_t id;
-    YETTY_ANNOTATE("property") uint32_t z;
+    /* Stacking depth (z-order), uniform and SIGNED across every drawable's
+     * `layer` — negative layers paint below the default plane. Serialized as
+     * raw 32-bit bits; the receiver decodes the paint key as signed. */
+    YETTY_ANNOTATE("property") int32_t layer;
     YETTY_ANNOTATE("property") uint32_t fill;
     YETTY_ANNOTATE("property") uint32_t stroke;
     YETTY_ANNOTATE("property") float stroke_width;

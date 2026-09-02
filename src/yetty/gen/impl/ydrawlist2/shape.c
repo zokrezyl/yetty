@@ -121,23 +121,23 @@ struct yetty_ycore_void_result yetty_ydrawlist2_shape_id_set(struct yetty_yclass
     return YETTY_OK_VOID();
 }
 
-struct uint32_result yetty_ydrawlist2_shape_z_get(struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_ydrawlist2_shape_layer_get(struct yetty_yclass_object *obj)
 {
     struct yetty_ydrawlist2_shape_ptr_result data = yetty_ydrawlist2_shape_from(obj);
     if (YETTY_IS_ERR(data)) {
-        return YETTY_ERR(uint32, "yetty_ydrawlist2_shape_z_get: data block", data);
+        return YETTY_ERR(yetty_ycore_int, "yetty_ydrawlist2_shape_layer_get: data block", data);
     }
-    return YETTY_OK(uint32, data.value->z);
+    return YETTY_OK(yetty_ycore_int, data.value->layer);
 }
 
-struct yetty_ycore_void_result yetty_ydrawlist2_shape_z_set(struct yetty_yclass_object *obj,
-                                                            uint32_t value)
+struct yetty_ycore_void_result yetty_ydrawlist2_shape_layer_set(struct yetty_yclass_object *obj,
+                                                                int32_t value)
 {
     struct yetty_ydrawlist2_shape_ptr_result data = yetty_ydrawlist2_shape_from(obj);
     if (YETTY_IS_ERR(data)) {
-        return YETTY_ERR(yetty_ycore_void, "yetty_ydrawlist2_shape_z_set: data block", data);
+        return YETTY_ERR(yetty_ycore_void, "yetty_ydrawlist2_shape_layer_set: data block", data);
     }
-    data.value->z = value;
+    data.value->layer = value;
     return YETTY_OK_VOID();
 }
 

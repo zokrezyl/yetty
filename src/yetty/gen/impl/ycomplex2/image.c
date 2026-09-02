@@ -173,6 +173,46 @@ struct yetty_ycore_void_result yetty_ycomplex2_image_height_set(struct yetty_ycl
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_int_result yetty_ycomplex2_image_layer_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_ycomplex2_image_ptr_result data = yetty_ycomplex2_image_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_ycomplex2_image_layer_get: data block", data);
+    }
+    return YETTY_OK(yetty_ycore_int, data.value->layer);
+}
+
+struct yetty_ycore_void_result yetty_ycomplex2_image_layer_set(struct yetty_yclass_object *obj,
+                                                               int32_t value)
+{
+    struct yetty_ycomplex2_image_ptr_result data = yetty_ycomplex2_image_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ycomplex2_image_layer_set: data block", data);
+    }
+    data.value->layer = value;
+    return YETTY_OK_VOID();
+}
+
+struct uint32_result yetty_ycomplex2_image_id_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_ycomplex2_image_ptr_result data = yetty_ycomplex2_image_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(uint32, "yetty_ycomplex2_image_id_get: data block", data);
+    }
+    return YETTY_OK(uint32, data.value->id);
+}
+
+struct yetty_ycore_void_result yetty_ycomplex2_image_id_set(struct yetty_yclass_object *obj,
+                                                            uint32_t value)
+{
+    struct yetty_ycomplex2_image_ptr_result data = yetty_ycomplex2_image_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_ycomplex2_image_id_set: data block", data);
+    }
+    data.value->id = value;
+    return YETTY_OK_VOID();
+}
+
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_image_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_image_create(struct yetty_yclass_ctx *ctx)
 {

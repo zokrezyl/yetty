@@ -372,3 +372,60 @@ class Plot(_ydrawlist2.Drawable):
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
+    @property
+    def layer(self) -> int:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_api_yplot_plot_layer_get", _t.yetty_ycore_int_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @layer.setter
+    def layer(self, value: int) -> None:
+        """Property `layer` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_api_yplot_plot_layer_set", _t.yetty_ycore_void_result, [c_void_p, c_int32])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    @property
+    def id(self) -> int:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_api_yplot_plot_id_get", _t.uint32_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @id.setter
+    def id(self, value: int) -> None:
+        """Property `id` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_api_yplot_plot_id_set", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    @property
+    def chrome_group(self) -> int:
+        """Property `chrome_group` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_api_yplot_plot_chrome_group_get", _t.uint32_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    @chrome_group.setter
+    def chrome_group(self, value: int) -> None:
+        """Property `chrome_group` (raises YettyError on failure)."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_api_yplot_plot_chrome_group_set", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, value))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)

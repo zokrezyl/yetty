@@ -73,3 +73,12 @@ class Sink(_rt.YClass):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
+    def set_title(self, title: str | bytes | None, len: int) -> None:
+        """Call `yetty_ytermsink_set_title`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ytermsink_set_title", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(title), len))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value

@@ -62,11 +62,17 @@ function Terminal:sixel_write(data, len)
   local res = rt.C().yetty_ytermsink_sixel_write(self.handle, data, len)
   rt.check(res)
 end
+function Terminal:set_title(title, len)
+  rt.live(self, "Terminal:set_title")
+  local res = rt.C().yetty_ytermsink_set_title(self.handle, title, len)
+  rt.check(res)
+end
 function Terminal:destroy()
   rt.object_free(self)
 end
 Terminal.__spec = {
   setters = {
+    title = { fn = "set_title", n = 2 },
   },
   props = {
   },

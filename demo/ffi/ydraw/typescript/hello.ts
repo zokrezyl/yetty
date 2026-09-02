@@ -17,7 +17,7 @@ dlist.add(new Font({ fontId: SCORE_FONT, name: "Emmentaler" }));
 dlist.add(new Circle({ centerX: 96, centerY: 96, radius: 64,
                        fill: "#6BA892", stroke: "#364A47", strokeWidth: 2 }));
 dlist.add(new Box({ centerX: 280, centerY: 96, halfWidth: 72,
-                    halfHeight: 48, cornerRadius: 8, fill: "#1E262C", z: 1 }));
+                    halfHeight: 48, cornerRadius: 8, fill: "#1E262C", layer: 1 }));
 dlist.add(new Star({ centerX: 460, centerY: 96, radius: 56, numPoints: 5,
                      innerRatio: 0.45, fill: "#74C5A5" }));
 dlist.add(new Segment({ startX: 40, startY: 180, endX: 600, endY: 180,

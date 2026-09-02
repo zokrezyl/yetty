@@ -339,15 +339,30 @@ class Vtermgrid(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_yscene_vtermgrid_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_yscene_vtermgrid_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Vtermgrid':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_yscene_vtermgrid_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_yscene_vtermgrid_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 def scene_terminal_grid_create(obj: Any, rows: int, cols: int, cell_width: float, cell_height: float) -> _rt.Result[None]:
     """Call `yetty_yscene_scene_terminal_grid_create`."""
@@ -490,7 +505,7 @@ def render_plan(obj: Any) -> _rt.Result[str | None]:
     """Call `yetty_yscene_render_plan`."""
     _fn = _rt.cfn("yetty_yscene_render_plan", _t.yetty_ycore_char_ptr_result, [c_void_p])
     res = _fn(_rt.handle(obj))
-    return _rt.result_from_c(res, _rt.decode_cstr)
+    return _rt.result_from_c(res, _rt.take_owned_cstr)
 
 def set_view_scale(obj: Any, view_scale: float) -> _rt.Result[None]:
     """Call `yetty_yscene_set_view_scale`."""
@@ -508,6 +523,8 @@ def vtermgrid_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_yscene_vtermgrid_dispose`."""
     _fn = _rt.cfn("yetty_yscene_vtermgrid_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def vtermgrid_write(obj: Any, bytes: Any, len: int) -> _rt.Result[None]:

@@ -511,8 +511,8 @@ static struct yetty_ycore_int_result chrome_handle_event(struct yetty_yclass_obj
                 float scale = chrome->content_scale > 0.0f ? chrome->content_scale : 1.0f;
                 int fb_dx = (int)((float)step_dx * scale);
                 int fb_dy = (int)((float)step_dy * scale);
-                wm_absorb(yetty_yplatform_window_chrome_resize_by(wm, fb_dx, fb_dy,
-                                                                  chrome->resize_edge));
+                wm_absorb(
+                    yetty_yplatform_window_chrome_resize_by(wm, fb_dx, fb_dy, chrome->resize_edge));
             }
             return YETTY_OK(yetty_ycore_int, 1);
         }

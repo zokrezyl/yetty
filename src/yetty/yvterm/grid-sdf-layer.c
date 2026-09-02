@@ -22,6 +22,7 @@
 #include "grid-sdf-layer.h"
 
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -70,7 +71,21 @@
 #define U_CZ_SCALE 6
 #define U_CZ_OFF 7
 #define U_VIEW_SIZE 8
-#define U_COUNT 9
+/* Active prim range of the current ranged draw — the fragment shader
+ * composites only prims with index in [run_first, run_first+run_count),
+ * so one staged upload serves every plan run without re-staging. */
+#define U_RUN_FIRST 9
+#define U_RUN_COUNT 10
+/* Producer-logical → framebuffer multiplier (rich density): the shader
+ * divides the row-anchored content position by it before evaluating the
+ * stored (logical) geometry/offsets/clips, and scales distances back up
+ * for framebuffer-pixel AA and stroke widths. */
+#define U_DENSITY 11
+/* First RICH prim index: the base range below it is shaped TERMINAL text
+ * (framebuffer-space, local scale 1); rich prims at/after it scale by
+ * density x structural cell zoom. */
+#define U_RICH_FIRST 12
+#define U_COUNT 13
 
 /* Producer-assigned font ids are small; cap the slot map at a generous size. */
 #define YVTERM_SDF_MAX_FONT_IDS 256
@@ -95,6 +110,15 @@ struct sdf_prim_meta {
     uint32_t type;
     float min_x, min_y, max_x, max_y; /* AABB in line-local pixels */
     int32_t rolling_row;              /* signed visible row this prim anchors to */
+    /* Projection: accumulated ancestor group offset (px), stamped at stage
+     * time; the shader adds it to the sample transform and bucketing shifts
+     * (and clips) the covered cells by it. */
+    float offset_x;
+    float offset_y;
+    /* Accumulated ancestor CLIP (block-content px, offsets applied);
+     * clip_w <= 0 = unclipped. Shader-side pixel test — row/col bucketing
+     * still clamps only to the insertion span. */
+    float clip_x, clip_y, clip_w, clip_h;
 };
 
 /* Per-cell bucket: prim indices whose screen extent overlaps the cell. */
@@ -104,8 +128,20 @@ struct sdf_cell {
     uint32_t cap;
 };
 
+/* Grid accessor declared ahead of the regenerated api header so the
+ * first codegen pass resolves it. */
+struct yetty_ycore_void_result yetty_yvterm_grid_rich_change_stamp(struct yetty_yclass_object *obj,
+                                                                   uint64_t *out_stamp);
+
 struct yetty_yvterm_sdf_layer {
     int headless;
+    /* Change gate for the pass-1 font sweep: the rich change stamp the
+     * last sweep ran against. Installation is idempotent and fonts only
+     * arrive as records, so an unchanged stamp means the whole
+     * O(resident records) walk would find nothing — skip it (cursor
+     * blinks and typing repaint every frame). */
+    uint64_t font_sweep_stamp;
+    int font_sweep_valid;
 
     /* Borrowed GPU handles. */
     WGPUDevice device;
@@ -159,12 +195,37 @@ struct yetty_yvterm_sdf_layer {
     size_t prim_staging_words;
     size_t prim_staging_cap;
 
-    /* Render-scoped metrics (set at the top of render, read by bucketing). */
+    /* Render-scoped metrics (set at begin, read by bucketing). */
     float cur_cell_w;
     float cur_cell_h;
+    /* Producer-logical → framebuffer multipliers: stored rich geometry,
+     * group offsets and clips are producer-local; cells and the sample
+     * grid are CURRENT framebuffer pixels. Rich prims scale by
+     * density x structural cell zoom; the base range's shaped TERMINAL
+     * glyph runs are framebuffer-space text and scale by 1 —
+     * cur_bucket_scale tracks the staging phase (begin's base staging
+     * vs stage_leaf), and base_prim_count marks the rich range start
+     * for the shader. */
+    float cur_density;
+    float cur_cell_zoom;
+    float cur_bucket_scale;
+    uint32_t base_prim_count;
     uint32_t cur_cols;
     uint32_t cur_rows;
     int32_t cur_rolling_row;
+    /* Projection state for the record being staged: accumulated group offset
+     * and the clip window (viewport rows of the owning insertion's span). */
+    float cur_offset_x;
+    float cur_offset_y;
+    float cur_clip_x, cur_clip_y, cur_clip_w, cur_clip_h;
+    int32_t cur_clip_row_min;
+    int32_t cur_clip_row_max;
+
+    /* Frame protocol state: begin() arms staging, finish() arms drawing.
+     * Both stay 0 on a headless/binderless layer, turning the whole
+     * protocol into no-ops. */
+    int frame_active;
+    int frame_ready;
 };
 
 /*===========================================================================
@@ -278,8 +339,18 @@ static void init_uniforms(struct yetty_yrender_gpu_resource_set *rs)
         (struct yetty_yrender_uniform){"ydraw_cell_zoom_off", YETTY_YRENDER_UNIFORM_VEC2};
     rs->uniforms[U_VIEW_SIZE] =
         (struct yetty_yrender_uniform){"ydraw_view_size", YETTY_YRENDER_UNIFORM_VEC2};
+    rs->uniforms[U_RUN_FIRST] =
+        (struct yetty_yrender_uniform){"ydraw_run_first", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_RUN_COUNT] =
+        (struct yetty_yrender_uniform){"ydraw_run_count", YETTY_YRENDER_UNIFORM_U32};
+    rs->uniforms[U_DENSITY] =
+        (struct yetty_yrender_uniform){"ydraw_density_scale", YETTY_YRENDER_UNIFORM_F32};
+    rs->uniforms[U_RICH_FIRST] =
+        (struct yetty_yrender_uniform){"ydraw_rich_first", YETTY_YRENDER_UNIFORM_U32};
 
     rs->uniforms[U_ROLLING_ROW_0].u32 = 0;
+    rs->uniforms[U_DENSITY].f32 = 1.0f;
+    rs->uniforms[U_RICH_FIRST].u32 = 0u;
     rs->uniforms[U_VZ_SCALE].f32 = 1.0f;
     rs->uniforms[U_VZ_OFF].vec2[0] = 0.0f;
     rs->uniforms[U_VZ_OFF].vec2[1] = 0.0f;
@@ -578,10 +649,32 @@ static struct yetty_ycore_void_result bucket_prim(struct yetty_yvterm_sdf_layer 
     if (cell_w <= 0.0f || cell_h <= 0.0f) {
         return YETTY_OK_VOID();
     }
-    int col_min = (int)(prim->min_x / cell_w);
-    int col_max = (int)(prim->max_x / cell_w);
-    int row_min = prim->rolling_row + (int)(prim->min_y / cell_h);
-    int row_max = prim->rolling_row + (int)(prim->max_y / cell_h);
+    /* The shared bucketing formula (see the header): local extent +
+     * offset, scaled to CURRENT framebuffer pixels, divided by the
+     * current cell stride. The row anchor itself is already in current
+     * cells — only the local space scales. */
+    float local_scale = layer->cur_bucket_scale > 0.0f ? layer->cur_bucket_scale : 1.0f;
+    int32_t col_span_min = 0;
+    int32_t col_span_max = 0;
+    int32_t row_span_min = 0;
+    int32_t row_span_max = 0;
+    yetty_yvterm_sdf_prim_cell_span(prim->min_x, prim->max_x, prim->offset_x, local_scale, cell_w,
+                                    &col_span_min, &col_span_max);
+    yetty_yvterm_sdf_prim_cell_span(prim->min_y, prim->max_y, prim->offset_y, local_scale, cell_h,
+                                    &row_span_min, &row_span_max);
+    int col_min = (int)col_span_min;
+    int col_max = (int)col_span_max;
+    int row_min = prim->rolling_row + (int)row_span_min;
+    int row_max = prim->rolling_row + (int)row_span_max;
+    /* Clip to the owning insertion's row span (the projection window): cells
+     * outside it never list the prim, so out-of-view content is culled and
+     * edge overlap clips at row granularity — the contract's clip unit. */
+    if (row_min < layer->cur_clip_row_min) {
+        row_min = layer->cur_clip_row_min;
+    }
+    if (row_max > layer->cur_clip_row_max) {
+        row_max = layer->cur_clip_row_max;
+    }
     if (col_min < 0) {
         col_min = 0;
     }
@@ -614,6 +707,7 @@ static struct yetty_ycore_void_result index_record(struct yetty_yvterm_sdf_layer
                                                    const uint32_t *words, uint32_t word_count)
 {
     uint32_t type = words[0];
+    uint32_t unshifted[YETTY_YSDF_MAX_RECORD_WORDS];
     struct rectangle_result aabb;
 
     if (type == YVTERM_SDF_GLYPH_TYPE) {
@@ -663,6 +757,21 @@ static struct yetty_ycore_void_result index_record(struct yetty_yvterm_sdf_layer
             yetty_ycore_error_destroy(ops_r.error); /* unsupported type — render nothing */
             return YETTY_OK_VOID();
         }
+        if (type & YETTY_YDRAW_HAS_ID_FLAG) {
+            /* Stage the id-less shape the WGSL expects — the id word is
+             * addressing metadata, not shader input. */
+            uint32_t masked_type = type & ~YETTY_YDRAW_HAS_ID_FLAG;
+            uint32_t base_words = yetty_ysdf_word_count((enum yetty_ysdf_type)masked_type);
+            if (base_words == 0u || base_words > YETTY_YSDF_MAX_RECORD_WORDS ||
+                word_count < base_words + 1u) {
+                return YETTY_OK_VOID(); /* malformed — render nothing */
+            }
+            unshifted[0] = masked_type;
+            memcpy(&unshifted[1], &words[2], (size_t)(base_words - 1u) * sizeof(uint32_t));
+            words = unshifted;
+            word_count = base_words;
+            type = masked_type;
+        }
         aabb = ops_r.value->aabb(words);
         if (YETTY_IS_ERR(aabb)) {
             yetty_ycore_error_destroy(aabb.error);
@@ -696,6 +805,12 @@ static struct yetty_ycore_void_result index_record(struct yetty_yvterm_sdf_layer
     meta->max_x = aabb.value.max.x;
     meta->max_y = aabb.value.max.y;
     meta->rolling_row = layer->cur_rolling_row;
+    meta->offset_x = layer->cur_offset_x;
+    meta->offset_y = layer->cur_offset_y;
+    meta->clip_x = layer->cur_clip_x;
+    meta->clip_y = layer->cur_clip_y;
+    meta->clip_w = layer->cur_clip_w;
+    meta->clip_h = layer->cur_clip_h;
     return bucket_prim(layer, layer->prim_count++);
 }
 
@@ -1260,7 +1375,8 @@ static struct yetty_ycore_void_result rebuild_prim_staging(struct yetty_yvterm_s
 {
     size_t total_record_words = 0;
     for (uint32_t i = 0; i < layer->prim_count; ++i) {
-        total_record_words += 1u /* rolling_row */ + layer->prims[i].payload_words;
+        total_record_words +=
+            7u /* rolling_row + offset_x + offset_y + clip rect */ + layer->prims[i].payload_words;
     }
     size_t need = (size_t)layer->prim_count + total_record_words;
     struct yetty_ycore_void_result r =
@@ -1271,9 +1387,18 @@ static struct yetty_ycore_void_result rebuild_prim_staging(struct yetty_yvterm_s
     for (uint32_t i = 0; i < layer->prim_count; ++i) {
         const struct sdf_prim_meta *meta = &layer->prims[i];
         layer->prim_staging[i] = cursor - (uint32_t)layer->prim_count;
-        /* rolling_row prefix — signed visible row, read with i32() in the
-         * shader so scrolling past the prim works in both directions. */
+        /* Header: [rolling_row][offset_x][offset_y][clip_x][clip_y][clip_w]
+         * [clip_h] — signed visible row (read with i32() so scrolling past
+         * the prim works both ways), the projection offset the shader adds
+         * to the sample transform, and the accumulated ancestor clip
+         * (clip_w <= 0 disables). */
         layer->prim_staging[cursor++] = (uint32_t)meta->rolling_row;
+        memcpy(&layer->prim_staging[cursor++], &meta->offset_x, sizeof(uint32_t));
+        memcpy(&layer->prim_staging[cursor++], &meta->offset_y, sizeof(uint32_t));
+        memcpy(&layer->prim_staging[cursor++], &meta->clip_x, sizeof(uint32_t));
+        memcpy(&layer->prim_staging[cursor++], &meta->clip_y, sizeof(uint32_t));
+        memcpy(&layer->prim_staging[cursor++], &meta->clip_w, sizeof(uint32_t));
+        memcpy(&layer->prim_staging[cursor++], &meta->clip_h, sizeof(uint32_t));
         memcpy(&layer->prim_staging[cursor], layer->bytes + meta->payload_offset,
                (size_t)meta->payload_words * sizeof(uint32_t));
         cursor += meta->payload_words;
@@ -1394,17 +1519,21 @@ void yetty_yvterm_sdf_layer_destroy(struct yetty_yvterm_sdf_layer *layer)
 }
 
 /*===========================================================================
- * Render
+ * Render — plan-driven frame protocol (begin / stage_leaf / finish /
+ * draw_range; vterm.c drives it in paint-plan order)
  *=========================================================================*/
 
-struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
-    struct yetty_yvterm_sdf_layer *layer, struct yetty_yclass_object *grid_obj,
-    struct yetty_ydraw_target *target, struct yetty_ycore_rectangle rect, float cell_width,
-    float cell_height, uint32_t cols, uint32_t rows, const uint32_t *window_slots,
-    uint32_t window_rows, uint32_t slot_count, float visual_zoom_scale, float visual_zoom_off_x,
-    float visual_zoom_off_y, float cell_zoom_scale)
+struct yetty_ycore_void_result yetty_yvterm_sdf_layer_begin(
+    struct yetty_yvterm_sdf_layer *layer, struct yetty_yclass_object *grid_obj, float cell_width,
+    float cell_height, float density_scale, float cell_zoom, uint32_t cols, uint32_t rows,
+    const uint32_t *window_slots, uint32_t window_rows, uint32_t slot_count)
 {
-    if (!layer || layer->headless || !layer->binder) {
+    if (!layer) {
+        return YETTY_OK_VOID();
+    }
+    layer->frame_active = 0;
+    layer->frame_ready = 0;
+    if (layer->headless || !layer->binder) {
         return YETTY_OK_VOID();
     }
     if (cols == 0 || rows == 0 || slot_count == 0 || cell_width <= 0.0f || cell_height <= 0.0f ||
@@ -1419,6 +1548,12 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     YETTY_RETURN_IF_ERR(yetty_ycore_void, cr, "sdf-layer: cells_reset");
     layer->cur_cell_w = cell_width;
     layer->cur_cell_h = cell_height;
+    layer->cur_density = (isfinite(density_scale) && density_scale > 0.0f) ? density_scale : 1.0f;
+    layer->cur_cell_zoom = (isfinite(cell_zoom) && cell_zoom > 0.0f) ? cell_zoom : 1.0f;
+    /* begin() stages shaped TERMINAL glyph runs — framebuffer-space text
+     * bucketed at scale 1; stage_leaf's rich prims switch to the rich
+     * local scale below. */
+    layer->cur_bucket_scale = 1.0f;
     layer->cur_cols = cols;
     layer->cur_rows = rows;
 
@@ -1429,81 +1564,129 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
      * the resolved window (archive rows served from the tier cache): a font is
      * installed while its record is hot and the layer's font table persists,
      * so archived text keeps resolving; the window walk covers records that
-     * archived before this layer ever rendered them. */
+     * archived before this layer ever rendered them. CHANGE-GATED: fonts
+     * only arrive as records and installation is idempotent, so while the
+     * rich change stamp holds still the sweep would find nothing new —
+     * skip it (every cursor-blink/typing frame otherwise pays an
+     * O(resident records) scan). */
+    uint64_t change_stamp = 0;
+    struct yetty_ycore_void_result stamp_res =
+        yetty_yvterm_grid_rich_change_stamp(grid_obj, &change_stamp);
+    if (YETTY_IS_ERR(stamp_res)) {
+        yetty_ycore_error_destroy(stamp_res.error);
+        layer->font_sweep_valid = 0; /* unknown — sweep to stay safe */
+    }
+    if (layer->font_sweep_valid && layer->font_sweep_stamp == change_stamp) {
+        goto fonts_swept;
+    }
     for (uint32_t walk = 0; walk < slot_count + window_rows; ++walk) {
         uint32_t slot = walk < slot_count ? walk : window_slots[walk - slot_count];
-        struct yetty_ycore_uint32_result prim_count_res =
-            yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_count_res,
-                            "sdf-layer: slot primitive count (fonts)");
-        uint32_t prim_count = prim_count_res.value;
-        for (uint32_t prim = 0; prim < prim_count; ++prim) {
-            uint32_t word_count = 0;
-            struct yetty_ycore_const_uint32_ptr_result words_res =
-                yetty_yvterm_grid_slot_primitive_words(grid_obj, slot, prim, &word_count);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, words_res,
-                                "sdf-layer: slot primitive words (fonts)");
-            const uint32_t *words = words_res.value;
-            if (!words || word_count == 0 || words[0] != YETTY_YDRAW_RESOURCE_FONT) {
-                continue;
-            }
-            struct yetty_ydraw_font_resource_view fv;
-            if (yetty_ydraw_font_resource_parse(words, &fv) != 0) {
-                continue;
-            }
-            struct yetty_ycore_void_result install = sdf_install_wire_font(layer, &fv);
-            if (YETTY_IS_ERR(install)) {
-                ydebug("sdf-layer: wire font install failed: %s", install.error.msg);
-                yetty_ycore_error_destroy(install.error);
+        struct yetty_ycore_uint32_result block_count_res =
+            yetty_yvterm_grid_slot_rich_block_count(grid_obj, slot);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, block_count_res,
+                            "sdf-layer: slot block count (fonts)");
+        for (uint32_t block_index = 0; block_index < block_count_res.value; ++block_index) {
+            uint32_t record_count = 0;
+            struct yetty_ycore_void_result block_res =
+                yetty_yvterm_grid_slot_rich_block(grid_obj, slot, block_index, NULL, &record_count);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, block_res, "sdf-layer: slot block (fonts)");
+            for (uint32_t record_index = 0; record_index < record_count; ++record_index) {
+                uint32_t word_count = 0;
+                struct yetty_ycore_const_uint32_ptr_result words_res =
+                    yetty_yvterm_grid_slot_rich_block_record(grid_obj, slot, block_index,
+                                                             record_index, &word_count, NULL);
+                YETTY_RETURN_IF_ERR(yetty_ycore_void, words_res,
+                                    "sdf-layer: slot record words (fonts)");
+                const uint32_t *words = words_res.value;
+                if (!words || word_count == 0 || words[0] != YETTY_YDRAW_RESOURCE_FONT) {
+                    continue;
+                }
+                struct yetty_ydraw_font_resource_view fv;
+                if (yetty_ydraw_font_resource_parse(words, &fv) != 0) {
+                    continue;
+                }
+                struct yetty_ycore_void_result install = sdf_install_wire_font(layer, &fv);
+                if (YETTY_IS_ERR(install)) {
+                    ydebug("sdf-layer: wire font install failed: %s", install.error.msg);
+                    yetty_ycore_error_destroy(install.error);
+                }
             }
         }
     }
 
-    /* Pass 2 — index the drawables (SDF shapes, glyphs, expanded text runs)
-     * of the resolved window. Window row r IS the viewport row: a block is
-     * anchored on its BOTTOM line (a bottom just below the viewport is inside
-     * the window's look-ahead tail); the block's top row, where its local
-     * coordinates are anchored, is (bottom − (span − 1)). The shader's
-     * rolling-row offset places it at that top, so the block draws top-down
-     * from where its text sits while staying owned by its bottom line. */
-    for (uint32_t window_row = 0; window_row < window_rows; ++window_row) {
-        uint32_t slot = window_slots[window_row];
-        struct yetty_ycore_uint32_result prim_count_res =
-            yetty_yvterm_grid_slot_primitive_count(grid_obj, slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, prim_count_res, "sdf-layer: slot primitive count");
-        uint32_t prim_count = prim_count_res.value;
-        struct yetty_ycore_uint32_result span_res = yetty_yvterm_grid_slot_span(grid_obj, slot);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, span_res, "sdf-layer: slot span");
-        uint32_t span = span_res.value;
-        layer->cur_rolling_row = (int)window_row - (int)(span ? span - 1u : 0u);
-        for (uint32_t prim = 0; prim < prim_count; ++prim) {
-            uint32_t word_count = 0;
-            struct yetty_ycore_const_uint32_ptr_result words_res =
-                yetty_yvterm_grid_slot_primitive_words(grid_obj, slot, prim, &word_count);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, words_res, "sdf-layer: slot primitive words");
-            const uint32_t *words = words_res.value;
-            if (!words || word_count == 0 || words[0] == YETTY_YDRAW_RESOURCE_FONT) {
-                continue; /* fonts already installed in pass 1 */
-            }
-            struct yetty_ycore_void_result dr = dispatch_record(layer, words, word_count);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, dr, "sdf-layer: dispatch_record");
-        }
+    layer->font_sweep_stamp = change_stamp;
+    layer->font_sweep_valid = 1;
+fonts_swept:;
+
+/* Shape the window rows' complex-script terminal cells. These glyphs
+     * are TEXT, not rich content — they stage first, forming the base
+     * range [0, prim_count-after-begin) drawn below every rich leaf. */
 #ifdef YETTY_ENABLE_LIB_HARFBUZZ
-        /* Shape any complex-script runs in this row's terminal cells. The grid
-         * suppresses those cells' own glyphs, so this draws them shaped.
-         * (Programming ligatures are NOT handled here: they are cell-aligned
-         * N-wide glyphs drawn directly by the grid shader — see vterm.c
-         * vterm_pack_line + grid-text.wgsl.) */
-        struct yetty_ycore_void_result shape_res =
-            shape_row_cells(layer, grid_obj, slot, cell_width, cell_height, cols);
+    for (uint32_t window_row = 0; window_row < window_rows; ++window_row) {
+        layer->cur_rolling_row = (int32_t)window_row;
+        layer->cur_offset_x = 0.0f;
+        layer->cur_offset_y = 0.0f;
+        layer->cur_clip_row_min = 0;
+        layer->cur_clip_row_max = (int32_t)layer->cur_rows - 1;
+        struct yetty_ycore_void_result shape_res = shape_row_cells(
+            layer, grid_obj, window_slots[window_row], cell_width, cell_height, cols);
         YETTY_RETURN_IF_ERR(yetty_ycore_void, shape_res, "sdf-layer: shape row cells");
-#endif
     }
-    ydebug("sdf-layer: render prim_count=%u font_count=%u rows=%u cols=%u", layer->prim_count,
-           layer->font_count, rows, cols);
+#endif
 
+    /* Everything staged so far is the BASE (terminal text) range; every
+     * later stage_leaf prim is RICH and buckets/samples at
+     * density x cell zoom. */
+    layer->base_prim_count = layer->prim_count;
+    layer->cur_bucket_scale = layer->cur_density * layer->cur_cell_zoom;
+    layer->frame_active = 1;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_uint32_result yetty_yvterm_sdf_layer_stage_leaf(
+    struct yetty_yvterm_sdf_layer *layer, const uint32_t *words, uint32_t word_count,
+    int32_t anchor_top_row, float offset_x, float offset_y, int32_t clip_row_min,
+    int32_t clip_row_max, float clip_x, float clip_y, float clip_w, float clip_h)
+{
+    if (!layer || !layer->frame_active) {
+        return YETTY_OK(yetty_ycore_uint32, layer ? layer->prim_count : 0u);
+    }
+    if (!words || word_count == 0 || words[0] == YETTY_YDRAW_RESOURCE_FONT) {
+        return YETTY_OK(yetty_ycore_uint32, layer->prim_count);
+    }
+    layer->cur_rolling_row = anchor_top_row;
+    layer->cur_offset_x = offset_x;
+    layer->cur_offset_y = offset_y;
+    layer->cur_clip_row_min = clip_row_min;
+    layer->cur_clip_row_max = clip_row_max;
+    layer->cur_clip_x = clip_x;
+    layer->cur_clip_y = clip_y;
+    layer->cur_clip_w = clip_w;
+    layer->cur_clip_h = clip_h;
+    struct yetty_ycore_void_result dr = dispatch_record(layer, words, word_count);
+    YETTY_RETURN_IF_ERR(yetty_ycore_uint32, dr, "sdf-layer: stage_leaf dispatch");
+    return YETTY_OK(yetty_ycore_uint32, layer->prim_count);
+}
+
+uint32_t yetty_yvterm_sdf_layer_prim_count(const struct yetty_yvterm_sdf_layer *layer)
+{
+    return (layer && layer->frame_active) ? layer->prim_count : 0u;
+}
+
+struct yetty_ycore_void_result yetty_yvterm_sdf_layer_finish(struct yetty_yvterm_sdf_layer *layer,
+                                                             struct yetty_ycore_rectangle rect,
+                                                             float visual_zoom_scale,
+                                                             float visual_zoom_off_x,
+                                                             float visual_zoom_off_y,
+                                                             float cell_zoom_scale)
+{
+    if (!layer || !layer->frame_active) {
+        return YETTY_OK_VOID();
+    }
+    ydebug("sdf-layer: finish prim_count=%u font_count=%u rows=%u cols=%u", layer->prim_count,
+           layer->font_count, layer->cur_rows, layer->cur_cols);
     if (layer->prim_count == 0) {
-        return YETTY_OK_VOID(); /* nothing to draw this frame */
+        return YETTY_OK_VOID(); /* nothing staged — draw_range stays a no-op */
     }
 
     /* Font set may have changed (a wire FONT was installed this frame) — rebuild
@@ -1527,14 +1710,14 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
 
     float width = rect.max.x - rect.min.x;
     float height = rect.max.y - rect.min.y;
-    layer->rs.uniforms[U_GRID_SIZE].vec2[0] = (float)cols;
-    layer->rs.uniforms[U_GRID_SIZE].vec2[1] = (float)rows;
-    layer->rs.uniforms[U_CELL_SIZE].vec2[0] = cell_width;
-    layer->rs.uniforms[U_CELL_SIZE].vec2[1] = cell_height;
+    layer->rs.uniforms[U_GRID_SIZE].vec2[0] = (float)layer->cur_cols;
+    layer->rs.uniforms[U_GRID_SIZE].vec2[1] = (float)layer->cur_rows;
+    layer->rs.uniforms[U_CELL_SIZE].vec2[0] = layer->cur_cell_w;
+    layer->rs.uniforms[U_CELL_SIZE].vec2[1] = layer->cur_cell_h;
     layer->rs.uniforms[U_ROLLING_ROW_0].u32 = 0u;
     layer->rs.uniforms[U_PRIM_COUNT].u32 = layer->prim_count;
-    layer->rs.uniforms[U_VIEW_SIZE].vec2[0] = (float)cols * cell_width;
-    layer->rs.uniforms[U_VIEW_SIZE].vec2[1] = (float)rows * cell_height;
+    layer->rs.uniforms[U_VIEW_SIZE].vec2[0] = (float)layer->cur_cols * layer->cur_cell_w;
+    layer->rs.uniforms[U_VIEW_SIZE].vec2[1] = (float)layer->cur_rows * layer->cur_cell_h;
     /* Zoom: the shader applies the same canonical visual-zoom transform
      * (pane-centred) + structural cell-zoom (around origin) as the text/figure
      * shaders, so SDF drawables scale and pan in lockstep. cz_off stays 0 — the
@@ -1543,6 +1726,10 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     layer->rs.uniforms[U_VZ_OFF].vec2[0] = visual_zoom_off_x;
     layer->rs.uniforms[U_VZ_OFF].vec2[1] = visual_zoom_off_y;
     layer->rs.uniforms[U_CZ_SCALE].f32 = cell_zoom_scale > 0.0f ? cell_zoom_scale : 1.0f;
+    layer->rs.uniforms[U_RUN_FIRST].u32 = 0u;
+    layer->rs.uniforms[U_RUN_COUNT].u32 = 0u;
+    layer->rs.uniforms[U_DENSITY].f32 = layer->cur_density > 0.0f ? layer->cur_density : 1.0f;
+    layer->rs.uniforms[U_RICH_FIRST].u32 = layer->base_prim_count;
     layer->rs.pixel_size.width = width;
     layer->rs.pixel_size.height = height;
 
@@ -1555,11 +1742,33 @@ struct yetty_ycore_void_result yetty_yvterm_sdf_layer_render(
     }
     struct yetty_ycore_void_result ur = layer->binder->ops->update(layer->binder);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, ur, "sdf-layer: binder update");
+    layer->frame_ready = 1;
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yvterm_sdf_layer_draw_range(
+    struct yetty_yvterm_sdf_layer *layer, struct yetty_ydraw_target *target,
+    struct yetty_ycore_rectangle rect, uint32_t first, uint32_t count)
+{
+    if (!layer || !layer->frame_ready || count == 0) {
+        return YETTY_OK_VOID();
+    }
+
+    /* Narrow the shader's composited prim set to this run, then refresh the
+     * uniform block (buffers are clean — update() re-uploads uniforms
+     * only, and queue ordering guarantees the pass encoded below reads
+     * this run's values). */
+    layer->rs.uniforms[U_RUN_FIRST].u32 = first;
+    layer->rs.uniforms[U_RUN_COUNT].u32 = count;
+    struct yetty_ycore_void_result ur = layer->binder->ops->update(layer->binder);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, ur, "sdf-layer: run uniform update");
 
     WGPUTextureView view = target->ops->get_view(target);
     if (!view) {
         return YETTY_ERR(yetty_ycore_void, "sdf-layer: target view NULL");
     }
+    float width = rect.max.x - rect.min.x;
+    float height = rect.max.y - rect.min.y;
     if (width <= 0.0f || height <= 0.0f) {
         return YETTY_OK_VOID();
     }

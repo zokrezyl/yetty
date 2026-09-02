@@ -488,6 +488,81 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_delete(
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_paint_z(
+    struct yetty_ydraw_drawable_list *buf, int32_t z)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_paint_z: buf is NULL");
+    }
+    uint32_t z_bits;
+    memcpy(&z_bits, &z, sizeof(z_bits));
+    uint32_t record[2] = {YETTY_YDRAW_CMD_PAINT_Z, z_bits};
+    struct yetty_ydraw_id_result add_res =
+        yetty_ydraw_drawable_list_add_prim(buf, record, sizeof(record));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "add_cmd_paint_z: add_prim failed");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_node_id(
+    struct yetty_ydraw_drawable_list *buf, uint32_t id)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_node_id: buf is NULL");
+    }
+    uint32_t record[2] = {YETTY_YDRAW_CMD_NODE_ID, id};
+    struct yetty_ydraw_id_result add_res =
+        yetty_ydraw_drawable_list_add_prim(buf, record, sizeof(record));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "add_cmd_node_id: add_prim failed");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_path(
+    struct yetty_ydraw_drawable_list *buf, const uint32_t *ids, uint32_t count)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_path: buf is NULL");
+    }
+    if (!ids || count == 0u || count > YETTY_YDRAW_CMD_PATH_MAX_IDS) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_path: bad id count");
+    }
+    uint32_t record[2u + YETTY_YDRAW_CMD_PATH_MAX_IDS];
+    record[0] = YETTY_YDRAW_CMD_PATH;
+    record[1] = count;
+    for (uint32_t index = 0; index < count; ++index) {
+        record[2u + index] = ids[index];
+    }
+    struct yetty_ydraw_id_result add_res =
+        yetty_ydraw_drawable_list_add_prim(buf, record, (2u + count) * sizeof(uint32_t));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "add_cmd_path: add_prim failed");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_reserve(
+    struct yetty_ydraw_drawable_list *buf, uint32_t height_px)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_reserve: buf is NULL");
+    }
+    uint32_t record[2] = {YETTY_YDRAW_CMD_RESERVE, height_px};
+    struct yetty_ydraw_id_result add_res =
+        yetty_ydraw_drawable_list_add_prim(buf, record, sizeof(record));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "add_cmd_reserve: add_prim failed");
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_paint_z_end(
+    struct yetty_ydraw_drawable_list *buf)
+{
+    if (!buf) {
+        return YETTY_ERR(yetty_ycore_void, "add_cmd_paint_z_end: buf is NULL");
+    }
+    uint32_t record[2] = {YETTY_YDRAW_CMD_PAINT_Z_END, 0u};
+    struct yetty_ydraw_id_result add_res =
+        yetty_ydraw_drawable_list_add_prim(buf, record, sizeof(record));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, add_res, "add_cmd_paint_z_end: add_prim failed");
+    return YETTY_OK_VOID();
+}
+
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_group_ref(
     struct yetty_ydraw_drawable_list *buf, uint32_t target_id)
 {

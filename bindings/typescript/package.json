@@ -9,6 +9,10 @@
     ".": {
       "types": "./ydraw.d.ts",
       "default": "./ydraw.mjs"
+    },
+    "./ygui2": {
+      "types": "./ygui2.d.ts",
+      "default": "./ygui2.mjs"
     }
   },
   "dependencies": {

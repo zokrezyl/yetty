@@ -68,6 +68,15 @@ struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_co
                                                            uint32_t target_field, const void *body,
                                                            size_t body_size);
 
+/* Chrome re-emission entry point — implemented by hand in a companion TU.
+ * Emits the figure's label/title/legend prims into `list` laid out for
+ * the instance's CURRENT retained state; the hosting ingest replaces the
+ * chrome group's content with them after an update that set
+ * `chrome_dirty`. Installed as the per-instance ops->emit_chrome. */
+struct yetty_ydraw_drawable_list;
+struct yetty_ycore_void_result yetty_yplot_instance_emit_chrome(
+    struct yetty_ydraw_complex *instance, struct yetty_ydraw_drawable_list *list);
+
 /* Lifecycle callouts — implemented by hand in a companion TU. `created`
  * runs after a successful create (failure is non-fatal: the figure still
  * renders); `destroying` runs FIRST in instance destroy, before any

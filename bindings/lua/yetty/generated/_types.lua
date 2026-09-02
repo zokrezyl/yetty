@@ -29,7 +29,6 @@ struct yetty_yclass_rpc_session;
 struct yetty_yclass_transport;
 struct yetty_yconfig_config;
 struct yetty_ycore_xthread_event_pipe;
-struct yetty_ydraw_complex;
 struct yetty_ydraw_complex_factory;
 struct yetty_ydraw_drawable_list;
 struct yetty_ydraw_drawable_list_registry;
@@ -60,7 +59,8 @@ struct yetty_yscene_scene;
 struct yetty_yscene_vtermgrid_store_cell;
 struct yetty_yui_event;
 struct yetty_yui_view_ops;
-struct yetty_yvterm_primitive;
+struct yetty_yvterm_paint_leaf;
+struct yetty_yvterm_rich_block;
 struct yetty_yvterm_text_cell;
 struct yetty_yvterm_tier_segment;
 struct yetty_ywire_channel;
@@ -417,22 +417,12 @@ struct yetty_ycore_xthread_event_pipe_ptr_result {
     struct yetty_ycore_error error;
   };
 };
-struct yetty_ydraw_complex_const_ptr_ptr_result {
-  int ok;
-  union {
-    struct yetty_ydraw_complex *const *value;
-    struct yetty_ycore_error error;
-  };
-};
 struct yetty_ydraw_drawable_list_result {
   int ok;
   union {
     struct yetty_ydraw_drawable_list *value;
     struct yetty_ycore_error error;
   };
-};
-struct yetty_ydraw_stream_registry {
-  struct yetty_ydraw_complex *targets[16];
 };
 struct yetty_yevent_event_listener {
   yetty_ycore_event_handler handler;
@@ -497,6 +487,30 @@ struct yetty_ygit_status_ptr_result {
     struct yetty_ygit_status *value;
     struct yetty_ycore_error error;
   };
+};
+struct yetty_ygui2_layout {
+  float basis;
+  float grow;
+  float cross_size;
+  float min_main;
+  uint32_t direction;
+  float gap;
+  float pad_left;
+  float pad_top;
+  float pad_right;
+  float pad_bottom;
+};
+struct yetty_ygui2_theme {
+  uint32_t bg;
+  uint32_t bg_lifted;
+  uint32_t bg_row;
+  uint32_t border;
+  uint32_t text_muted;
+  uint32_t text_secondary;
+  uint32_t text_primary;
+  uint32_t accent_deep;
+  uint32_t accent;
+  uint32_t accent_bright;
 };
 struct yetty_ygui_input_state {
   int st;
@@ -889,20 +903,40 @@ struct yetty_yui_view {
 };
 struct yetty_yvterm_line {
   struct yetty_yvterm_text_cell *text_cells;
-  struct yetty_yvterm_primitive *primitives;
-  uint32_t primitive_count;
-  uint32_t primitive_capacity;
-  uint32_t *arena;
-  uint32_t arena_count;
-  uint32_t arena_capacity;
-  struct yetty_ydraw_complex **complexes;
-  uint32_t complex_count;
-  uint32_t complex_capacity;
-  uint32_t rich_span_rows;
-  uint32_t envelope_count;
+  struct yetty_yvterm_rich_handle *rich_blocks;
+  uint32_t rich_block_count;
+  uint32_t rich_block_capacity;
+  uint32_t rich_coverage_count;
   uint32_t view_stamp;
   int dirty;
   int continuation;
+};
+struct yetty_yvterm_paint_plan {
+  struct yetty_yvterm_paint_leaf *leaves;
+  uint32_t leaf_count;
+  uint32_t leaf_capacity;
+  uint64_t built_stamp;
+  int built;
+  uint64_t build_count;
+};
+struct yetty_yvterm_rich_handle {
+  uint32_t slot;
+  uint32_t generation;
+};
+struct yetty_yvterm_rich_store {
+  struct yetty_yvterm_rich_block *blocks;
+  uint32_t block_capacity;
+  uint32_t *free_slots;
+  uint32_t free_count;
+  uint32_t free_capacity;
+  uint64_t next_paint_sequence;
+  uint32_t live_count;
+  int32_t ambient_paint_z[8];
+  uint32_t ambient_paint_z_depth;
+  uint32_t ambient_paint_z_overflow;
+  uint64_t paint_generation[3];
+  size_t journal_bytes_used;
+  size_t journal_bytes_budget;
 };
 struct yetty_yvterm_screen {
   struct yetty_yvterm_line *lines;
@@ -955,6 +989,7 @@ struct yetty_yvterm_tiers {
   uint64_t cache_tick;
   struct yetty_ycore_memtag *memtag;
   uint32_t live_pin_stamp;
+  struct yetty_yvterm_rich_store *rich_store;
 };
 struct ymusic_staff {
   int clef;

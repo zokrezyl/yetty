@@ -33,6 +33,14 @@ struct yetty_ydraw_drawable_list_entry_ops {
 
     // Bounding box (for spatial grid)
     struct rectangle_result (*aabb)(const uint32_t *prim);
+
+    // Paint z (stacking order) read from the record's wire words,
+    // reinterpreted as signed 32-bit. NULL means the record family has no
+    // z field — callers treat that as z = 0. Records that never become
+    // render leaves (FONT, cmds) leave this NULL. Future wire formats
+    // with a different width or signedness normalize HERE, not in the
+    // stores that cache the value.
+    int32_t (*paint_z)(const uint32_t *prim);
 };
 
 //=============================================================================

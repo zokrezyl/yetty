@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import pathlib
+import re
 import sys
 
 import yaml
@@ -46,6 +47,17 @@ SRC_ROOTS = [REPO / "src" / "yetty", REPO / "src" / "api"]
 # per-argument ownership annotations — until it does, finalization stays
 # scoped to this list and other modules use explicit destroy().
 FINALIZED_DOMAINS = {"ydrawlist2", "ysdf2", "api_yplot", "ycomplex2"}
+
+# Domains whose objects are FACTORY-OWNED: instances must be produced by the
+# module's own factories (ygui2: framework_make / framework_root_create /
+# widget_add / framework_overlay_add), which wire framework back-pointers,
+# parents, and wire node ids. The generic `<class>_create` allocator would
+# mint an uninitialized object (node id 0, no framework) that corrupts the
+# module's id invariants — so in these domains a class is only directly
+# constructible when the module exposes a dedicated `<class>_make`; all
+# other classes are handle-wrapping tokens. (A proper per-class `lifecycle:`
+# model annotation should replace this table eventually.)
+FACTORY_DOMAINS = {"ygui2"}
 
 
 # ---------------------------------------------------------------------------
@@ -126,7 +138,16 @@ def classify(type_str: str) -> tuple[str, str | None]:
 
 
 def is_char_ptr(type_str: str) -> bool:
-    t = (type_str or "").replace("const", "").replace("volatile", "").strip()
+    """CONST char* only — the read-only C-string convention (str → bytes via
+    cstr()). A MUTABLE `char *` is a writable OUT buffer: mapping it to
+    c_char_p would route the caller's ctypes buffer through cstr()/encode()
+    and break every out-copy API (e.g. textinput_text_copy). Mutable char*
+    falls through to the opaque-pointer path (c_void_p, passed as-is), which
+    accepts create_string_buffer() and byte arrays unchanged."""
+    t = (type_str or "").strip()
+    if not re.match(r"^const\b", t):
+        return False
+    t = t.replace("const", "").replace("volatile", "").strip()
     return t in ("char *", "char*")
 
 
@@ -391,8 +412,14 @@ def py_result_value_annot(return_type: str) -> str:
 def py_result_converter(return_type: str) -> str | None:
     _, tag = classify(return_type)
     name = tag or ""
-    if name.endswith("char_ptr_result") or name.endswith("const_char_ptr_result"):
+    if name.endswith("const_char_ptr_result"):
+        # Borrowed C string: decode in place, never freed by the binding.
         return "_rt.decode_cstr"
+    if name.endswith("char_ptr_result"):
+        # OWNED heap string (result.h contract): the value field is laid
+        # out as c_void_p so the ADDRESS survives — copy + release it
+        # through the exported allocator-compatible free.
+        return "_rt.take_owned_cstr"
     return None
 
 
@@ -543,7 +570,12 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
         # takes that content as the first positional argument, so
         # Plot("f=sin(x)") / Text("hello", x=4) work. `_handle` wraps an
         # existing object (from_handle) and skips construction entirely.
-        create_sym = f"yetty_{cls['domain']}_{cls['name']}_create"
+        exposed_names = {fn.get("name") for fn in model.get("exposed", []) or []
+                         if isinstance(fn, dict)}
+        make_sym = f"yetty_{cls['domain']}_{cls['name']}_make"
+        create_sym = make_sym if make_sym in exposed_names \
+            else f"yetty_{cls['domain']}_{cls['name']}_create"
+        factory_owned = cls["domain"] in FACTORY_DOMAINS and make_sym not in exposed_names
         setter_names = {op["slot"][4:] for op in cls.get("ops", []) if op["slot"].startswith("set_")}
         # The model names the primary-content slot (`primary@` annotation);
         # the expression/body name probe remains as pre-annotation fallback.
@@ -561,18 +593,49 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
         parts.append("        if _handle is not None:")
         parts.append("            _rt.YClass.__init__(self, _handle)")
         parts.append("            return")
-        parts.append(
-            f'        _fn = _rt.cfn("{create_sym}", _t.yetty_yclass_object_ptr_result, [c_void_p])')
-        parts.append("        res = _rt.result_from_c(_fn(None))")
-        parts.append("        if res.error is not None:")
-        parts.append("            raise _rt.YettyError(res.error.message)")
-        parts.append("        _rt.YClass.__init__(self, res.value)")
-        if cls["domain"] in FINALIZED_DOMAINS:
-            parts.append("        self._owned = True")
-        if primary_setter is not None:
-            parts.append(f"        if {primary_setter} is not None:")
-            parts.append(f"            self.set_{primary_setter}({primary_setter})")
-        parts.append("        self._apply_kwargs(kwargs)")
+        if factory_owned:
+            parts.append(f'        raise _rt.YettyError("{cls["domain"]}:{cls["name"]} is '
+                         'factory-owned — create it via the module\'s own factory '
+                         '(framework_root_create / widget_add / framework_overlay_add), '
+                         'or wrap an existing handle with _handle=...")')
+        else:
+            if create_sym == make_sym:
+                parts.append(
+                    f'        _fn = _rt.cfn("{create_sym}", _t.yetty_yclass_object_ptr_result, [])')
+                parts.append("        res = _rt.result_from_c(_fn())")
+            else:
+                parts.append(
+                    f'        _fn = _rt.cfn("{create_sym}", _t.yetty_yclass_object_ptr_result, [c_void_p])')
+                parts.append("        res = _rt.result_from_c(_fn(None))")
+            parts.append("        if res.error is not None:")
+            parts.append("            raise _rt.YettyError(res.error.message)")
+            parts.append("        _rt.YClass.__init__(self, res.value)")
+        dispose_sym = f"yetty_{cls['domain']}_{cls['name']}_dispose"
+        has_dispose = dispose_sym in exposed_names
+        if not factory_owned:
+            if cls["domain"] in FINALIZED_DOMAINS:
+                parts.append("        self._owned = True")
+            if has_dispose and create_sym == make_sym:
+                # A directly-constructed make/dispose object is OWNED by its
+                # wrapper: garbage collection runs the overridden destroy()
+                # (the class dispose), so dropping it cannot leak the native
+                # tree. Handle-wrapped instances stay borrowed.
+                parts.append("        self._owned = True")
+                # A make/dispose class: a failed kwargs application must not
+                # leak the just-created native object.
+                parts.append("        try:")
+                if primary_setter is not None:
+                    parts.append(f"            if {primary_setter} is not None:")
+                    parts.append(f"                self.set_{primary_setter}({primary_setter})")
+                parts.append("            self._apply_kwargs(kwargs)")
+                parts.append("        except BaseException:")
+                parts.append("            self.destroy()")
+                parts.append("            raise")
+            else:
+                if primary_setter is not None:
+                    parts.append(f"        if {primary_setter} is not None:")
+                    parts.append(f"            self.set_{primary_setter}({primary_setter})")
+                parts.append("        self._apply_kwargs(kwargs)")
         # create(...) stays as a classmethod alias of the constructor.
         parts.append("    @classmethod")
         if primary_setter is not None:
@@ -581,6 +644,31 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
         else:
             parts.append(f"    def create(cls, **kwargs: Any) -> {cname!r}:")
             parts.append("        return cls(**kwargs)")
+        if has_dispose and create_sym == make_sym:
+            # Lifecycle override: the generic YClass.destroy() would free
+            # only the yclass allocation and leak the class's owned state —
+            # route destruction through the module's own dispose, and
+            # invalidate the handle FIRST (dispose frees the whole object;
+            # a later call through this wrapper would be use-after-free).
+            parts.append("    def destroy(self) -> None:")
+            parts.append(f'        """Dispose via `{dispose_sym}`; idempotent."""')
+            parts.append("        if self._handle is None:")
+            parts.append("            return")
+            parts.append("        handle, self._handle = self._handle, None")
+            parts.append(
+                f'        _fn = _rt.cfn("{dispose_sym}", _t.yetty_ycore_void_result, [c_void_p])')
+            parts.append("        res = _rt.result_from_c(_fn(handle))")
+            parts.append("        if res.error is not None:")
+            parts.append("            raise _rt.YettyError(res.error.message)")
+            parts.append("    close = destroy")
+        elif factory_owned:
+            # Framework-owned object: generic destruction would free a
+            # linked widget behind the framework's back. Removal is the only
+            # app-owned destructive operation.
+            parts.append("    def destroy(self) -> None:")
+            parts.append(f'        raise _rt.YettyError("{cls["domain"]}:{cls["name"]} is '
+                         'framework-owned — it dies with its framework; detach it with '
+                         'widget_remove, never a raw destroy")')
         # methods introduced by this class. Inherited slots remain inherited
         # Python methods; the C public stub still dispatches dynamically through
         # the yclass vtable using this instance's handle.
@@ -703,6 +791,15 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
                 parts.append(f"    {fname} = property(None, {fname})")
         parts.append("")
 
+    dispose_symbols = set()
+    for cls in classes:
+        exposed_set = {fn.get("name") for fn in model.get("exposed", []) or []
+                       if isinstance(fn, dict)}
+        make_name = f"yetty_{cls['domain']}_{cls['name']}_make"
+        dispose_name = f"yetty_{cls['domain']}_{cls['name']}_dispose"
+        if make_name in exposed_set and dispose_name in exposed_set:
+            dispose_symbols.add(dispose_name)
+
     for fn in model.get("exposed", []) or []:
         if not isinstance(fn, dict) or "name" not in fn or "return_type" not in fn:
             continue
@@ -730,8 +827,15 @@ def py_emit_module(module: str, model: dict, type_names: set[str], out_path: pat
 
         passed = ", ".join(exposed_pass_expr(a) for a in args)
         call = f"_fn({passed})" if passed else "_fn()"
+        # A class-dispose free function consumes the object: a wrapper passed
+        # here must not keep a dangling handle behind the caller's back.
+        destructive_first_arg = symbol in dispose_symbols and args
         if py_is_result(return_type):
             parts.append(f"    res = {call}")
+            if destructive_first_arg:
+                first = py_arg_name(args[0])
+                parts.append(f"    if hasattr({first}, '_handle'):")
+                parts.append(f"        {first}._handle = None  # consumed: no dangling wrapper")
             converter = py_result_converter(return_type)
             if converter:
                 parts.append(f"    return _rt.result_from_c(res, {converter})")

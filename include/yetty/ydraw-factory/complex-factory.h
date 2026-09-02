@@ -40,6 +40,7 @@ struct yetty_ydraw_concrete_factory;
 struct yetty_ydraw_complex;
 struct yetty_ydraw_target;
 struct yetty_ydraw_gpu_allocator;
+struct yetty_ydraw_drawable_list;
 
 /* Bounds how many complexes may hold live GPU resources at once, decoupling
  * GPU residency from how deep a figure sits in scrollback. See the residency
@@ -83,6 +84,23 @@ struct yetty_ydraw_complex_ops {
     struct yetty_ycore_void_result (*update)(struct yetty_ydraw_complex *self,
                                              uint32_t target_field, const void *body,
                                              size_t body_size);
+
+    /* Re-emit this instance's chrome primitives (tick labels, title,
+     * legend — everything the figure draws AROUND its GPU-rendered body)
+     * into `list`, laid out for the instance's CURRENT retained state.
+     * The receiving host calls this after an update that set
+     * `chrome_dirty` (a geometry or axis-range op) and replaces the
+     * content of the group named by `chrome_group_id` with the emitted
+     * prims — locally, with no producer round-trip. NULL on figures
+     * whose record carries no chrome state.
+     *
+     * Contract: the emission holds ONLY plain prim records (no nested
+     * groups/complexes/commands). The record COUNT is unbounded; the
+     * host enforces one generous denial-of-service ceiling of 1 MiB of
+     * emitted bytes per replacement — orders of magnitude above any real
+     * chrome, never a per-record cap. */
+    struct yetty_ycore_void_result (*emit_chrome)(struct yetty_ydraw_complex *self,
+                                                  struct yetty_ydraw_drawable_list *list);
 };
 
 //=============================================================================
@@ -103,14 +121,28 @@ struct yetty_ydraw_complex {
     struct yetty_ycore_rectangle bounds;
     uint32_t rolling_row;
     /* HiDPI logical->physical scale for THIS render. `bounds` is in the
-     * coordinate space the host laid the figure out in: for the absolute
-     * (ygui chrome) compositor that is LOGICAL pixels, so the figure must
-     * paint at bounds*content_scale to fill its physical footprint; for the
-     * local (terminal scrolling-layer) compositor bounds are already
-     * framebuffer pixels, so this stays 1.0. The hosting grid sets it before
-     * each render() call; producers read it (treating <=0 as 1.0). */
+     * coordinate space the host laid the figure out in — PRODUCER-LOGICAL
+     * pixels for both compositors — and the figure must paint at
+     * bounds*content_scale to fill its physical footprint. The absolute
+     * (ygui chrome) compositor passes the window density; the local
+     * (terminal scrolling-layer) compositor passes its committed density
+     * times the zoom/cell-ratio factors (1.0 on a standard-density
+     * display). The hosting grid sets it before each render() call;
+     * producers read it (treating <=0 as 1.0). */
     float content_scale;
     void *instance_data; // type-specific, managed by concrete factory
+
+    /* Self-owned chrome: nonzero names the wire GROUP (sibling scope of
+     * this instance inside its parent group) that holds the figure's
+     * label/title/legend prims. Parsed from the creation record's chrome
+     * tail by the concrete factory's created-callout; 0 = the record
+     * carries no chrome state (legacy producers). */
+    uint32_t chrome_group_id;
+    /* Set by an update op that invalidated the chrome layout (geometry /
+     * axis-range change). The hosting ingest checks it after every
+     * successful update, regenerates the chrome group locally via
+     * ops->emit_chrome, and clears it. */
+    uint8_t chrome_dirty;
 
     /* Per-instance dirty bit. The render loop renders this figure iff
      * `dirty || force`; cleared inside the layer's render path after
@@ -331,6 +363,9 @@ float yetty_ydraw_complex_pixel_height(const struct yetty_ydraw_complex *instanc
 /* Bottom edge of the figure's wire bounds (envelope-local px) — the
  * culling extent for records positioned inside a multi-figure block. */
 float yetty_ydraw_complex_pixel_bottom(const struct yetty_ydraw_complex *instance);
+
+/* Top edge of the figure's wire bounds (envelope-local px). */
+float yetty_ydraw_complex_pixel_top(const struct yetty_ydraw_complex *instance);
 
 // Set the figure's content scale (paint size relative to its laid-out bounds).
 // The hosting grid uses it to magnify a figure under visual (Ctrl+wheel) zoom in

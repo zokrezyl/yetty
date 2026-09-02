@@ -19,15 +19,30 @@ class Attachment(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_attachment_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_attachment_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Attachment':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_attachment_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_attachment_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Client(_rt.YClass):
     """yclass ymux:client"""
@@ -41,15 +56,30 @@ class Client(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_client_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_client_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Client':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_client_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_client_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Daemon(_rt.YClass):
     """yclass ymux:daemon"""
@@ -63,15 +93,30 @@ class Daemon(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_daemon_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_daemon_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Daemon':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_daemon_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_daemon_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Engine(_rt.YClass):
     """yclass ymux:engine"""
@@ -85,15 +130,30 @@ class Engine(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_engine_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_engine_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Engine':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_engine_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_engine_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class History(_rt.YClass):
     """yclass ymux:history"""
@@ -107,15 +167,30 @@ class History(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_history_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_history_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'History':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_history_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_history_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Pane(_rt.YClass):
     """yclass ymux:pane"""
@@ -129,15 +204,30 @@ class Pane(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_pane_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_pane_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Pane':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_pane_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_pane_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Projector(_rt.YClass):
     """yclass ymux:projector"""
@@ -151,15 +241,30 @@ class Projector(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_projector_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_projector_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Projector':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_projector_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_projector_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Rich(_rt.YClass):
     """yclass ymux:rich"""
@@ -173,15 +278,30 @@ class Rich(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_rich_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_rich_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Rich':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_rich_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_rich_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Session(_rt.YClass):
     """yclass ymux:session"""
@@ -195,15 +315,30 @@ class Session(_rt.YClass):
         if _handle is not None:
             _rt.YClass.__init__(self, _handle)
             return
-        _fn = _rt.cfn("yetty_ymux_session_create", _t.yetty_yclass_object_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(None))
+        _fn = _rt.cfn("yetty_ymux_session_make", _t.yetty_yclass_object_ptr_result, [])
+        res = _rt.result_from_c(_fn())
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         _rt.YClass.__init__(self, res.value)
-        self._apply_kwargs(kwargs)
+        self._owned = True
+        try:
+            self._apply_kwargs(kwargs)
+        except BaseException:
+            self.destroy()
+            raise
     @classmethod
     def create(cls, **kwargs: Any) -> 'Session':
         return cls(**kwargs)
+    def destroy(self) -> None:
+        """Dispose via `yetty_ymux_session_dispose`; idempotent."""
+        if self._handle is None:
+            return
+        handle, self._handle = self._handle, None
+        _fn = _rt.cfn("yetty_ymux_session_dispose", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+    close = destroy
 
 class Vtsink(_rt.YClass):
     """yclass ymux:vtsink"""
@@ -246,6 +381,8 @@ def attachment_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_attachment_dispose`."""
     _fn = _rt.cfn("yetty_ymux_attachment_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def attachment_set_view_size(obj: Any, view_rows: int, view_cols: int) -> _rt.Result[None]:
@@ -324,6 +461,8 @@ def client_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_client_dispose`."""
     _fn = _rt.cfn("yetty_ymux_client_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def client_set_terminal(obj: Any, term_name: str | bytes | None, features: str | bytes | None) -> _rt.Result[None]:
@@ -560,10 +699,10 @@ def client_bell_count(obj: Any) -> _rt.Result[Any]:
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
-def client_title(obj: Any, out: str | bytes | None, out_cap: int) -> _rt.Result[Any]:
+def client_title(obj: Any, out: Any, out_cap: int) -> _rt.Result[Any]:
     """Call `yetty_ymux_client_title`."""
-    _fn = _rt.cfn("yetty_ymux_client_title", _t.yetty_ycore_uint64_result, [c_void_p, c_char_p, c_size_t])
-    res = _fn(_rt.handle(obj), _rt.cstr(out), out_cap)
+    _fn = _rt.cfn("yetty_ymux_client_title", _t.yetty_ycore_uint64_result, [c_void_p, c_void_p, c_size_t])
+    res = _fn(_rt.handle(obj), _rt.handle(out), out_cap)
     return _rt.result_from_c(res)
 
 def client_clipboard(obj: Any, out_text: Any, out_len: Any, out_target: Any) -> _rt.Result[Any]:
@@ -582,6 +721,8 @@ def daemon_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_daemon_dispose`."""
     _fn = _rt.cfn("yetty_ymux_daemon_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def daemon_paste_buffer(obj: Any, out_bytes: Any, out_capacity: int) -> _rt.Result[int]:
@@ -620,10 +761,10 @@ def daemon_step(obj: Any) -> _rt.Result[int]:
     res = _fn(_rt.handle(obj))
     return _rt.result_from_c(res)
 
-def daemon_socket_path(obj: Any, out: str | bytes | None, out_cap: int) -> _rt.Result[None]:
+def daemon_socket_path(obj: Any, out: Any, out_cap: int) -> _rt.Result[None]:
     """Call `yetty_ymux_daemon_socket_path`."""
-    _fn = _rt.cfn("yetty_ymux_daemon_socket_path", _t.yetty_ycore_void_result, [c_void_p, c_char_p, c_size_t])
-    res = _fn(_rt.handle(obj), _rt.cstr(out), out_cap)
+    _fn = _rt.cfn("yetty_ymux_daemon_socket_path", _t.yetty_ycore_void_result, [c_void_p, c_void_p, c_size_t])
+    res = _fn(_rt.handle(obj), _rt.handle(out), out_cap)
     return _rt.result_from_c(res)
 
 def daemon_session(obj: Any, name: str | bytes | None) -> _rt.Result[Any]:
@@ -648,6 +789,8 @@ def engine_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_engine_dispose`."""
     _fn = _rt.cfn("yetty_ymux_engine_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def engine_feed(obj: Any, bytes: str | bytes | None, len: int) -> _rt.Result[None]:
@@ -752,16 +895,16 @@ def engine_cursor_style(obj: Any, out_shape: Any, out_blink: Any) -> _rt.Result[
     res = _fn(_rt.handle(obj), _rt.handle(out_shape), _rt.handle(out_blink))
     return _rt.result_from_c(res)
 
-def engine_exotic_colour(obj: Any, ref: int, out_text: str | bytes | None, out_capacity: int) -> _rt.Result[int]:
+def engine_exotic_colour(obj: Any, ref: int, out_text: Any, out_capacity: int) -> _rt.Result[int]:
     """Call `yetty_ymux_engine_exotic_colour`."""
-    _fn = _rt.cfn("yetty_ymux_engine_exotic_colour", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_char_p, c_uint32])
-    res = _fn(_rt.handle(obj), ref, _rt.cstr(out_text), out_capacity)
+    _fn = _rt.cfn("yetty_ymux_engine_exotic_colour", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), ref, _rt.handle(out_text), out_capacity)
     return _rt.result_from_c(res)
 
-def engine_exotic_link(obj: Any, ref: int, out_text: str | bytes | None, out_capacity: int) -> _rt.Result[int]:
+def engine_exotic_link(obj: Any, ref: int, out_text: Any, out_capacity: int) -> _rt.Result[int]:
     """Call `yetty_ymux_engine_exotic_link`."""
-    _fn = _rt.cfn("yetty_ymux_engine_exotic_link", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_char_p, c_uint32])
-    res = _fn(_rt.handle(obj), ref, _rt.cstr(out_text), out_capacity)
+    _fn = _rt.cfn("yetty_ymux_engine_exotic_link", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), ref, _rt.handle(out_text), out_capacity)
     return _rt.result_from_c(res)
 
 def engine_row_cells(obj: Any, row: int) -> _rt.Result[Any]:
@@ -792,6 +935,8 @@ def history_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_history_dispose`."""
     _fn = _rt.cfn("yetty_ymux_history_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def history_set_budgets(obj: Any, warm_bytes: int, file_max_bytes: int) -> _rt.Result[None]:
@@ -834,6 +979,8 @@ def pane_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_pane_dispose`."""
     _fn = _rt.cfn("yetty_ymux_pane_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def pane_feed(obj: Any, bytes: str | bytes | None, len: int) -> _rt.Result[None]:
@@ -890,10 +1037,10 @@ def projector_consume_tty_response(obj: Any, bytes: Any, byte_count: int) -> _rt
     res = _fn(_rt.handle(obj), _rt.handle(bytes), byte_count)
     return _rt.result_from_c(res)
 
-def projector_response_cap(obj: Any, cap_index: int, out_text: str | bytes | None, out_capacity: int) -> _rt.Result[int]:
+def projector_response_cap(obj: Any, cap_index: int, out_text: Any, out_capacity: int) -> _rt.Result[int]:
     """Call `yetty_ymux_projector_response_cap`."""
-    _fn = _rt.cfn("yetty_ymux_projector_response_cap", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_char_p, c_uint32])
-    res = _fn(_rt.handle(obj), cap_index, _rt.cstr(out_text), out_capacity)
+    _fn = _rt.cfn("yetty_ymux_projector_response_cap", _t.yetty_ycore_uint32_result, [c_void_p, c_uint32, c_void_p, c_uint32])
+    res = _fn(_rt.handle(obj), cap_index, _rt.handle(out_text), out_capacity)
     return _rt.result_from_c(res)
 
 def projector_response_state(obj: Any) -> _rt.Result[Any]:
@@ -924,6 +1071,8 @@ def projector_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_projector_dispose`."""
     _fn = _rt.cfn("yetty_ymux_projector_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def projector_invalidate(obj: Any) -> _rt.Result[None]:
@@ -954,6 +1103,8 @@ def rich_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_rich_dispose`."""
     _fn = _rt.cfn("yetty_ymux_rich_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def rich_mint(obj: Any, creation_words: Any, word_count: int, anchor_kind: int, anchor_a: int, anchor_b: int, span_rows: int) -> _rt.Result[Any]:
@@ -1092,6 +1243,8 @@ def session_dispose(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ymux_session_dispose`."""
     _fn = _rt.cfn("yetty_ymux_session_dispose", _t.yetty_ycore_void_result, [c_void_p])
     res = _fn(_rt.handle(obj))
+    if hasattr(obj, '_handle'):
+        obj._handle = None  # consumed: no dangling wrapper
     return _rt.result_from_c(res)
 
 def session_pane_create(obj: Any, rows: int, cols: int, hot_rows: int, total_row_cap: int, host: Any) -> _rt.Result[int]:

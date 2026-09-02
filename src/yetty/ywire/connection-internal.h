@@ -153,6 +153,14 @@ struct yetty_ywire_connection {
      * accumulate keyboard input without limit. Release also fires on PTY EOF
      * (`_release_forced`) so an ungraceful client death recovers the bytes. */
     int input_barrier_armed;
+    /* RPC-less client presence: a DCS-only client (ygui2) never opens a
+     * dynamic channel, so "zero open channels" is ALWAYS true for it and
+     * would disarm the barrier on the very feed that processed its HOLD.
+     * The terminal sets this while the client's pane-input subscription is
+     * active and clears it on the flags=0 unsubscribe — the RPC-less
+     * lifetime marker. Release requires channels gone AND presence clear
+     * (or the deadline as wedged-client failsafe). */
+    int input_barrier_client_present;
     struct timespec input_barrier_deadline;
     struct yetty_ycore_buffer input_held;
 

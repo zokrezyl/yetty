@@ -146,7 +146,9 @@ struct YETTY_ANNOTATE("class@ydrawlist2:text") YETTY_ANNOTATE("parent@ydrawlist2
     YETTY_ANNOTATE("property") float y;
     YETTY_ANNOTATE("property") float font_size;
     YETTY_ANNOTATE("property") uint32_t color;
-    YETTY_ANNOTATE("property") uint32_t layer;
+    /* Stacking depth (z-order), uniform and SIGNED across every drawable's
+     * `layer` — negative layers paint below the default plane. */
+    YETTY_ANNOTATE("property") int32_t layer;
     YETTY_ANNOTATE("property") int32_t font_id;
     YETTY_ANNOTATE("property") float rotation;
     uint32_t body_len;
@@ -225,9 +227,9 @@ static struct yetty_ycore_void_result text_pack(struct yetty_yclass_object *obj,
         .size = text->body_len,
         .capacity = text->body_len,
     };
-    struct yetty_ycore_void_result pack_r =
-        yetty_ydraw_drawable_list_add_text(list, text->x, text->y, &body, text->font_size,
-                                           text->color, text->layer, text->font_id, text->rotation);
+    struct yetty_ycore_void_result pack_r = yetty_ydraw_drawable_list_add_text(
+        list, text->x, text->y, &body, text->font_size, text->color, (uint32_t)text->layer,
+        text->font_id, text->rotation);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, pack_r, "ydrawlist2 text pack: add_text");
     return YETTY_OK_VOID();
 }

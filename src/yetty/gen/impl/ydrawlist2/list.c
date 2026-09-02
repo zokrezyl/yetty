@@ -13,10 +13,34 @@
 struct yetty_ycore_void_result;
 struct yetty_ycore_void_result yetty_ydrawlist2_add(struct yetty_yclass_object *obj,
                                                     struct yetty_yclass_object *drawable);
+struct yetty_ycore_void_result yetty_ydrawlist2_begin_group(struct yetty_yclass_object *obj,
+                                                            uint32_t group_id);
+struct yetty_ycore_void_result yetty_ydrawlist2_end_group(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ydrawlist2_delete_group(struct yetty_yclass_object *obj,
+                                                             uint32_t group_id);
+struct yetty_ycore_void_result yetty_ydrawlist2_update(struct yetty_yclass_object *obj, uint32_t id,
+                                                       struct yetty_ycore_buffer payload);
+struct yetty_ycore_void_result yetty_ydrawlist2_path(struct yetty_yclass_object *obj,
+                                                     struct yetty_ycore_buffer prefix);
+struct yetty_ycore_void_result yetty_ydrawlist2_reserve(struct yetty_yclass_object *obj,
+                                                        uint32_t height_px);
 struct yetty_ycore_void_result yetty_ydrawlist2_dcs_emit(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ydrawlist2_destroy(struct yetty_yclass_object *obj);
 typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_add_fn)(struct yetty_yclass_object *,
                                                                   struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_begin_group_fn)(
+    struct yetty_yclass_object *, uint32_t);
+typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_end_group_fn)(
+    struct yetty_yclass_object *);
+typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_delete_group_fn)(
+    struct yetty_yclass_object *, uint32_t);
+typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_update_fn)(struct yetty_yclass_object *,
+                                                                     uint32_t,
+                                                                     struct yetty_ycore_buffer);
+typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_path_fn)(struct yetty_yclass_object *,
+                                                                   struct yetty_ycore_buffer);
+typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_reserve_fn)(struct yetty_yclass_object *,
+                                                                      uint32_t);
 typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_dcs_emit_fn)(
     struct yetty_yclass_object *);
 typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_destroy_fn)(struct yetty_yclass_object *);
@@ -24,6 +48,26 @@ typedef struct yetty_ycore_void_result (*yetty_ydrawlist2_destroy_fn)(struct yet
 YETTY_MAYBE_UNUSED
 static yetty_ydrawlist2_add_fn yetty_ydrawlist2_drawable_list_yetty_ydrawlist2_add_list_add_check =
     list_add;
+YETTY_MAYBE_UNUSED
+static yetty_ydrawlist2_begin_group_fn
+    yetty_ydrawlist2_drawable_list_yetty_ydrawlist2_begin_group_list_begin_group_check =
+        list_begin_group;
+YETTY_MAYBE_UNUSED
+static yetty_ydrawlist2_end_group_fn
+    yetty_ydrawlist2_drawable_list_yetty_ydrawlist2_end_group_list_end_group_check = list_end_group;
+YETTY_MAYBE_UNUSED
+static yetty_ydrawlist2_delete_group_fn
+    yetty_ydrawlist2_drawable_list_yetty_ydrawlist2_delete_group_list_delete_group_check =
+        list_delete_group;
+YETTY_MAYBE_UNUSED
+static yetty_ydrawlist2_update_fn
+    yetty_ydrawlist2_drawable_list_yetty_ydrawlist2_update_list_update_check = list_update;
+YETTY_MAYBE_UNUSED
+static yetty_ydrawlist2_path_fn
+    yetty_ydrawlist2_drawable_list_yetty_ydrawlist2_path_list_path_check = list_path;
+YETTY_MAYBE_UNUSED
+static yetty_ydrawlist2_reserve_fn
+    yetty_ydrawlist2_drawable_list_yetty_ydrawlist2_reserve_list_reserve_check = list_reserve;
 YETTY_MAYBE_UNUSED
 static yetty_ydrawlist2_dcs_emit_fn
     yetty_ydrawlist2_drawable_list_yetty_ydrawlist2_dcs_emit_list_dcs_emit_check = list_dcs_emit;
@@ -48,6 +92,19 @@ struct yetty_yclass_ptr_result yetty_ydrawlist2_drawable_list_class_get(void)
     static const struct yetty_yclass_op ops[] = {
         {"yetty_ydrawlist2", "add", (yetty_yclass_method_id_t)yetty_ydrawlist2_add,
          (yetty_yclass_impl_t)list_add},
+        {"yetty_ydrawlist2", "begin_group", (yetty_yclass_method_id_t)yetty_ydrawlist2_begin_group,
+         (yetty_yclass_impl_t)list_begin_group},
+        {"yetty_ydrawlist2", "end_group", (yetty_yclass_method_id_t)yetty_ydrawlist2_end_group,
+         (yetty_yclass_impl_t)list_end_group},
+        {"yetty_ydrawlist2", "delete_group",
+         (yetty_yclass_method_id_t)yetty_ydrawlist2_delete_group,
+         (yetty_yclass_impl_t)list_delete_group},
+        {"yetty_ydrawlist2", "update", (yetty_yclass_method_id_t)yetty_ydrawlist2_update,
+         (yetty_yclass_impl_t)list_update},
+        {"yetty_ydrawlist2", "path", (yetty_yclass_method_id_t)yetty_ydrawlist2_path,
+         (yetty_yclass_impl_t)list_path},
+        {"yetty_ydrawlist2", "reserve", (yetty_yclass_method_id_t)yetty_ydrawlist2_reserve,
+         (yetty_yclass_impl_t)list_reserve},
         {"yetty_ydrawlist2", "dcs_emit", (yetty_yclass_method_id_t)yetty_ydrawlist2_dcs_emit,
          (yetty_yclass_impl_t)list_dcs_emit},
         {"yetty_ydrawlist2", "destroy", (yetty_yclass_method_id_t)yetty_ydrawlist2_destroy,

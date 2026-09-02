@@ -679,6 +679,7 @@ static void yplot_instance_destroy(struct yetty_ydraw_complex *instance)
 static const struct yetty_ydraw_complex_ops yplot_figure_ops = {
     .destroy = yplot_instance_destroy,
     .update = yetty_yplot_instance_update,
+    .emit_chrome = yetty_yplot_instance_emit_chrome,
 };
 
 /* Legacy factory adapter — kept for the factory->destroy_instance

@@ -103,9 +103,9 @@ struct yetty_ycore_void_result yetty_ydrawlist2_text_font_size_set(struct yetty_
 struct uint32_result yetty_ydrawlist2_text_color_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ydrawlist2_text_color_set(struct yetty_yclass_object *obj,
                                                                uint32_t value);
-struct uint32_result yetty_ydrawlist2_text_layer_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_int_result yetty_ydrawlist2_text_layer_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ydrawlist2_text_layer_set(struct yetty_yclass_object *obj,
-                                                               uint32_t value);
+                                                               int32_t value);
 struct yetty_ycore_int_result yetty_ydrawlist2_text_font_id_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ydrawlist2_text_font_id_set(struct yetty_yclass_object *obj,
                                                                  int32_t value);

@@ -42,7 +42,7 @@ class Client(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yjupyter_client_execute", _t.yetty_ycore_char_ptr_result, [c_void_p, c_char_p, c_char_p])
-        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(code), _rt.cstr(tag)), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(code), _rt.cstr(tag)), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -136,7 +136,7 @@ class Message(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yjupyter_message_to_wire", _t.yetty_ycore_char_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -190,7 +190,7 @@ class Message(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yjupyter_message_content_json", _t.yetty_ycore_char_ptr_result, [c_void_p])
-        res = _rt.result_from_c(_fn(self._handle), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -199,7 +199,7 @@ class Message(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yjupyter_message_content_string", _t.yetty_ycore_char_ptr_result, [c_void_p, c_char_p])
-        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(key)), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle, _rt.cstr(key)), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value

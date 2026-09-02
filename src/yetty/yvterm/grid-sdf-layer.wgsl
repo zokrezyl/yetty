@@ -45,10 +45,10 @@ fn vs_main(input: VertexInput) -> VertexOutput {
     output.position = vec4<f32>(input.position, 0.0, 1.0);
 
     // Map the rect's NDC quad onto the on-screen view (rect) size in px.
-    // The fragment offsets this by the scroll (cz_off) into the content and
-    // buckets/bounds against grid_size*cell_size (the content extent). When
-    // content == rect, view == content and this is identical to mapping the
-    // whole content onto the rect (the non-scrolling case).
+    // The fragment inverse-applies the visual zoom and buckets/bounds
+    // against grid_size*cell_size (the content extent). When content ==
+    // rect, view == content and this is identical to mapping the whole
+    // content onto the rect (the non-scrolling case).
     let view = uniforms.ydraw_ydraw_view_size;
     output.grid_pixel = vec2<f32>(
         (input.position.x * 0.5 + 0.5) * view.x,
@@ -58,70 +58,88 @@ fn vs_main(input: VertexInput) -> VertexOutput {
 }
 
 // =============================================================================
-// Primitive Buffer Layout (serialized with rolling_row prepended):
+// Primitive Buffer Layout (serialized with a 3-word header prepended):
 //   [0] rolling_row   - absolute row number of primitive's line
-//   [1] type          - primitive type for dispatch
-//   [2] z_order       - rendering order
-//   [3] fill_color    - packed RGBA
-//   [4] stroke_color  - packed RGBA
-//   [5] stroke_width  - f32
-//   [6+] geometry     - primitive-specific args (Y coords relative to line)
+//   [1] offset_x      - f32 projection offset (accumulated group offsets)
+//   [2] offset_y      - f32 projection offset
+//   [3] type          - primitive type for dispatch
+//   [4] z_order       - rendering order
+//   [5] fill_color    - packed RGBA
+//   [6] stroke_color  - packed RGBA
+//   [7] stroke_width  - f32
+//   [8+] geometry     - primitive-specific args (Y coords relative to line)
 // =============================================================================
 
 fn ydraw_read_rolling_row(drawable_offset: u32) -> u32 {
     return storage_buffer[drawable_offset + 0u];
 }
 
+fn ydraw_read_offset(drawable_offset: u32) -> vec2<f32> {
+    return vec2<f32>(bitcast<f32>(storage_buffer[drawable_offset + 1u]),
+                     bitcast<f32>(storage_buffer[drawable_offset + 2u]));
+}
+
+// Accumulated ancestor clip rect (block-content px, offsets applied);
+// w <= 0 disables clipping.
+fn ydraw_read_clip(drawable_offset: u32) -> vec4<f32> {
+    return vec4<f32>(bitcast<f32>(storage_buffer[drawable_offset + 3u]),
+                     bitcast<f32>(storage_buffer[drawable_offset + 4u]),
+                     bitcast<f32>(storage_buffer[drawable_offset + 5u]),
+                     bitcast<f32>(storage_buffer[drawable_offset + 6u]));
+}
+
 fn ydraw_read_drawable_type(drawable_offset: u32) -> u32 {
-    return storage_buffer[drawable_offset + 1u];
+    return storage_buffer[drawable_offset + 7u];
 }
 
 fn ydraw_read_fill_color(drawable_offset: u32) -> u32 {
-    return storage_buffer[drawable_offset + 3u];
+    return storage_buffer[drawable_offset + 9u];
 }
 
 fn ydraw_read_stroke_color(drawable_offset: u32) -> u32 {
-    return storage_buffer[drawable_offset + 4u];
+    return storage_buffer[drawable_offset + 10u];
 }
 
 fn ydraw_read_stroke_width(drawable_offset: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[drawable_offset + 5u]);
+    return bitcast<f32>(storage_buffer[drawable_offset + 11u]);
 }
 
 fn ydraw_read_geom_f32(drawable_offset: u32, idx: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[drawable_offset + 6u + idx]);
+    return bitcast<f32>(storage_buffer[drawable_offset + 12u + idx]);
 }
 
 // =============================================================================
-// Glyph Primitive Layout (different from SDF):
+// Glyph Primitive Layout (different from SDF; same 3-word header):
 //   [0] rolling_row
-//   [1] type (200 = GLYPH)
-//   [2] z_order
-//   [3] x           - glyph position (with bearing applied)
-//   [4] y           - glyph position (with bearing applied)
-//   [5] font_size   - target render size (scale = font_size / base_size)
-//   [6] packed      - glyph_index (low 16) | font_id (high 16)
-//   [7] color       - packed RGBA
+//   [1] offset_x    - f32 projection offset
+//   [2] offset_y    - f32 projection offset
+//   [3] type (200 = GLYPH)
+//   [4] z_order
+//   [5] x           - glyph position (with bearing applied)
+//   [6] y           - glyph position (with bearing applied)
+//   [7] font_size   - target render size (scale = font_size / base_size)
+//   [8] packed      - glyph_index (low 16) | font_id (high 16)
+//   [9] color       - packed RGBA
 // =============================================================================
 
 fn glyph_read_x(drawable_offset: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[drawable_offset + 3u]);
+    return bitcast<f32>(storage_buffer[drawable_offset + 9u]);
 }
 
 fn glyph_read_y(drawable_offset: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[drawable_offset + 4u]);
+    return bitcast<f32>(storage_buffer[drawable_offset + 10u]);
 }
 
 fn glyph_read_font_size(drawable_offset: u32) -> f32 {
-    return bitcast<f32>(storage_buffer[drawable_offset + 5u]);
+    return bitcast<f32>(storage_buffer[drawable_offset + 11u]);
 }
 
 fn glyph_read_packed(drawable_offset: u32) -> u32 {
-    return storage_buffer[drawable_offset + 6u];
+    return storage_buffer[drawable_offset + 12u];
 }
 
 fn glyph_read_color(drawable_offset: u32) -> u32 {
-    return storage_buffer[drawable_offset + 7u];
+    return storage_buffer[drawable_offset + 13u];
 }
 
 // The active fonts' shaders (msdf-font.wgsl × N) are merged by the binder.
@@ -139,7 +157,8 @@ fn glyph_read_color(drawable_offset: u32) -> u32 {
 
 // SDF evaluation: call the generated evaluate_sdf_2d() (from ysdf.gen.wgsl).
 // The ydraw prim stores rolling_row at word +0 and the raw ysdf record
-// from +1 onward, so pass drawable_offset + 1u.
+// from the word after the per-prim header (3 words: rolling_row, offset_x,
+// offset_y + clip rect), so pass drawable_offset + 7u.
 
 // Unpack RGBA color from u32
 fn ydraw_unpack_color(packed: u32) -> vec4<f32> {
@@ -175,21 +194,20 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     let grid_pixel_w = grid_size.x * cell_size.x;
     let grid_pixel_h = grid_size.y * cell_size.y;
 
-    // Two independent zoom transforms:
-    //   visual_zoom — Ctrl+Scroll, mouse-anchored, around pane center
-    //   cell_zoom   — Ctrl+Shift+Scroll, structural, around origin (0,0)
-    //                 so content grows top-left→right-down exactly like text
-    //                 cells growing in the text layer (they multiply from 0).
-    // Both run BEFORE cell lookup / SDF eval, so edges stay crisp at any
-    // zoom level — the shader re-samples SDF math per fragment.
+    // Visual zoom (Ctrl+Scroll, mouse-anchored, around pane center) is the
+    // only GLOBAL transform: it applies identically to terminal glyphs and
+    // rich content, matching the text/figure shaders. Structural cell zoom
+    // (Ctrl+Shift+Scroll) is NOT global — row anchors already move with
+    // the CURRENT cell size, so cell zoom belongs exclusively to the
+    // rich-primitive LOCAL scale below (dividing the whole pane coordinate
+    // by it scaled the row anchors a second time and sampled prims far
+    // from their bucketed cells at any nonzero row).
     let vz_scale = uniforms.ydraw_ydraw_visual_zoom_scale;
     let vz_off   = uniforms.ydraw_ydraw_visual_zoom_off;
     let cz_scale = uniforms.ydraw_ydraw_cell_zoom_scale;
-    let cz_off   = uniforms.ydraw_ydraw_cell_zoom_off;
     let vz_center = vec2<f32>(grid_pixel_w * 0.5, grid_pixel_h * 0.5);
-    let after_visual = (input.grid_pixel - vz_center) / max(vz_scale, 0.0001)
-                     + vz_center + vz_off;
-    let pixel_pos = after_visual / max(cz_scale, 0.0001) + cz_off;
+    let pixel_pos = (input.grid_pixel - vz_center) / max(vz_scale, 0.0001)
+                  + vz_center + vz_off;
 
     // Outside grid = transparent
     if (pixel_pos.x < 0.0 || pixel_pos.y < 0.0 ||
@@ -224,8 +242,18 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     var result_color = vec3<f32>(0.0);
     var result_alpha = 0.0;
 
+    // Active plan run: only prims with index in [run_first, run_first +
+    // run_count) composite in this draw. Prims are staged in paint-plan
+    // order, so a run is a contiguous index interval and interleaving
+    // ranged draws with complex draws yields the total paint order.
+    let run_first = uniforms.ydraw_ydraw_run_first;
+    let run_count = uniforms.ydraw_ydraw_run_count;
+
     for (var i = 0u; i < loop_count; i++) {
         let raw_idx = storage_buffer[grid_offset + cell_start + 1u + i];
+        if (raw_idx < run_first || raw_idx >= run_first + run_count) {
+            continue;
+        }
 
         // raw_idx is a primitive index (0, 1, 2...), not a data offset
         // Prim staging layout: [offset_table...][drawable_data...]
@@ -241,8 +269,31 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         let drawable_type = ydraw_read_drawable_type(drawable_offset);
 
-        // Transform pixel position to primitive-local coords
-        let local_pos = vec2<f32>(pixel_pos.x, pixel_pos.y - y_offset);
+        // Transform pixel position to primitive-local coords. The row
+        // anchor (y_offset, CURRENT cell pixels) stays in framebuffer
+        // space; only the primitive-LOCAL space scales. RICH prims are
+        // producer-logical x density x structural cell zoom; the base
+        // range below ydraw_rich_first is shaped TERMINAL text staged at
+        // current framebuffer cell metrics — it follows the text grid
+        // exactly once and receives NO conversion (scale 1).
+        let density = max(uniforms.ydraw_ydraw_density_scale, 0.0001);
+        let rich_prim = raw_idx >= uniforms.ydraw_ydraw_rich_first;
+        let local_scale = select(1.0, max(density * cz_scale, 0.0001), rich_prim);
+        let content_pos = vec2<f32>(pixel_pos.x, pixel_pos.y - y_offset) / local_scale;
+        let prim_offset = ydraw_read_offset(drawable_offset);
+        let local_pos = content_pos - prim_offset;
+
+        // Ancestor clip (block-content space = pixel with the block anchor
+        // removed but BEFORE the group offset): outside → this prim
+        // contributes nothing at this pixel. clip.z <= 0 = unclipped.
+        let prim_clip = ydraw_read_clip(drawable_offset);
+        if (prim_clip.z > 0.0) {
+            if (content_pos.x < prim_clip.x || content_pos.y < prim_clip.y ||
+                content_pos.x >= prim_clip.x + prim_clip.z ||
+                content_pos.y >= prim_clip.y + prim_clip.w) {
+                continue;
+            }
+        }
 
 
         // Glyph primitives — delegate atlas sampling to the active font
@@ -275,8 +326,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                 continue;
             }
 
+            // The sampler's AA sharpness follows the on-screen scale:
+            // local pixel_scale times the prim's local-space multiplier.
             let glyph_uv = (local_pos - glyph_min) / (glyph_size * pixel_scale);
-            let glyph_alpha = font_glyph_sample(font_slot, glyph_index, glyph_uv, pixel_scale);
+            let glyph_alpha =
+                font_glyph_sample(font_slot, glyph_index, glyph_uv, pixel_scale * local_scale);
 
             if (glyph_alpha > 0.0) {
                 let glyph_rgba = ydraw_unpack_color(color_packed);
@@ -287,8 +341,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             continue;
         }
 
-        // Evaluate SDF for non-glyph primitives
-        let d = evaluate_sdf_2d(drawable_offset + 1u, local_pos);
+        // Evaluate SDF for non-glyph primitives. The evaluation runs in
+        // the prim's local space; multiplying the distance by local_scale
+        // puts it back in framebuffer pixels, so the one-pixel AA ramp
+        // and the stroke bands below stay screen-accurate at any density
+        // and any cell zoom.
+        let d = evaluate_sdf_2d(drawable_offset + 7u, local_pos) * local_scale;
 
         // Resolve the fill color. Gradient primitives compute their color
         // from per-pixel position; everything else reads the single
@@ -297,7 +355,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         var fill_rgba: vec4<f32>;
         var has_fill: bool;
         if (yetty_ysdf_is_gradient_2d(drawable_type_for_color)) {
-            fill_rgba = yetty_ysdf_eval_gradient_color_2d(drawable_offset + 1u, local_pos);
+            fill_rgba = yetty_ysdf_eval_gradient_color_2d(drawable_offset + 7u, local_pos);
             has_fill = fill_rgba.a > 0.0;
         } else {
             let fill_color = ydraw_read_fill_color(drawable_offset);
@@ -322,9 +380,10 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         // Render stroke. Strokes thinner than 1px draw as a 1px band dimmed
         // by the requested width, so hairlines stay visible (and uniform)
-        // at any subpixel position.
+        // at any subpixel position. Rich stroke widths are producer-local —
+        // scale to framebuffer pixels alongside the distance.
         let stroke_color = ydraw_read_stroke_color(drawable_offset);
-        let stroke_width = ydraw_read_stroke_width(drawable_offset);
+        let stroke_width = ydraw_read_stroke_width(drawable_offset) * local_scale;
         if (stroke_width > 0.0 && stroke_color != 0u) {
             let effective_stroke_width = max(stroke_width, 1.0);
             let stroke_dist = abs(d) - effective_stroke_width * 0.5;

@@ -14,6 +14,10 @@ struct float_result yetty_ycomplex2_image_width_get(struct yetty_yclass_object *
 struct yetty_ycore_void_result yetty_ycomplex2_image_width_set(struct yetty_yclass_object *, float);
 struct float_result yetty_ycomplex2_image_height_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ycomplex2_image_height_set(struct yetty_yclass_object *, float);
+struct yetty_ycore_int_result yetty_ycomplex2_image_layer_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ycomplex2_image_layer_set(struct yetty_yclass_object *, int32_t);
+struct uint32_result yetty_ycomplex2_image_id_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ycomplex2_image_id_set(struct yetty_yclass_object *, uint32_t);
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_mesh_create(struct yetty_yclass_ctx *);
 struct float_result yetty_ycomplex2_mesh_x_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ycomplex2_mesh_x_set(struct yetty_yclass_object *, float);
@@ -31,6 +35,10 @@ struct float_result yetty_ycomplex2_mesh_zoom_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ycomplex2_mesh_zoom_set(struct yetty_yclass_object *, float);
 struct uint32_result yetty_ycomplex2_mesh_wireframe_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ycomplex2_mesh_wireframe_set(struct yetty_yclass_object *, uint32_t);
+struct yetty_ycore_int_result yetty_ycomplex2_mesh_layer_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ycomplex2_mesh_layer_set(struct yetty_yclass_object *, int32_t);
+struct uint32_result yetty_ycomplex2_mesh_id_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ycomplex2_mesh_id_set(struct yetty_yclass_object *, uint32_t);
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_shadertoy_create(struct yetty_yclass_ctx *);
 struct float_result yetty_ycomplex2_shadertoy_x_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_x_set(struct yetty_yclass_object *, float);
@@ -40,6 +48,10 @@ struct float_result yetty_ycomplex2_shadertoy_width_get(struct yetty_yclass_obje
 struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_width_set(struct yetty_yclass_object *, float);
 struct float_result yetty_ycomplex2_shadertoy_height_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_height_set(struct yetty_yclass_object *, float);
+struct yetty_ycore_int_result yetty_ycomplex2_shadertoy_layer_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_layer_set(struct yetty_yclass_object *, int32_t);
+struct uint32_result yetty_ycomplex2_shadertoy_id_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ycomplex2_shadertoy_id_set(struct yetty_yclass_object *, uint32_t);
 struct yetty_yclass_object_ptr_result yetty_ycomplex2_video_create(struct yetty_yclass_ctx *);
 struct float_result yetty_ycomplex2_video_x_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ycomplex2_video_x_set(struct yetty_yclass_object *, float);
@@ -57,6 +69,8 @@ struct uint32_result yetty_ycomplex2_video_video_h_get(struct yetty_yclass_objec
 struct yetty_ycore_void_result yetty_ycomplex2_video_video_h_set(struct yetty_yclass_object *, uint32_t);
 struct float_result yetty_ycomplex2_video_fps_get(struct yetty_yclass_object *);
 struct yetty_ycore_void_result yetty_ycomplex2_video_fps_set(struct yetty_yclass_object *, float);
+struct yetty_ycore_int_result yetty_ycomplex2_video_layer_get(struct yetty_yclass_object *);
+struct yetty_ycore_void_result yetty_ycomplex2_video_layer_set(struct yetty_yclass_object *, int32_t);
 struct yetty_ycore_void_result yetty_ycomplex2_set_path(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_ycomplex2_set_glb(struct yetty_yclass_object *, const char *);
 struct yetty_ycore_void_result yetty_ycomplex2_set_source(struct yetty_yclass_object *, const char *);
@@ -141,6 +155,28 @@ Image.__prop_set.height = function(obj, value)
   local res = rt.C().yetty_ycomplex2_image_height_set(obj.handle, value)
   rt.check(res)
 end
+Image.__prop_get.layer = function(obj)
+  rt.live(obj, "Image.layer")
+  local res = rt.C().yetty_ycomplex2_image_layer_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Image.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Image.layer")
+  local res = rt.C().yetty_ycomplex2_image_layer_set(obj.handle, value)
+  rt.check(res)
+end
+Image.__prop_get.id = function(obj)
+  rt.live(obj, "Image.id")
+  local res = rt.C().yetty_ycomplex2_image_id_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Image.__prop_set.id = function(obj, value)
+  rt.live(obj, "Image.id")
+  local res = rt.C().yetty_ycomplex2_image_id_set(obj.handle, value)
+  rt.check(res)
+end
 function Image:destroy()
   rt.object_free(self)
 end
@@ -151,6 +187,8 @@ Image.__spec = {
   },
   props = {
     height = true,
+    id = true,
+    layer = true,
     width = true,
     x = true,
     y = true,
@@ -285,6 +323,28 @@ Mesh.__prop_set.wireframe = function(obj, value)
   local res = rt.C().yetty_ycomplex2_mesh_wireframe_set(obj.handle, value)
   rt.check(res)
 end
+Mesh.__prop_get.layer = function(obj)
+  rt.live(obj, "Mesh.layer")
+  local res = rt.C().yetty_ycomplex2_mesh_layer_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Mesh.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Mesh.layer")
+  local res = rt.C().yetty_ycomplex2_mesh_layer_set(obj.handle, value)
+  rt.check(res)
+end
+Mesh.__prop_get.id = function(obj)
+  rt.live(obj, "Mesh.id")
+  local res = rt.C().yetty_ycomplex2_mesh_id_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Mesh.__prop_set.id = function(obj, value)
+  rt.live(obj, "Mesh.id")
+  local res = rt.C().yetty_ycomplex2_mesh_id_set(obj.handle, value)
+  rt.check(res)
+end
 function Mesh:destroy()
   rt.object_free(self)
 end
@@ -297,6 +357,8 @@ Mesh.__spec = {
     azimuth = true,
     elevation = true,
     height = true,
+    id = true,
+    layer = true,
     width = true,
     wireframe = true,
     x = true,
@@ -394,6 +456,28 @@ Shadertoy.__prop_set.height = function(obj, value)
   local res = rt.C().yetty_ycomplex2_shadertoy_height_set(obj.handle, value)
   rt.check(res)
 end
+Shadertoy.__prop_get.layer = function(obj)
+  rt.live(obj, "Shadertoy.layer")
+  local res = rt.C().yetty_ycomplex2_shadertoy_layer_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Shadertoy.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Shadertoy.layer")
+  local res = rt.C().yetty_ycomplex2_shadertoy_layer_set(obj.handle, value)
+  rt.check(res)
+end
+Shadertoy.__prop_get.id = function(obj)
+  rt.live(obj, "Shadertoy.id")
+  local res = rt.C().yetty_ycomplex2_shadertoy_id_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Shadertoy.__prop_set.id = function(obj, value)
+  rt.live(obj, "Shadertoy.id")
+  local res = rt.C().yetty_ycomplex2_shadertoy_id_set(obj.handle, value)
+  rt.check(res)
+end
 function Shadertoy:destroy()
   rt.object_free(self)
 end
@@ -405,6 +489,8 @@ Shadertoy.__spec = {
   },
   props = {
     height = true,
+    id = true,
+    layer = true,
     width = true,
     x = true,
     y = true,
@@ -539,6 +625,17 @@ Video.__prop_set.fps = function(obj, value)
   local res = rt.C().yetty_ycomplex2_video_fps_set(obj.handle, value)
   rt.check(res)
 end
+Video.__prop_get.layer = function(obj)
+  rt.live(obj, "Video.layer")
+  local res = rt.C().yetty_ycomplex2_video_layer_get(obj.handle)
+  rt.check(res)
+  return res.value
+end
+Video.__prop_set.layer = function(obj, value)
+  rt.live(obj, "Video.layer")
+  local res = rt.C().yetty_ycomplex2_video_layer_set(obj.handle, value)
+  rt.check(res)
+end
 function Video:destroy()
   rt.object_free(self)
 end
@@ -551,6 +648,7 @@ Video.__spec = {
     fps = true,
     height = true,
     id = true,
+    layer = true,
     video_h = true,
     video_w = true,
     width = true,

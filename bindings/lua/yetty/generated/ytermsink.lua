@@ -10,6 +10,7 @@ struct yetty_ycore_void_result yetty_ytermsink_request_render(struct yetty_yclas
 struct yetty_ycore_void_result yetty_ytermsink_mouse_sub(struct yetty_yclass_object *, int, int, int);
 struct yetty_ycore_void_result yetty_ytermsink_clipboard_write(struct yetty_yclass_object *, const char *, size_t, int);
 struct yetty_ycore_void_result yetty_ytermsink_sixel_write(struct yetty_yclass_object *, const char *, size_t);
+struct yetty_ycore_void_result yetty_ytermsink_set_title(struct yetty_yclass_object *, const char *, size_t);
 ]]
 local M = {}
 local Sink = {}
@@ -59,11 +60,17 @@ function Sink:sixel_write(data, len)
   local res = rt.C().yetty_ytermsink_sixel_write(self.handle, data, len)
   rt.check(res)
 end
+function Sink:set_title(title, len)
+  rt.live(self, "Sink:set_title")
+  local res = rt.C().yetty_ytermsink_set_title(self.handle, title, len)
+  rt.check(res)
+end
 function Sink:destroy()
   rt.object_free(self)
 end
 Sink.__spec = {
   setters = {
+    title = { fn = "set_title", n = 2 },
   },
   props = {
   },

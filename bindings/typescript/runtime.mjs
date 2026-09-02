@@ -55,6 +55,15 @@ koffi.struct("yetty_result_view", {
 koffi.struct("yetty_ycore_buffer", {
   data: "void *", capacity: "size_t", size: "size_t",
 });
+// The real error layout (the union half of every result struct): needed
+// to walk the cause chain and to hand the error back to the native
+// destroy, which frees the heap-linked causes the Result contract makes
+// the receiver own.
+koffi.struct("yetty_ycore_error_native", {
+  msg: "void *", file: "void *", func: "void *", line: "int32", cause: "void *",
+});
+const errorDestroy = lib.func(
+  "void yetty_ycore_error_destroy(yetty_ycore_error_native err)");
 
 const signatures = {};
 const bound = new Map();
@@ -98,10 +107,25 @@ export function requireFeature(className, symbol, feature) {
 }
 
 function errorMessage(view, fallback) {
-  if (view.word0 === null) {
-    return fallback;
+  let message = view.word0 === null ? fallback : koffi.decode(view.word0, "char", 512);
+  // Flatten the cause chain into the message, then destroy the native
+  // chain exactly once — reading only the top message would leak one
+  // heap node per cause on every failed call.
+  let cause = view.word4;
+  for (let guard = 0; cause !== null && cause !== undefined && guard < 64; guard++) {
+    const node = koffi.decode(cause, "yetty_ycore_error_native");
+    if (node.msg !== null) {
+      message += `; caused by: ${koffi.decode(node.msg, "char", 512)}`;
+    }
+    cause = node.cause;
   }
-  return koffi.decode(view.word0, "char", 512);
+  try {
+    errorDestroy({ msg: view.word0, file: view.word1, func: view.word2,
+      line: view.word3, cause: view.word4 });
+  } catch {
+    // Destroy is best-effort — the error being surfaced matters more.
+  }
+  return message;
 }
 
 // Call a result-returning FFI function; throw on error, return the

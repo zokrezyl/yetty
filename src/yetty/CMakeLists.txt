@@ -8,6 +8,13 @@ if(YETTY_ENABLE_FEATURE_YGUI)
     # Object-system-based widget toolkit (yclass). The sole ygui
     # implementation now that the legacy toolkit has been removed.
     add_subdirectory(ygui)
+
+    # ygui2 — the drawable-contract widget toolkit (pure PTY producer;
+    # renders through DCS drawable envelopes only). Phase 1 core.
+    add_subdirectory(ygui2)
+
+    # yguiapp2 — the generic ygui2 terminal application host.
+    add_subdirectory(yguiapp2)
 endif()
 
 if(YETTY_ENABLE_FEATURE_YMGUI)

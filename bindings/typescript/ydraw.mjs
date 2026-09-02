@@ -13,8 +13,11 @@ runtime.registerSignatures({
   yetty_api_yplot_curve_create: "yetty_result_view yetty_api_yplot_curve_create(void *ctx)",
   yetty_api_yplot_destroy: "yetty_result_view yetty_api_yplot_destroy(void *obj)",
   yetty_api_yplot_function_create: "yetty_result_view yetty_api_yplot_function_create(void *ctx)",
+  yetty_api_yplot_plot_chrome_group_set: "yetty_result_view yetty_api_yplot_plot_chrome_group_set(void *obj, uint32_t value)",
   yetty_api_yplot_plot_create: "yetty_result_view yetty_api_yplot_plot_create(void *ctx)",
   yetty_api_yplot_plot_height_set: "yetty_result_view yetty_api_yplot_plot_height_set(void *obj, float value)",
+  yetty_api_yplot_plot_id_set: "yetty_result_view yetty_api_yplot_plot_id_set(void *obj, uint32_t value)",
+  yetty_api_yplot_plot_layer_set: "yetty_result_view yetty_api_yplot_plot_layer_set(void *obj, int32_t value)",
   yetty_api_yplot_plot_width_set: "yetty_result_view yetty_api_yplot_plot_width_set(void *obj, float value)",
   yetty_api_yplot_plot_x_set: "yetty_result_view yetty_api_yplot_plot_x_set(void *obj, float value)",
   yetty_api_yplot_plot_y_set: "yetty_result_view yetty_api_yplot_plot_y_set(void *obj, float value)",
@@ -36,6 +39,8 @@ runtime.registerSignatures({
   yetty_yclass_object_free: "yetty_result_view yetty_yclass_object_free(void *obj)",
   yetty_ycomplex2_image_create: "yetty_result_view yetty_ycomplex2_image_create(void *ctx)",
   yetty_ycomplex2_image_height_set: "yetty_result_view yetty_ycomplex2_image_height_set(void *obj, float value)",
+  yetty_ycomplex2_image_id_set: "yetty_result_view yetty_ycomplex2_image_id_set(void *obj, uint32_t value)",
+  yetty_ycomplex2_image_layer_set: "yetty_result_view yetty_ycomplex2_image_layer_set(void *obj, int32_t value)",
   yetty_ycomplex2_image_width_set: "yetty_result_view yetty_ycomplex2_image_width_set(void *obj, float value)",
   yetty_ycomplex2_image_x_set: "yetty_result_view yetty_ycomplex2_image_x_set(void *obj, float value)",
   yetty_ycomplex2_image_y_set: "yetty_result_view yetty_ycomplex2_image_y_set(void *obj, float value)",
@@ -43,6 +48,8 @@ runtime.registerSignatures({
   yetty_ycomplex2_mesh_create: "yetty_result_view yetty_ycomplex2_mesh_create(void *ctx)",
   yetty_ycomplex2_mesh_elevation_set: "yetty_result_view yetty_ycomplex2_mesh_elevation_set(void *obj, float value)",
   yetty_ycomplex2_mesh_height_set: "yetty_result_view yetty_ycomplex2_mesh_height_set(void *obj, float value)",
+  yetty_ycomplex2_mesh_id_set: "yetty_result_view yetty_ycomplex2_mesh_id_set(void *obj, uint32_t value)",
+  yetty_ycomplex2_mesh_layer_set: "yetty_result_view yetty_ycomplex2_mesh_layer_set(void *obj, int32_t value)",
   yetty_ycomplex2_mesh_width_set: "yetty_result_view yetty_ycomplex2_mesh_width_set(void *obj, float value)",
   yetty_ycomplex2_mesh_wireframe_set: "yetty_result_view yetty_ycomplex2_mesh_wireframe_set(void *obj, uint32_t value)",
   yetty_ycomplex2_mesh_x_set: "yetty_result_view yetty_ycomplex2_mesh_x_set(void *obj, float value)",
@@ -55,6 +62,8 @@ runtime.registerSignatures({
   yetty_ycomplex2_set_wgsl_path: "yetty_result_view yetty_ycomplex2_set_wgsl_path(void *obj, const char *value)",
   yetty_ycomplex2_shadertoy_create: "yetty_result_view yetty_ycomplex2_shadertoy_create(void *ctx)",
   yetty_ycomplex2_shadertoy_height_set: "yetty_result_view yetty_ycomplex2_shadertoy_height_set(void *obj, float value)",
+  yetty_ycomplex2_shadertoy_id_set: "yetty_result_view yetty_ycomplex2_shadertoy_id_set(void *obj, uint32_t value)",
+  yetty_ycomplex2_shadertoy_layer_set: "yetty_result_view yetty_ycomplex2_shadertoy_layer_set(void *obj, int32_t value)",
   yetty_ycomplex2_shadertoy_width_set: "yetty_result_view yetty_ycomplex2_shadertoy_width_set(void *obj, float value)",
   yetty_ycomplex2_shadertoy_x_set: "yetty_result_view yetty_ycomplex2_shadertoy_x_set(void *obj, float value)",
   yetty_ycomplex2_shadertoy_y_set: "yetty_result_view yetty_ycomplex2_shadertoy_y_set(void *obj, float value)",
@@ -62,18 +71,24 @@ runtime.registerSignatures({
   yetty_ycomplex2_video_fps_set: "yetty_result_view yetty_ycomplex2_video_fps_set(void *obj, float value)",
   yetty_ycomplex2_video_height_set: "yetty_result_view yetty_ycomplex2_video_height_set(void *obj, float value)",
   yetty_ycomplex2_video_id_set: "yetty_result_view yetty_ycomplex2_video_id_set(void *obj, uint32_t value)",
+  yetty_ycomplex2_video_layer_set: "yetty_result_view yetty_ycomplex2_video_layer_set(void *obj, int32_t value)",
   yetty_ycomplex2_video_video_h_set: "yetty_result_view yetty_ycomplex2_video_video_h_set(void *obj, uint32_t value)",
   yetty_ycomplex2_video_video_w_set: "yetty_result_view yetty_ycomplex2_video_video_w_set(void *obj, uint32_t value)",
   yetty_ycomplex2_video_width_set: "yetty_result_view yetty_ycomplex2_video_width_set(void *obj, float value)",
   yetty_ycomplex2_video_x_set: "yetty_result_view yetty_ycomplex2_video_x_set(void *obj, float value)",
   yetty_ycomplex2_video_y_set: "yetty_result_view yetty_ycomplex2_video_y_set(void *obj, float value)",
   yetty_ydrawlist2_add: "yetty_result_view yetty_ydrawlist2_add(void *obj, void *child)",
+  yetty_ydrawlist2_begin_group: "yetty_result_view yetty_ydrawlist2_begin_group(void *obj, void *child)",
   yetty_ydrawlist2_dcs_emit: "yetty_result_view yetty_ydrawlist2_dcs_emit(void *obj)",
+  yetty_ydrawlist2_delete_group: "yetty_result_view yetty_ydrawlist2_delete_group(void *obj, void *child)",
   yetty_ydrawlist2_destroy: "yetty_result_view yetty_ydrawlist2_destroy(void *obj)",
   yetty_ydrawlist2_drawable_create: "yetty_result_view yetty_ydrawlist2_drawable_create(void *ctx)",
   yetty_ydrawlist2_drawable_list_create: "yetty_result_view yetty_ydrawlist2_drawable_list_create(void *ctx)",
+  yetty_ydrawlist2_end_group: "yetty_result_view yetty_ydrawlist2_end_group(void *obj)",
   yetty_ydrawlist2_font_create: "yetty_result_view yetty_ydrawlist2_font_create(void *ctx)",
   yetty_ydrawlist2_font_font_id_set: "yetty_result_view yetty_ydrawlist2_font_font_id_set(void *obj, int32_t value)",
+  yetty_ydrawlist2_path: "yetty_result_view yetty_ydrawlist2_path(void *obj, void *child)",
+  yetty_ydrawlist2_reserve: "yetty_result_view yetty_ydrawlist2_reserve(void *obj, void *child)",
   yetty_ydrawlist2_set_body: "yetty_result_view yetty_ydrawlist2_set_body(void *obj, const char *value)",
   yetty_ydrawlist2_set_color: "yetty_result_view yetty_ydrawlist2_set_color(void *obj, const char *value)",
   yetty_ydrawlist2_set_fill: "yetty_result_view yetty_ydrawlist2_set_fill(void *obj, const char *value)",
@@ -81,15 +96,16 @@ runtime.registerSignatures({
   yetty_ydrawlist2_set_stroke: "yetty_result_view yetty_ydrawlist2_set_stroke(void *obj, const char *value)",
   yetty_ydrawlist2_shape_create: "yetty_result_view yetty_ydrawlist2_shape_create(void *ctx)",
   yetty_ydrawlist2_shape_id_set: "yetty_result_view yetty_ydrawlist2_shape_id_set(void *obj, uint32_t value)",
+  yetty_ydrawlist2_shape_layer_set: "yetty_result_view yetty_ydrawlist2_shape_layer_set(void *obj, int32_t value)",
   yetty_ydrawlist2_shape_stroke_width_set: "yetty_result_view yetty_ydrawlist2_shape_stroke_width_set(void *obj, float value)",
-  yetty_ydrawlist2_shape_z_set: "yetty_result_view yetty_ydrawlist2_shape_z_set(void *obj, uint32_t value)",
   yetty_ydrawlist2_text_create: "yetty_result_view yetty_ydrawlist2_text_create(void *ctx)",
   yetty_ydrawlist2_text_font_id_set: "yetty_result_view yetty_ydrawlist2_text_font_id_set(void *obj, int32_t value)",
   yetty_ydrawlist2_text_font_size_set: "yetty_result_view yetty_ydrawlist2_text_font_size_set(void *obj, float value)",
-  yetty_ydrawlist2_text_layer_set: "yetty_result_view yetty_ydrawlist2_text_layer_set(void *obj, uint32_t value)",
+  yetty_ydrawlist2_text_layer_set: "yetty_result_view yetty_ydrawlist2_text_layer_set(void *obj, int32_t value)",
   yetty_ydrawlist2_text_rotation_set: "yetty_result_view yetty_ydrawlist2_text_rotation_set(void *obj, float value)",
   yetty_ydrawlist2_text_x_set: "yetty_result_view yetty_ydrawlist2_text_x_set(void *obj, float value)",
   yetty_ydrawlist2_text_y_set: "yetty_result_view yetty_ydrawlist2_text_y_set(void *obj, float value)",
+  yetty_ydrawlist2_update: "yetty_result_view yetty_ydrawlist2_update(void *obj, void *child)",
   yetty_ysdf2_arc_aperture_x_set: "yetty_result_view yetty_ysdf2_arc_aperture_x_set(void *obj, float value)",
   yetty_ysdf2_arc_aperture_y_set: "yetty_result_view yetty_ysdf2_arc_aperture_y_set(void *obj, float value)",
   yetty_ysdf2_arc_center_x_set: "yetty_result_view yetty_ysdf2_arc_center_x_set(void *obj, float value)",
@@ -327,7 +343,7 @@ const SHAPE_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -356,7 +372,7 @@ const CIRCLE_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -387,7 +403,7 @@ const BOX_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -417,7 +433,7 @@ const SEGMENT_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -449,7 +465,7 @@ const TRIANGLE_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -479,7 +495,7 @@ const ELLIPSE_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -511,7 +527,7 @@ const ARC_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -545,7 +561,7 @@ const ROUNDED_BOX_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -575,7 +591,7 @@ const RHOMBUS_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -604,7 +620,7 @@ const PENTAGON_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -633,7 +649,7 @@ const HEXAGON_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -664,7 +680,7 @@ const STAR_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -695,7 +711,7 @@ const PIE_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -727,7 +743,7 @@ const RING_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -756,7 +772,7 @@ const HEART_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -787,7 +803,7 @@ const CROSS_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -817,7 +833,7 @@ const ROUNDED_X_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -848,7 +864,7 @@ const CAPSULE_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -879,7 +895,7 @@ const MOON_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -909,7 +925,7 @@ const EGG_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -938,7 +954,7 @@ const OCTOGON_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -967,7 +983,7 @@ const HEXAGRAM_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -996,7 +1012,7 @@ const PENTAGRAM_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -1033,7 +1049,7 @@ const LINEAR_GRADIENT_BOX_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -1069,7 +1085,7 @@ const RADIAL_GRADIENT_BOX_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -1099,7 +1115,7 @@ const SPHERE_3D_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -1131,7 +1147,7 @@ const BOX_3D_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -1162,7 +1178,7 @@ const TORUS_3D_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -1193,7 +1209,7 @@ const CYLINDER_3D_SPEC = {
     fill: { kind: "cstr", sym: "yetty_ydrawlist2_set_fill" },
     stroke: { kind: "cstr", sym: "yetty_ydrawlist2_set_stroke" },
     id: { kind: "scalar", sym: "yetty_ydrawlist2_shape_id_set" },
-    z: { kind: "scalar", sym: "yetty_ydrawlist2_shape_z_set" },
+    layer: { kind: "scalar", sym: "yetty_ydrawlist2_shape_layer_set" },
     strokeWidth: { kind: "scalar", sym: "yetty_ydrawlist2_shape_stroke_width_set" },
   },
 };
@@ -1305,6 +1321,9 @@ const PLOT_SPEC = {
     y: { kind: "scalar", sym: "yetty_api_yplot_plot_y_set" },
     width: { kind: "scalar", sym: "yetty_api_yplot_plot_width_set" },
     height: { kind: "scalar", sym: "yetty_api_yplot_plot_height_set" },
+    layer: { kind: "scalar", sym: "yetty_api_yplot_plot_layer_set" },
+    id: { kind: "scalar", sym: "yetty_api_yplot_plot_id_set" },
+    chromeGroup: { kind: "scalar", sym: "yetty_api_yplot_plot_chrome_group_set" },
   },
 };
 
@@ -1331,6 +1350,8 @@ const IMAGE_SPEC = {
     y: { kind: "scalar", sym: "yetty_ycomplex2_image_y_set" },
     width: { kind: "scalar", sym: "yetty_ycomplex2_image_width_set" },
     height: { kind: "scalar", sym: "yetty_ycomplex2_image_height_set" },
+    layer: { kind: "scalar", sym: "yetty_ycomplex2_image_layer_set" },
+    id: { kind: "scalar", sym: "yetty_ycomplex2_image_id_set" },
   },
 };
 
@@ -1361,6 +1382,8 @@ const MESH_SPEC = {
     elevation: { kind: "scalar", sym: "yetty_ycomplex2_mesh_elevation_set" },
     zoom: { kind: "scalar", sym: "yetty_ycomplex2_mesh_zoom_set" },
     wireframe: { kind: "scalar", sym: "yetty_ycomplex2_mesh_wireframe_set" },
+    layer: { kind: "scalar", sym: "yetty_ycomplex2_mesh_layer_set" },
+    id: { kind: "scalar", sym: "yetty_ycomplex2_mesh_id_set" },
   },
 };
 
@@ -1388,6 +1411,8 @@ const SHADERTOY_SPEC = {
     y: { kind: "scalar", sym: "yetty_ycomplex2_shadertoy_y_set" },
     width: { kind: "scalar", sym: "yetty_ycomplex2_shadertoy_width_set" },
     height: { kind: "scalar", sym: "yetty_ycomplex2_shadertoy_height_set" },
+    layer: { kind: "scalar", sym: "yetty_ycomplex2_shadertoy_layer_set" },
+    id: { kind: "scalar", sym: "yetty_ycomplex2_shadertoy_id_set" },
   },
 };
 
@@ -1418,6 +1443,7 @@ const VIDEO_SPEC = {
     videoW: { kind: "scalar", sym: "yetty_ycomplex2_video_video_w_set" },
     videoH: { kind: "scalar", sym: "yetty_ycomplex2_video_video_h_set" },
     fps: { kind: "scalar", sym: "yetty_ycomplex2_video_fps_set" },
+    layer: { kind: "scalar", sym: "yetty_ycomplex2_video_layer_set" },
   },
 };
 
@@ -1461,6 +1487,16 @@ export class DrawableList {
     runtime.requireHandle(this, "DrawableList");
     runtime.invoke("yetty_ydrawlist2_add", this.handle, drawable.handle);
   }
+
+
+  endGroup() {
+    runtime.requireHandle(this, "DrawableList");
+    runtime.invoke("yetty_ydrawlist2_end_group", this.handle);
+  }
+
+
+
+
 
   dcsEmit() {
     runtime.requireHandle(this, "DrawableList");

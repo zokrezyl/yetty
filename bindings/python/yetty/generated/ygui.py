@@ -2290,6 +2290,12 @@ def tabbar_set_label(tabbar: Any, index: int, label: str | bytes | None) -> _rt.
     res = _fn(_rt.handle(tabbar), index, _rt.cstr(label))
     return _rt.result_from_c(res)
 
+def tabbar_label(tabbar: Any, index: int) -> _rt.Result[str | None]:
+    """Call `yetty_ygui_tabbar_label`."""
+    _fn = _rt.cfn("yetty_ygui_tabbar_label", _t.yetty_ycore_const_char_ptr_result, [c_void_p, c_int])
+    res = _fn(_rt.handle(tabbar), index)
+    return _rt.result_from_c(res, _rt.decode_cstr)
+
 def tabbar_count(tabbar: Any) -> _rt.Result[int]:
     """Call `yetty_ygui_tabbar_count`."""
     _fn = _rt.cfn("yetty_ygui_tabbar_count", _t.yetty_ycore_int_result, [c_void_p])
@@ -2360,7 +2366,7 @@ def textinput_get_selection(obj: Any) -> _rt.Result[str | None]:
     """Call `yetty_ygui_textinput_get_selection`."""
     _fn = _rt.cfn("yetty_ygui_textinput_get_selection", _t.yetty_ycore_char_ptr_result, [c_void_p])
     res = _fn(_rt.handle(obj))
-    return _rt.result_from_c(res, _rt.decode_cstr)
+    return _rt.result_from_c(res, _rt.take_owned_cstr)
 
 def textinput_select_all(obj: Any) -> _rt.Result[None]:
     """Call `yetty_ygui_textinput_select_all`."""

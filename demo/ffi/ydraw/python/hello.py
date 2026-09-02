@@ -42,12 +42,14 @@ dlist = DrawableList()
 SCORE_FONT = 7
 dlist.add(Font(font_id=SCORE_FONT, name="Emmentaler"))
 
-# Shapes: constructor kwargs = the common paint prefix (z, fill, stroke,
+# Shapes: constructor kwargs = the common paint prefix (layer, fill, stroke,
 # stroke_width) + the schema's flattened geometry fields, exact names.
+# `layer` (z-order) is the SAME uniform attribute on shapes, Text, and every
+# complex (Plot, Image, …) — see zplot.py.
 dlist.add(Circle(center_x=96, center_y=96, radius=64,
                  fill="#6BA892", stroke="#364A47", stroke_width=2))
 dlist.add(Box(center_x=280, center_y=96, half_width=72, half_height=48,
-              corner_radius=8, fill="#1E262C", z=1))
+              corner_radius=8, fill="#1E262C", layer=1))
 dlist.add(Star(center_x=460, center_y=96, radius=56, num_points=5,
                inner_ratio=0.45, fill="#74C5A5"))
 dlist.add(Segment(start_x=40, start_y=180, end_x=600, end_y=180,

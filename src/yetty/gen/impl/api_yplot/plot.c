@@ -555,6 +555,67 @@ struct yetty_ycore_void_result yetty_api_yplot_plot_height_set(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
+struct yetty_ycore_int_result yetty_api_yplot_plot_layer_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_api_yplot_plot_ptr_result data = yetty_api_yplot_plot_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_int, "yetty_api_yplot_plot_layer_get: data block", data);
+    }
+    return YETTY_OK(yetty_ycore_int, data.value->layer);
+}
+
+struct yetty_ycore_void_result yetty_api_yplot_plot_layer_set(struct yetty_yclass_object *obj,
+                                                              int32_t value)
+{
+    struct yetty_api_yplot_plot_ptr_result data = yetty_api_yplot_plot_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_api_yplot_plot_layer_set: data block", data);
+    }
+    data.value->layer = value;
+    return YETTY_OK_VOID();
+}
+
+struct uint32_result yetty_api_yplot_plot_id_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_api_yplot_plot_ptr_result data = yetty_api_yplot_plot_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(uint32, "yetty_api_yplot_plot_id_get: data block", data);
+    }
+    return YETTY_OK(uint32, data.value->id);
+}
+
+struct yetty_ycore_void_result yetty_api_yplot_plot_id_set(struct yetty_yclass_object *obj,
+                                                           uint32_t value)
+{
+    struct yetty_api_yplot_plot_ptr_result data = yetty_api_yplot_plot_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_api_yplot_plot_id_set: data block", data);
+    }
+    data.value->id = value;
+    return YETTY_OK_VOID();
+}
+
+struct uint32_result yetty_api_yplot_plot_chrome_group_get(struct yetty_yclass_object *obj)
+{
+    struct yetty_api_yplot_plot_ptr_result data = yetty_api_yplot_plot_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(uint32, "yetty_api_yplot_plot_chrome_group_get: data block", data);
+    }
+    return YETTY_OK(uint32, data.value->chrome_group);
+}
+
+struct yetty_ycore_void_result yetty_api_yplot_plot_chrome_group_set(
+    struct yetty_yclass_object *obj, uint32_t value)
+{
+    struct yetty_api_yplot_plot_ptr_result data = yetty_api_yplot_plot_from(obj);
+    if (YETTY_IS_ERR(data)) {
+        return YETTY_ERR(yetty_ycore_void, "yetty_api_yplot_plot_chrome_group_set: data block",
+                         data);
+    }
+    data.value->chrome_group = value;
+    return YETTY_OK_VOID();
+}
+
 struct yetty_yclass_object_ptr_result yetty_api_yplot_curve_create(struct yetty_yclass_ctx *ctx);
 struct yetty_yclass_object_ptr_result yetty_api_yplot_curve_create(struct yetty_yclass_ctx *ctx)
 {

@@ -94,6 +94,14 @@ classes:
         type: float
         get: true
         set: true
+      - name: layer
+        type: int32_t
+        get: true
+        set: true
+      - name: id
+        type: uint32_t
+        get: true
+        set: true
       - name: path
         type: "char[512]"
         get: false
@@ -153,6 +161,14 @@ classes:
         type: uint32_t
         get: true
         set: true
+      - name: layer
+        type: int32_t
+        get: true
+        set: true
+      - name: id
+        type: uint32_t
+        get: true
+        set: true
       - name: path
         type: "char[512]"
         get: false
@@ -194,6 +210,14 @@ classes:
         set: true
       - name: height
         type: float
+        get: true
+        set: true
+      - name: layer
+        type: int32_t
+        get: true
+        set: true
+      - name: id
+        type: uint32_t
         get: true
         set: true
       - name: wgsl_len
@@ -261,6 +285,10 @@ classes:
         set: true
       - name: fps
         type: float
+        get: true
+        set: true
+      - name: layer
+        type: int32_t
         get: true
         set: true
       - name: path

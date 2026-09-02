@@ -236,10 +236,18 @@ struct yetty_client_input_mouse {
  * The client uses (width, height) as DisplaySize for the target's
  * rendering context. Coordinate units: FRAMEBUFFER pixels.
  *
- * `content_scale` is the host display's HiDPI factor (framebuffer_px /
- * logical_px). A client that authors in LOGICAL px (browser CSS viewport,
- * ygui widget layout) divides (width, height) by this before feeding its
- * layout / viewport. On a non-HiDPI display the field is 1.0; a value of
+ * `content_scale` is the COMMITTED logical→device factor (framebuffer_px
+ * / logical_px). A client that authors in LOGICAL px (browser CSS
+ * viewport, ygui widget layout) divides (width, height) by this before
+ * feeding its layout / viewport, and divides forwarded device-px pointer
+ * coordinates by the same value. On the PANE-WIDE family
+ * (SC_CLIENT_INPUT_RESIZE) it is the host display's HiDPI factor TIMES
+ * the terminal's structural cell zoom — the exact factor the terminal
+ * renders the client's retained drawable content by, so a Ctrl+Shift
+ * zoom tick shrinks the logical viewport and the client reflows like
+ * terminal text. On the figure family (SC_CLIENT_INPUT_FIGURE_RESIZE)
+ * it is the bare HiDPI factor (figure bodies composite without the cell
+ * zoom). On a plain display with no zoom the field is 1.0; a value of
  * 0.0 (older host that did not populate it) is treated as 1.0 for
  * backwards compatibility — clients that fell back to raw framebuffer
  * before this field existed keep the same (Retina-broken but stable)

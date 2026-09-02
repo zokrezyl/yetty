@@ -302,6 +302,17 @@ struct yetty_ycore_void_result yetty_{name}_instance_update(
     struct yetty_ydraw_complex *instance, uint32_t target_field,
     const void *body, size_t body_size);
 '''
+    if schema.get('chrome') == 'extern':
+        extern_api += f'''
+/* Chrome re-emission entry point — implemented by hand in a companion TU.
+ * Emits the figure's label/title/legend prims into `list` laid out for
+ * the instance's CURRENT retained state; the hosting ingest replaces the
+ * chrome group's content with them after an update that set
+ * `chrome_dirty`. Installed as the per-instance ops->emit_chrome. */
+struct yetty_ydraw_drawable_list;
+struct yetty_ycore_void_result yetty_{name}_instance_emit_chrome(
+    struct yetty_ydraw_complex *instance, struct yetty_ydraw_drawable_list *list);
+'''
     if schema.get('lifecycle_extern'):
         extern_api += f'''
 /* Lifecycle callouts — implemented by hand in a companion TU. `created`
@@ -1195,6 +1206,9 @@ static struct yetty_ycore_void_result {name}_update_dispatch(
         hooks_factory_wire = ''
         if update_mode(schema) == 'extern':
             hooks_factory_wire = f'    factory->base.update_instance = {name}_update_dispatch;\n'
+    ops_chrome_member = ''
+    if schema.get('chrome') == 'extern':
+        ops_chrome_member = f'\n    .emit_chrome = yetty_{name}_instance_emit_chrome,'
     lifecycle_create_call = ''
     if schema.get('lifecycle_extern'):
         lifecycle_create_call = f'''
@@ -1627,7 +1641,7 @@ static void {name}_instance_destroy(struct yetty_ydraw_complex *instance)
 /* Per-instance vtable installed on every {name} figure_instance. */
 static const struct yetty_ydraw_complex_ops {name}_figure_ops = {{
     .destroy = {name}_instance_destroy,
-    .update = {ops_update_member},
+    .update = {ops_update_member},{ops_chrome_member}
 }};
 
 /* Legacy factory adapter — kept for the factory->destroy_instance
@@ -2042,10 +2056,10 @@ def main():
     wire_source = generate_c_wire_source(schema, uniforms, buffers)
     wgsl = generate_wgsl_bindings(schema, uniforms, buffers)
 
-    (include_dir / f'{name}-gen.h').write_text(header + '\n')
-    (src_dir / f'{name}-gen.c').write_text(source + '\n')
-    (src_dir / f'{name}-gen-wire.c').write_text(wire_source + '\n')
-    (src_dir / f'{name}-gen.wgsl').write_text(wgsl + '\n')
+    (include_dir / f'{name}-gen.h').write_text(header.rstrip('\n') + '\n')
+    (src_dir / f'{name}-gen.c').write_text(source.rstrip('\n') + '\n')
+    (src_dir / f'{name}-gen-wire.c').write_text(wire_source.rstrip('\n') + '\n')
+    (src_dir / f'{name}-gen.wgsl').write_text(wgsl.rstrip('\n') + '\n')
 
     print(f'Generated:')
     print(f'  {include_dir / f"{name}-gen.h"}')
@@ -2068,7 +2082,7 @@ def main():
         print(f'  (yaml factory is hand-written: {name}-yaml.c)')
     else:
         yaml_parser = generate_yaml_parser(schema, uniforms, buffers)
-        yaml_path.write_text(yaml_parser + '\n')
+        yaml_path.write_text(yaml_parser.rstrip('\n') + '\n')
         print(f'  {yaml_path}')
 
 

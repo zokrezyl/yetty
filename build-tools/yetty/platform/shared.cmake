@@ -473,6 +473,7 @@ if(YETTY_BUILD_FFI_SHARED)
             yetty_ysdf yetty_yfsvm_core yetty_yexpr yetty_yclass yetty_ywire
             yetty_ycore yetty_ydrawlist2 yetty_api_ydrawlist2 yetty_ysdf2
             yetty_api_ysdf2 yetty_ycomplex2 yetty_api_ycomplex2
+            yetty_ygui2 yetty_api_ygui2
             yetty_yimage_core yetty_ymesh_core yetty_yshadertoy_core
             yetty_yvideo_core)
         if(TARGET ${ffi_pic_target})
@@ -760,6 +761,32 @@ function(yetty_embed_assets TARGET)
     foreach(GLYPH_FILE ${GLYPH_SHADER_FILES})
         file(COPY "${GLYPH_FILE}" DESTINATION "${EMBED_DATA_DIR}/shaders/glyph-shaders")
     endforeach()
+
+    # The file(COPY) calls above stage the embedded shaders at CONFIGURE
+    # time only. Without a dependency on the source files, editing a shader
+    # (e.g. grid-sdf-layer.wgsl) does NOT re-stage embed-data on a plain
+    # rebuild, so incbin keeps embedding — and yinstall keeps shipping — the
+    # stale copy while the runtime silently runs an old shader. Register
+    # every staged shader source as a configure dependency so any edit
+    # re-triggers configure, which re-runs the copies and re-embeds. The
+    # glyph glob is already CONFIGURE-time; add its results too.
+    set(_YETTY_EMBED_SHADER_SOURCES
+        "${YETTY_ROOT}/src/yetty/yscene/yscene.wgsl"
+        "${YETTY_ROOT}/src/yetty/yshaders/effects-lib.wgsl"
+        "${YETTY_ROOT}/src/yetty/yvterm/grid-text.wgsl"
+        "${YETTY_ROOT}/src/yetty/ymgui/ymgui-layer.wgsl"
+        "${YETTY_ROOT}/src/yetty/yterminal/background-layer.wgsl"
+        "${YETTY_ROOT}/src/yetty/ysdf/ysdf.gen.wgsl"
+        "${YETTY_ROOT}/src/yetty/yvterm/grid-sdf-layer.wgsl"
+        "${YETTY_ROOT}/src/yetty/yrender/blend.wgsl"
+        "${YETTY_ROOT}/src/yetty/yfont/ms-msdf-font.wgsl"
+        "${YETTY_ROOT}/src/yetty/yfont/msdf-font.wgsl"
+        "${YETTY_ROOT}/src/yetty/yfont/ms-raster-font.wgsl"
+        "${YETTY_ROOT}/src/yetty/yfont/raster-font.wgsl"
+        "${YETTY_ROOT}/src/yetty/ymsdf-wgsl/shaders/msdf_gen.wgsl"
+        ${GLYPH_SHADER_FILES})
+    set_property(DIRECTORY "${CMAKE_SOURCE_DIR}" APPEND
+        PROPERTY CMAKE_CONFIGURE_DEPENDS ${_YETTY_EMBED_SHADER_SOURCES})
 
     # Copy fonts (.ttf text faces + .otf — e.g. Emmentaler, the music font ymusic
     # renders with — so they extract to the runtime fonts dir alongside DejaVu).

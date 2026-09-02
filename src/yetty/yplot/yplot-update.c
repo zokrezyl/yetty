@@ -10,11 +10,14 @@
  */
 
 #include <yetty/yplot/yplot-gen.h>
+#include <yetty/yplot/yplot.h>
 
 #include <yetty/ydraw-factory/complex-factory.h>
+#include <yetty/ydraw-list/complex.h>
 #include <yetty/yrender/gpu-resource-binder.h>
 #include <yetty/ytrace/ytrace.h>
 
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -120,14 +123,100 @@ static struct yetty_ycore_void_result yplot_update_ring_head(struct yetty_ydraw_
     return YETTY_ERR(yetty_ycore_void, "ring head: ring_heads uniform not found");
 }
 
+/* GEOMETRY op: re-plan the retained record at a new figure size. The
+ * shared rechrome patches the record IN PLACE — new inset plot bounds +
+ * tick steps in the uniform words, the new figure rect in the chrome
+ * tail — then the instance AABB refreshes from the patched words and the
+ * chrome flags for LOCAL regeneration by the hosting ingest. Sample data
+ * and the GPU storage buffer are untouched: nothing re-uploads, nothing
+ * re-ships. */
+static struct yetty_ycore_void_result yplot_update_geometry(struct yetty_ydraw_complex *instance,
+                                                            uint32_t width_bits,
+                                                            uint32_t height_bits)
+{
+    if (!instance->buffer_data) {
+        return YETTY_ERR(yetty_ycore_void, "geometry op: instance has no record");
+    }
+    float new_width;
+    float new_height;
+    memcpy(&new_width, &width_bits, sizeof(new_width));
+    memcpy(&new_height, &height_bits, sizeof(new_height));
+    if (!(isfinite(new_width) && new_width > 0.0f && isfinite(new_height) && new_height > 0.0f)) {
+        return YETTY_ERR(yetty_ycore_void, "geometry op: size must be positive finite");
+    }
+    struct yetty_ycore_void_result rechrome_res = yetty_yplot_record_rechrome(
+        instance->buffer_data, instance->buffer_size, new_width, new_height, NULL);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rechrome_res, "geometry op: rechrome");
+    struct rectangle_result aabb_res = yetty_ydraw_complex_record_aabb(instance->buffer_data);
+    if (YETTY_IS_OK(aabb_res)) {
+        instance->bounds = aabb_res.value;
+    } else {
+        yetty_ycore_error_destroy(aabb_res.error);
+    }
+    instance->dirty = 1;
+    instance->chrome_dirty = 1;
+    ydebug("yplot geometry op: figure resized to %.1f x %.1f", (double)new_width,
+           (double)new_height);
+    return YETTY_OK_VOID();
+}
+
+/* RANGES op: patch one axis range and re-plan at the retained figure
+ * rect — tick steps, margins and the grid all follow the new range; the
+ * curves rescale in the shader off the same words. The core helper is
+ * ATOMIC: a rejected patch (legacy record, bad range) leaves the record
+ * byte-identical and no dirty flag set, so a reported failure can never
+ * be observed as a silent half-applied range. */
+static struct yetty_ycore_void_result yplot_update_ranges(struct yetty_ydraw_complex *instance,
+                                                          uint32_t axis, uint32_t min_bits,
+                                                          uint32_t max_bits)
+{
+    if (!instance->buffer_data) {
+        return YETTY_ERR(yetty_ycore_void, "ranges op: instance has no record");
+    }
+    float new_min;
+    float new_max;
+    memcpy(&new_min, &min_bits, sizeof(new_min));
+    memcpy(&new_max, &max_bits, sizeof(new_max));
+    struct yetty_ycore_void_result patch_res = yetty_yplot_record_patch_ranges(
+        instance->buffer_data, instance->buffer_size, axis, new_min, new_max);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, patch_res, "ranges op: patch");
+    /* The range-dependent layout can move the inset plot rect too. */
+    struct rectangle_result aabb_res = yetty_ydraw_complex_record_aabb(instance->buffer_data);
+    if (YETTY_IS_OK(aabb_res)) {
+        instance->bounds = aabb_res.value;
+    } else {
+        yetty_ycore_error_destroy(aabb_res.error);
+    }
+    instance->dirty = 1;
+    instance->chrome_dirty = 1;
+    return YETTY_OK_VOID();
+}
+
+/* ops->emit_chrome — the hosting ingest calls this after an update set
+ * chrome_dirty and replaces the chrome group's content with the emitted
+ * prims. One shared re-plan produces layout and prims alike. */
+struct yetty_ycore_void_result yetty_yplot_instance_emit_chrome(
+    struct yetty_ydraw_complex *instance, struct yetty_ydraw_drawable_list *list)
+{
+    if (!instance || !instance->buffer_data || !list) {
+        return YETTY_ERR(yetty_ycore_void, "yplot emit_chrome: invalid arguments");
+    }
+    struct yetty_ycore_void_result rechrome_res =
+        yetty_yplot_record_rechrome(instance->buffer_data, instance->buffer_size, 0.0f, 0.0f, list);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, rechrome_res, "yplot emit_chrome: rechrome");
+    return YETTY_OK_VOID();
+}
+
 /* CMD_UPDATE payload schema (defined by yplot):
  *   u32 buffer_index   — index into the `data` array of the yplot
  *   u32 sample_offset  — first sample to overwrite (in f32s into THAT buffer)
  *   u32 count          — number of f32 samples
  *   f32 samples[count] — new sample values
  *
- * sample_offset == 0xFFFFFFFF is the RING-HEAD op: `count` carries the new
- * head index (physical index of the oldest sample) and no samples follow.
+ * A sentinel in the sample_offset slot selects an op instead (values in
+ * yplot.h): RING_HEAD (count = new head index, no samples), GEOMETRY
+ * (count slot = new width bits, next word = new height bits) and RANGES
+ * (count slot = axis, next two words = min/max bits).
  *
  * Under the generic CMD_UPDATE dispatcher the first u32 of the payload is
  * peeled off as `target_field` (= buffer_index here); the rest arrives as
@@ -146,8 +235,22 @@ struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_co
     const uint32_t *header = (const uint32_t *)body;
     uint32_t sample_offset = header[0];
     uint32_t count = header[1];
-    if (sample_offset == 0xFFFFFFFFu) {
+    if (sample_offset == YETTY_YPLOT_UPDATE_OP_RING_HEAD) {
         return yplot_update_ring_head(instance, target_field, /*head_index=*/count);
+    }
+    if (sample_offset == YETTY_YPLOT_UPDATE_OP_GEOMETRY) {
+        if (body_size < 12u) {
+            return YETTY_ERR(yetty_ycore_void, "yplot update: geometry op truncated");
+        }
+        return yplot_update_geometry(instance, /*width_bits=*/header[1],
+                                     /*height_bits=*/header[2]);
+    }
+    if (sample_offset == YETTY_YPLOT_UPDATE_OP_RANGES) {
+        if (body_size < 16u) {
+            return YETTY_ERR(yetty_ycore_void, "yplot update: ranges op truncated");
+        }
+        return yplot_update_ranges(instance, /*axis=*/header[1], /*min_bits=*/header[2],
+                                   /*max_bits=*/header[3]);
     }
     size_t expected = 8u + (size_t)count * sizeof(float);
     if (body_size < expected) {
@@ -162,6 +265,13 @@ struct yetty_ycore_void_result yetty_yplot_instance_update(struct yetty_ydraw_co
  * a no-op on static plots (yplot-time.c checks the wire flags itself). */
 struct yetty_ycore_void_result yetty_yplot_instance_created(struct yetty_ydraw_complex *instance)
 {
+    /* Self-owned chrome: remember which sibling GROUP holds the label
+     * prims so the hosting ingest can regenerate it locally after a
+     * geometry / range op. 0 (no chrome tail) = legacy record. */
+    if (instance && instance->buffer_data) {
+        instance->chrome_group_id =
+            yetty_yplot_record_chrome_group(instance->buffer_data, instance->buffer_size);
+    }
     return yetty_yplot_time_attach(instance);
 }
 

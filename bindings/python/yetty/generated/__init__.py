@@ -12,6 +12,7 @@ from . import yfigure as yfigure
 from . import yflame as yflame
 from . import ygit as ygit
 from . import ygui as ygui
+from . import ygui2 as ygui2
 from . import yguiapp as yguiapp
 from . import yjupyter as yjupyter
 from . import ymap as ymap

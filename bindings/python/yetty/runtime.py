@@ -190,8 +190,40 @@ _LIB_BASENAMES = ("libyetty_ffi.so", "libyetty_ffi.dylib", "yetty_ffi.dll")
 _LOAD_MODE = ctypes.RTLD_LOCAL | getattr(os, "RTLD_LAZY", 1)
 
 
+# The binding ABI this runtime speaks. MAJOR must match the library
+# exactly; the library's MINOR must be >= ours (the surface only grows
+# within a major). Symbol presence is a capability check, not an ABI
+# check — a stale library could export a probe symbol over incompatible
+# struct layouts, so the version gate runs at load, before any ctypes
+# signature is configured.
+REQUIRED_ABI = (0, 2)
+
+
+def _check_abi(lib: ctypes.CDLL, path: str) -> None:
+    try:
+        probe = lib.yetty_ffi_version
+    except AttributeError:
+        raise RuntimeError(
+            f"yetty FFI: {path} exports no yetty_ffi_version probe — the "
+            "library predates the binding ABI and cannot be used; rebuild it")
+    probe.restype = ctypes.c_char_p
+    probe.argtypes = []
+    text = (probe() or b"0.0.0").decode("ascii", "replace")
+    try:
+        major, minor = (int(part) for part in text.split(".")[:2])
+    except ValueError:
+        raise RuntimeError(f"yetty FFI: {path} reports unparsable version {text!r}")
+    if major != REQUIRED_ABI[0] or minor < REQUIRED_ABI[1]:
+        raise RuntimeError(
+            f"yetty FFI: {path} speaks ABI {text}, bindings require "
+            f"{REQUIRED_ABI[0]}.{REQUIRED_ABI[1]}+ within major "
+            f"{REQUIRED_ABI[0]} — rebuild the library or the bindings")
+
+
 def _open_library(path: str) -> ctypes.CDLL:
-    return ctypes.CDLL(path, mode=_LOAD_MODE)
+    lib = ctypes.CDLL(path, mode=_LOAD_MODE)
+    _check_abi(lib, path)
+    return lib
 
 
 def _candidate_paths() -> list[str]:
@@ -260,16 +292,22 @@ def load(path: str | None = None) -> ctypes.CDLL:
         is_path = os.sep in candidate or (os.altsep and os.altsep in candidate)
         if is_path and not os.path.exists(candidate):
             continue
-        attempted.append(candidate)
         try:
             _lib = _open_library(candidate)
             return _lib
-        except OSError:
+        except OSError as error:
+            attempted.append(f"{candidate} ({error})")
+            continue
+        except RuntimeError as error:
+            # ABI-incompatible candidate: skip it (a dev checkout may hold
+            # several build trees) but keep the diagnosis for the report.
+            attempted.append(f"{candidate} ({error})")
             continue
 
     raise RuntimeError(
-        "yetty FFI: could not locate libyetty_ffi.so. Build it with "
-        "`make build-desktop-ffi-release`, or set YETTY_FFI_LIB to its path.\n"
+        "yetty FFI: could not locate a compatible libyetty_ffi.so. Build it "
+        "with `make build-desktop-ffi-release`, or set YETTY_FFI_LIB to its "
+        "path.\n"
         f"Tried: {attempted or _candidate_paths()}")
 
 
@@ -336,6 +374,25 @@ def decode_cstr(value) -> str | None:
     return value.decode("utf-8", "replace")
 
 
+def take_owned_cstr(address) -> str | None:
+    """Adopt an OWNED heap C string result (`char *` per the Result
+    contract): copy the bytes out, then release the allocation through the
+    library's own allocator-compatible free (NEVER the process libc free
+    picked blindly). `address` is the raw pointer kept by a c_void_p
+    result-value field."""
+    if not address:
+        return None
+    text = ctypes.string_at(address).decode("utf-8", "replace")
+    try:
+        release = _require().yetty_ffi_string_release
+        release.restype = None
+        release.argtypes = [ctypes.c_void_p]
+        release(address)
+    except (AttributeError, OSError):
+        pass  # library predates the export — degrade to the old leak
+    return text
+
+
 def error_from_c(err, _seen: set[int] | None = None) -> Error:
     """Copy a yetty_ycore_error, including linked causes, into Python data."""
     _seen = _seen or set()
@@ -367,7 +424,18 @@ def result_from_c(res, convert: Callable[[object], T] | None = None) -> Result[T
     Python value, error results carry an Error with the C cause chain copied.
     """
     if not getattr(res, "ok", 1):
-        return Result(error=error_from_c(res.error))
+        error = error_from_c(res.error)
+        # Result contract: the receiver owns the heap-linked cause chain and
+        # must destroy it. The chain is now copied into Python — release the
+        # native side, or every failed call leaks one allocation per cause.
+        try:
+            destroy = _require().yetty_ycore_error_destroy
+            destroy.restype = None
+            destroy.argtypes = [type(res.error)]
+            destroy(res.error)
+        except (AttributeError, OSError):
+            pass  # library predates the export — degrade to the old leak
+        return Result(error=error)
     if type(res).__name__.endswith("void_result"):
         return Result(value=None)
     value = res.value

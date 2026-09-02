@@ -33,9 +33,15 @@ static struct rectangle_result figure_aabb_wrapper(const uint32_t *prim)
     return yetty_ydraw_complex_record_aabb(prim);
 }
 
+static int32_t figure_paint_z_wrapper(const uint32_t *prim)
+{
+    return yetty_ydraw_complex_record_paint_z(prim);
+}
+
 static const struct yetty_ydraw_drawable_list_entry_ops g_figure_base_ops = {
     .size = figure_size_wrapper,
     .aabb = figure_aabb_wrapper,
+    .paint_z = figure_paint_z_wrapper,
 };
 
 struct yetty_ydraw_drawable_list_entry_ops_ptr_result yetty_ydraw_complex_record_handler(
@@ -80,4 +86,13 @@ struct rectangle_result yetty_ydraw_complex_record_aabb(const void *data)
 
     struct yetty_ycore_rectangle rect = {.min = {.x = x, .y = y}, .max = {.x = x + w, .y = y + h}};
     return YETTY_OK(rectangle, rect);
+}
+
+int32_t yetty_ydraw_complex_record_paint_z(const void *data)
+{
+    /* No current complex creation format carries a z field; a versioned
+     * format that adds one decodes it here (sniffing header.type), so
+     * the stores caching the value never learn wire details. */
+    (void)data;
+    return 0;
 }

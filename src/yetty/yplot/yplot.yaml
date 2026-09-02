@@ -26,7 +26,12 @@ libraries:
 
 # CMD_UPDATE handling and the chunked sample-update API live in the
 # hand-written yplot-update.c; the animation timer lives in yplot-time.c.
+# `chrome: extern` installs ops->emit_chrome (yplot-update.c): the record
+# carries a chrome-state tail and the receiving host re-renders the
+# label/title/legend prims LOCALLY after a geometry / axis-range op —
+# resize never re-ships the record or its sample data.
 update: extern
+chrome: extern
 lifecycle_extern: true
 yaml_factory: manual
 

@@ -146,4 +146,3 @@ fn yplot_data_count() -> u32 {
 
 // Buffer data is in storage_buffer (binding 1+)
 // Access via: storage_buffer[offset]
-

@@ -1138,16 +1138,16 @@ def ydoc_table_edit(obj: Any, op: int) -> _rt.Result[None]:
     res = _fn(_rt.handle(obj), op)
     return _rt.result_from_c(res)
 
-def ydoc_all_text(ydoc: Any) -> bytes | None:
+def ydoc_all_text(ydoc: Any) -> Any:
     """Call `ydoc_all_text`."""
-    _fn = _rt.cfn("ydoc_all_text", c_char_p, [c_void_p])
+    _fn = _rt.cfn("ydoc_all_text", c_void_p, [c_void_p])
     return _fn(_rt.handle(ydoc))
 
 def ydoc_selection_text(obj: Any) -> _rt.Result[str | None]:
     """Call `yetty_yrich_ydoc_selection_text`."""
     _fn = _rt.cfn("yetty_yrich_ydoc_selection_text", _t.yetty_ycore_char_ptr_result, [c_void_p])
     res = _fn(_rt.handle(obj))
-    return _rt.result_from_c(res, _rt.decode_cstr)
+    return _rt.result_from_c(res, _rt.take_owned_cstr)
 
 def ydoc_word_count(obj: Any, out_words: Any, out_chars: Any, out_chars_no_spaces: Any, out_paragraphs: Any) -> _rt.Result[None]:
     """Call `yetty_yrich_ydoc_word_count`."""

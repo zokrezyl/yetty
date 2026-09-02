@@ -108,6 +108,32 @@ struct yetty_ycore_void_result yetty_ydraw_drawable_list_end_group(
 struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_delete(
     struct yetty_ydraw_drawable_list *buf, uint32_t group_id);
 
+/* Append a CMD_PAINT_Z record (8 bytes: [CMD_PAINT_Z][z]) opening an
+ * explicit paint-z scope, and CMD_PAINT_Z_END (8 bytes: [type][0])
+ * closing it. Records added between the two paint at depth `z` regardless
+ * of any z they carry themselves — the way to stack a complex (yplot,
+ * yimage, …), which has no z field of its own. Scopes nest. */
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_paint_z(
+    struct yetty_ydraw_drawable_list *buf, int32_t z);
+
+/* CMD_NODE_ID: assign an addressable id to the IMMEDIATELY following record
+ * (how a complex carries its own id — see cmds.h). */
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_node_id(
+    struct yetty_ydraw_drawable_list *buf, uint32_t id);
+
+/* CMD_RESERVE: declare this batch's insertion row span (a viewport) from a
+ * pixel height instead of deriving it from the content bottom. */
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_reserve(
+    struct yetty_ydraw_drawable_list *buf, uint32_t height_px);
+
+/* CMD_PATH: the absolute ancestor path (outermost first) for the NEXT
+ * update/delete — the command's own id is the final path component. */
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_path(
+    struct yetty_ydraw_drawable_list *buf, const uint32_t *ids, uint32_t count);
+
+struct yetty_ycore_void_result yetty_ydraw_drawable_list_add_cmd_paint_z_end(
+    struct yetty_ydraw_drawable_list *buf);
+
 /* Append a CMD_GROUP_REF (kind=REF / bits 31:30 = 10) at the current
  * write head. Wire layout: 2 u32 words = [CMD_GROUP_REF][target_id].
  *

@@ -29,7 +29,7 @@
 #include <yetty/yrender/gpu-resource-set.h>
 #include <yetty/yrender/render-target.h>
 #include <yetty/yterminal/dcs-codes.h>
-#include <yetty/yterminal/dcs-codes.h>
+#include <yetty/ydraw-list/cmds.h>
 #include <yetty/yclass/rpc-dcs-server.h>
 #include <yetty/ywire/connection.h>
 #include <yetty/ywire/wire-statemachine.h>
@@ -55,6 +55,10 @@
 #include <yetty/ysixel/sixel.h>
 #endif
 #include <yetty/yterminal/terminal.h>
+#include <yetty/ysdf/default-registry.h>
+#include <yetty/ysdf/types.gen.h>
+#include <yetty/api/yvterm/grid.h>
+#include <yetty/yvterm/group-key.h>
 #include "yetty/gen/impl/ytermsink/sink.h"
 #include "yetty/gen/impl/yvterm/vterm.h"
 #include "yetty/gen/impl/yfigure/figure.h"
@@ -260,7 +264,24 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
      * on the resize envelope, with no input forwarding. Latched from the
      * pane-wide subscription envelope. */
     int resize_subscribed;
+    /* Pane-wide mouse forwarding (CLIENT_INPUT_SUB MOUSE_* bits): events not
+     * owned by a yscene figure are emitted as SC_CLIENT_INPUT_MOUSE with
+     * figure_id 0 and PANE-LOCAL pixels — the input path for a pure
+     * drawable-tree (group) surface, which has no figures for the DEC-mode
+     * hit-test to find. A subscribed wheel is claimed by the client instead
+     * of driving scrollback (same philosophy as ?1502 claiming scroll keys). */
+    int pane_mouse_click_subscribed;
+    int pane_mouse_move_subscribed;
+    int pane_mouse_wheel_subscribed;
     int mouse_buttons_held; /* OR of (1 << button) for currently-down buttons */
+    /* Capture OWNER of the in-flight drag, recorded at the press that
+     * started it: held-button motion and releases route to this owner —
+     * even outside the pane — until every button is up. Without it, a
+     * figure-owned drag leaving the pane would degrade to pane events (the
+     * figure never sees its release), and a pane-background drag crossing a
+     * figure would switch owners mid-drag. */
+    uint32_t mouse_capture_figure_id; /* nonzero: a figure owns the drag */
+    int mouse_capture_pane;           /* the pane subscriber owns the drag */
 
     /* Long-lived yface for emitting input events to the inferior over the
    * PTY. Reused across every emit; out_buf is cleared after each write. */
@@ -311,11 +332,23 @@ struct YETTY_ANNOTATE("class@yterminal:terminal") YETTY_ANNOTATE("parent@ytermsi
      * shared instance (runtime->drawable_registry) — never owned. */
     struct yetty_ydraw_drawable_list_registry *ydraw_registry;
 
+    /* Figures whose receiver-local chrome replacement failed transiently
+     * (reserve OOM, paint-z scope momentarily full): retried at every
+     * ingest-envelope close, so a figure that goes quiet after ONE
+     * geometry/range op still converges instead of showing stale chrome
+     * until its next update. Tiny and deduplicated; on overflow the
+     * figure falls back to retry-on-its-next-update (the chrome_dirty
+     * flag it keeps). */
+    struct {
+        uint64_t update_key;
+        uint64_t parent_scope;
+    } rechrome_retry[8];
+    uint32_t rechrome_retry_count;
+
     /* CMD_UPDATE routing for scrollback figures: each envelope's complexes
      * register here under their ordinal (1, 2, ...) so a producer's later
      * update envelopes (live plot samples, chunked video NALs) reach the
      * instance. Instances unregister themselves on destroy. */
-    struct yetty_ydraw_stream_registry stream_targets;
 
     /* Bundles handed as registry user-data — one per coordinate mode.
      * Live on the terminal because the registry stores pointers to them,
@@ -704,14 +737,44 @@ static struct yetty_ycore_void_result terminal_clear_figures_callback(void *user
     return YETTY_OK_VOID();
 }
 
+/* Terminal reset hook (RIS / DECSTR): drop every client-input subscription.
+ * These are per-session opt-ins from a PTY client; when that client dies
+ * without unsubscribing, the pane keeps spraying SC_CLIENT_INPUT_MOUSE
+ * envelopes at whatever now owns the PTY (the shell). `reset` must cure
+ * that, exactly as it cures a leaked DEC mouse mode. */
+static struct yetty_ycore_void_result terminal_reset_subscriptions_callback(int hard,
+                                                                            void *userdata)
+{
+    struct yetty_yterminal_terminal *terminal = userdata;
+    (void)hard; /* RIS and DECSTR both clear subscription state */
+    if (!terminal) {
+        return YETTY_OK_VOID();
+    }
+    if (terminal->resize_subscribed || terminal->figure_key_optin ||
+        terminal->pane_mouse_click_subscribed || terminal->pane_mouse_move_subscribed ||
+        terminal->pane_mouse_wheel_subscribed) {
+        ydebug("terminal reset: dropping client-input subscriptions");
+    }
+    terminal->resize_subscribed = 0;
+    terminal->figure_key_optin = 0;
+    terminal->pane_mouse_click_subscribed = 0;
+    terminal->pane_mouse_move_subscribed = 0;
+    terminal->pane_mouse_wheel_subscribed = 0;
+    if (terminal->channel_host) {
+        /* Dropped subscriptions also drop the RPC-less presence marker. */
+        yetty_ywire_connection_input_barrier_client_present(terminal->channel_host, 0);
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Figure re-materialization hook: replay a wire envelope retained on a grid
  * line through the complex factory — the same call that minted the figure
  * when the envelope first arrived over the PTY. The grid invokes this when an
  * evicted history line (past the scrollback hot window) scrolls back into
  * view; the fresh instance's ownership transfers to the grid line. */
 static struct yetty_ycore_void_result terminal_materialize_figure_callback(
-    const uint32_t *envelope_words, uint32_t envelope_word_count, void *userdata,
-    struct yetty_ydraw_complex **out_instance)
+    const uint32_t *envelope_words, uint32_t envelope_word_count, const uint32_t *journal_words,
+    uint32_t journal_word_count, void *userdata, struct yetty_ydraw_complex **out_instance)
 {
     struct yetty_yterminal_terminal *terminal = userdata;
     *out_instance = NULL;
@@ -724,7 +787,27 @@ static struct yetty_ycore_void_result terminal_materialize_figure_callback(
                                                     /*rolling_row=*/0u);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, instance_res,
                         "terminal_materialize_figure: create_instance");
-    *out_instance = instance_res.value;
+    struct yetty_ydraw_complex *instance = instance_res.value;
+    /* Replay the accepted-update journal so the figure comes back at its
+     * last state, not its creation state: entries are {target_field,
+     * payload_words, payload...} back to back. Best-effort per entry. */
+    uint32_t offset = 0;
+    while (instance && instance->ops && instance->ops->update &&
+           offset + 2u <= journal_word_count) {
+        uint32_t target_field = journal_words[offset];
+        uint32_t payload_words = journal_words[offset + 1u];
+        if (payload_words > journal_word_count - offset - 2u) {
+            break; /* corrupt tail — stop replaying */
+        }
+        struct yetty_ycore_void_result replay_res = instance->ops->update(
+            instance, target_field, (const uint8_t *)(journal_words + offset + 2u),
+            (size_t)payload_words * sizeof(uint32_t));
+        if (YETTY_IS_ERR(replay_res)) {
+            yetty_ycore_error_destroy(replay_res.error);
+        }
+        offset += 2u + payload_words;
+    }
+    *out_instance = instance;
     return YETTY_OK_VOID();
 }
 
@@ -828,8 +911,8 @@ static struct yetty_ycore_void_result terminal_layer_emit_osc(int osc_code, cons
 {
     struct yetty_yterminal_terminal *terminal = userdata;
     ydebug("terminal_layer_emit_osc: code=%d payload_len=%zu", osc_code, len);
-    struct yetty_ycore_void_result r = terminal_yface_emit(terminal, osc_code, payload, len);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_layer_emit_osc: yface_emit failed");
+    struct yetty_ycore_void_result emit_res = terminal_yface_emit(terminal, osc_code, payload, len);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "terminal_layer_emit_osc: yface_emit failed");
     return YETTY_OK_VOID();
 }
 
@@ -845,9 +928,9 @@ static struct yetty_ycore_void_result terminal_emit_card_focus(
         .figure_id = figure_id,
         .gained = gained,
     };
-    struct yetty_ycore_void_result r =
+    struct yetty_ycore_void_result emit_res =
         terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_FOCUS, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_focus: yface_emit failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res, "terminal_emit_card_focus: yface_emit failed");
     return YETTY_OK_VOID();
 }
 
@@ -856,14 +939,14 @@ static struct yetty_ycore_void_result terminal_emit_card_focus(
  * pixels in TIOCGWINSZ — telnet NAWS (the --temu/--qemu guest path) ships
  * character cols/rows only, so ws_xpixel/ws_ypixel arrive as 0. Emitted on
  * the mouse-subscribe rising edge (initial size) and on every pane resize. */
-static struct yetty_ycore_void_result terminal_emit_card_resize(
-    struct yetty_yterminal_terminal *terminal, uint32_t figure_id, float width, float height)
+/* Protocol family and target id are DISTINCT inputs: the family comes from
+ * which subscription is being served (DEC figure path vs pane-wide
+ * CLIENT_INPUT_SUB), never inferred from the id — a DEC subscriber gets the
+ * figure-tagged code even before any figure has focus (figure_id 0). */
+static struct yetty_ycore_void_result terminal_emit_resize_envelope(
+    struct yetty_yterminal_terminal *terminal, uint32_t osc_code, uint32_t figure_id, float width,
+    float height, float content_scale)
 {
-    /* Publish the host display's HiDPI factor alongside the framebuffer-px
-     * size so clients that author in logical px (browser CSS viewport, ygui
-     * layout) can divide once and render 1:1 with the physical pane. */
-    float content_scale =
-        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
     struct yetty_client_input_resize msg = {
         .magic = YETTY_CLIENT_INPUT_RESIZE_MAGIC,
         .version = YMGUI_WIRE_VERSION,
@@ -872,12 +955,63 @@ static struct yetty_ycore_void_result terminal_emit_card_resize(
         .width = width,
         .height = height,
     };
-    struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_resize: yface_emit failed");
+    struct yetty_ycore_void_result emit_res =
+        terminal_yface_emit(terminal, osc_code, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res,
+                        "terminal_emit_resize_envelope: yface_emit failed");
     return YETTY_OK_VOID();
 }
 
+/* The DEC figure family (SC_CLIENT_INPUT_FIGURE_RESIZE, any figure_id incl.
+ * 0 before the first click-focus). Publishes the host display's HiDPI
+ * factor — figure bodies render through the compositor, which does not
+ * apply the structural cell zoom, so their clients divide by the bare
+ * density. */
+static struct yetty_ycore_void_result terminal_emit_card_resize(
+    struct yetty_yterminal_terminal *terminal, uint32_t figure_id, float width, float height)
+{
+    float content_scale =
+        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
+    return terminal_emit_resize_envelope(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_RESIZE,
+                                         figure_id, width, height, content_scale);
+}
+
+/* The pane-wide family (SC_CLIENT_INPUT_RESIZE, figure_id always 0).
+ * Publishes the COMMITTED logical→device product: display density x
+ * structural cell zoom — the exact factor the terminal renders a
+ * drawable-tree client's retained content by. A Ctrl+Shift zoom tick
+ * grows the product, the client's logical viewport shrinks and it
+ * REFLOWS (exactly like terminal text does), and the raw device-px
+ * pointer contract (client divides by this scale) stays correct at any
+ * zoom with no per-event coordinate rewriting. */
+static struct yetty_ycore_void_result terminal_emit_pane_resize(
+    struct yetty_yterminal_terminal *terminal, float width, float height)
+{
+    /* Publish the COMMITTED product read back from yvterm — the exact
+     * value retirement, reserve conversion and rendering use. Nominal
+     * terminal-side state (layout scale x accumulated zoom) differs from
+     * it whenever the cell stride SNAPPED: an 18px baseline at nominal
+     * zoom 1.1 commits a 20px cell, so the projection is 20/18 = 1.111…,
+     * not 1.1 — publishing the nominal value would make the client lay
+     * out and hit-test in a different coordinate system from the
+     * rendered content. Fallback: the bare layout scale (no grid yet). */
+    float content_scale =
+        terminal->layout_content_scale > 0.0f ? terminal->layout_content_scale : 1.0f;
+    if (terminal->grid) {
+        struct yetty_ycore_void_result density_res =
+            yetty_yvterm_vterm_rich_density(terminal->grid, &content_scale);
+        if (YETTY_IS_ERR(density_res)) {
+            yetty_ycore_error_destroy(density_res.error);
+        }
+    }
+    return terminal_emit_resize_envelope(terminal, YETTY_OSC_SC_CLIENT_INPUT_RESIZE, 0u, width,
+                                         height, content_scale);
+}
+
+/* figure_id != 0 → figure-tagged envelope, coords are figure-local;
+ * figure_id == 0 → pane-wide envelope (SC_CLIENT_INPUT_MOUSE), coords are
+ * pane-local — the documented coordinate-space convention of
+ * client-input.h. Same struct either way. */
 static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
     struct yetty_yterminal_terminal *terminal, uint32_t figure_id, float lx, float ly, int button,
     int press, float wheel_dy, int mods)
@@ -899,9 +1033,12 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_button(
         msg.button = button;
         msg.pressed = press;
     }
-    struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_mouse_button: yface_emit failed");
+    uint32_t osc_code =
+        figure_id != 0 ? YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE : YETTY_OSC_SC_CLIENT_INPUT_MOUSE;
+    struct yetty_ycore_void_result emit_res =
+        terminal_yface_emit(terminal, osc_code, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res,
+                        "terminal_emit_card_mouse_button: yface_emit failed");
     return YETTY_OK_VOID();
 }
 
@@ -919,9 +1056,12 @@ static struct yetty_ycore_void_result terminal_emit_card_mouse_move(
         .x = lx,
         .y = ly,
     };
-    struct yetty_ycore_void_result r =
-        terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, r, "terminal_emit_card_mouse_move: yface_emit failed");
+    uint32_t osc_code =
+        figure_id != 0 ? YETTY_OSC_SC_CLIENT_INPUT_FIGURE_MOUSE : YETTY_OSC_SC_CLIENT_INPUT_MOUSE;
+    struct yetty_ycore_void_result emit_res =
+        terminal_yface_emit(terminal, osc_code, &msg, sizeof(msg));
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, emit_res,
+                        "terminal_emit_card_mouse_move: yface_emit failed");
     return YETTY_OK_VOID();
 }
 
@@ -1005,9 +1145,9 @@ static struct yetty_ycore_int_result terminal_emit_figure_key(
         .mods = mods,
         .codepoint = codepoint,
     };
-    struct yetty_ycore_void_result r =
+    struct yetty_ycore_void_result emit_res =
         terminal_yface_emit(terminal, YETTY_OSC_SC_CLIENT_INPUT_FIGURE_KEY, &msg, sizeof(msg));
-    YETTY_RETURN_IF_ERR(yetty_ycore_int, r, "terminal_emit_figure_key: yface_emit failed");
+    YETTY_RETURN_IF_ERR(yetty_ycore_int, emit_res, "terminal_emit_figure_key: yface_emit failed");
     return YETTY_OK(yetty_ycore_int, 1);
 }
 
@@ -1617,16 +1757,19 @@ static struct yetty_ycore_void_result terminal_content_inset_process_input(
 /*-----------------------------------------------------------------------
  * Pane-wide input subscription — YETTY_OSC_CS_CLIENT_INPUT_SUB.
  *
- * Two bits are honoured here. RESIZE: a client that lays out in logical
- * pixels asks to be told the pane size AND the display's HiDPI factor,
- * without opting into mouse or key forwarding. KEY_FANOUT: the client asks
- * that keystrokes be consumed and fanned out as structured
+ * Bits honoured here. RESIZE: a client that lays out in logical pixels
+ * asks to be told the pane size AND the display's HiDPI factor, without
+ * opting into mouse or key forwarding. KEY_FANOUT: the client asks that
+ * keystrokes be consumed and fanned out as structured
  * CLIENT_INPUT_FIGURE_KEY envelopes once one of its figures is
  * click-focused (without the opt-in, keys stay on the raw PTY channel).
+ * MOUSE_CLICK / MOUSE_MOVE / MOUSE_WHEEL: pane-wide mouse forwarding —
+ * events that no yscene figure owns are emitted as SC_CLIENT_INPUT_MOUSE
+ * (figure_id 0, pane-local pixels); this is the input path for a pure
+ * drawable-tree surface, which has no figures for the DEC-mode hit-test.
  * Each envelope declares the full desired subscription state. The classic
- * mouse/?1502 bits stay driven by the DEC private modes, which is where
- * every existing subscriber sets them — this envelope is the path that
- * needs no terminal-emulation involvement at all.
+ * figure-tagged mouse/?1502 path stays driven by the DEC private modes,
+ * which is where every existing figure subscriber sets them.
  *----------------------------------------------------------------------*/
 
 /* Read one subscription envelope off the SM and latch the geometry bit.
@@ -1674,12 +1817,26 @@ static struct yetty_ycore_void_result terminal_client_sub_consume_envelope(
     int was_subscribed = terminal->resize_subscribed;
     terminal->resize_subscribed = want_resize;
     terminal->figure_key_optin = (msg.flags & YETTY_CLIENT_INPUT_SUB_KEY_FANOUT) != 0;
-    ydebug("terminal: client sub flags=0x%x resize=%d figure_key=%d", msg.flags, want_resize,
-           terminal->figure_key_optin);
+    terminal->pane_mouse_click_subscribed = (msg.flags & YETTY_CLIENT_INPUT_SUB_MOUSE_CLICK) != 0;
+    terminal->pane_mouse_move_subscribed = (msg.flags & YETTY_CLIENT_INPUT_SUB_MOUSE_MOVE) != 0;
+    terminal->pane_mouse_wheel_subscribed = (msg.flags & YETTY_CLIENT_INPUT_SUB_MOUSE_WHEEL) != 0;
+    /* The subscription doubles as the RPC-less client-presence marker for
+     * the exit-window input barrier: a DCS-only client (ygui2) opens no
+     * dynamic channel, so without this the barrier would disarm on the
+     * same feed that processed its HOLD. flags=0 (the framework's detach,
+     * sent AFTER it stopped reading stdin) marks the client gone. */
+    if (terminal->channel_host) {
+        yetty_ywire_connection_input_barrier_client_present(terminal->channel_host,
+                                                            msg.flags != 0u);
+    }
+    ydebug("terminal: client sub flags=0x%x resize=%d figure_key=%d pane_mouse=%d/%d/%d", msg.flags,
+           want_resize, terminal->figure_key_optin, terminal->pane_mouse_click_subscribed,
+           terminal->pane_mouse_move_subscribed, terminal->pane_mouse_wheel_subscribed);
     if (want_resize && !was_subscribed && terminal->applied_w > 0.0f &&
         terminal->applied_h > 0.0f) {
-        struct yetty_ycore_void_result rr = terminal_emit_card_resize(
-            terminal, terminal->focused_figure_id, terminal->applied_w, terminal->applied_h);
+        /* Pane-wide subscription → pane-wide envelope. */
+        struct yetty_ycore_void_result rr =
+            terminal_emit_pane_resize(terminal, terminal->applied_w, terminal->applied_h);
         if (YETTY_IS_ERR(rr)) {
             yetty_ycore_error_destroy(rr.error);
         }
@@ -1838,6 +1995,18 @@ static struct yetty_ycore_void_result terminal_effect_process_input(
     }
 }
 
+enum { TERMINAL_YDRAW_GROUP_DEPTH_MAX = 8 };
+
+/* Bounds on wire-supplied vertical extents. RESERVE_MAX_PX caps the declared
+ * viewport (and any content bottom) so the reserve row count stays exactly
+ * representable and the newline advance stays finite; RESERVE_MAX_ROWS is a
+ * second bound after the cell division (a 1px cell height must not turn a
+ * legal pixel span into millions of rows). */
+enum {
+    TERMINAL_YDRAW_RESERVE_MAX_PX = 1 << 24,
+    TERMINAL_YDRAW_RESERVE_MAX_ROWS = 1 << 16,
+};
+
 /* Shared ingest bookkeeping for one envelope's worth of inbound rich
  * content. Two producers feed it: the wire-streamed YDRAW_BIN path
  * (terminal_ydraw_consume_bin) and the in-process serialized path used by
@@ -1845,6 +2014,11 @@ static struct yetty_ycore_void_result terminal_effect_process_input(
 struct terminal_ydraw_ingest_state {
     uint32_t cursor_row;
     struct yetty_ycore_pixel_size text_cell;
+    /* The grid's committed rich density product (logical → current-fb:
+     * display density x structural cell zoom), snapshotted with the cell
+     * metrics so this envelope's reserve/span conversions use exactly
+     * the value retirement judges the same content by. */
+    float rich_density;
     /* Bottom extent of this envelope's drawn content (px, envelope-local,
      * from the insert row's top). After ingestion the cursor is advanced
      * past it so the next envelope's content (the next plot, the next PDF
@@ -1854,7 +2028,47 @@ struct terminal_ydraw_ingest_state {
     float content_bottom_px;
     uint32_t ingested_records;
     uint32_t ingested_complexes;
+    /* Nonzero while walking a REOPENED group's replacement body: replacement
+     * content keeps the block's original reservation, so its bounds must not
+     * feed the reserve computation. */
+    uint32_t reopen_depth;
+    /* Set once the envelope produced NEW rolling content (anonymous records
+     * or a newly created group). A mutation-only envelope (reopens/deletes)
+     * reserves no rows and never advances the cursor. */
+    int new_content;
+    /* GROUP nesting bound for the nested-body walk. */
+    uint32_t group_depth;
+    /* Folded key of each open scope: scope_keys[0] is the root (empty path);
+     * scope_keys[d] is the key of the group open at depth d. A group / delete /
+     * update target key at the current scope is
+     * yetty_yvterm_group_key_fold(scope_keys[group_depth], local_id). This is
+     * how nested group-id PATHS collapse into the 64-bit binding key. */
+    uint64_t scope_keys[TERMINAL_YDRAW_GROUP_DEPTH_MAX + 1u];
+    /* CMD_NODE_ID latch: the id assigned to the NEXT COMPLEX record (how a
+     * complex carries its own id — see cmds.h). Survives interleaved
+     * primitives (a plot's emitter surrounds its complex with label prims),
+     * is consumed by the first complex, and is dropped at a GROUP
+     * declaration or the batch end. */
+    uint32_t pending_node_id;
+    int pending_node_id_valid;
+    /* CMD_PATH latch: the ABSOLUTE ancestor-scope key for the NEXT
+     * update/delete (the command's own id is the final path component).
+     * Consumed by exactly one command; any other record drops it. */
+    uint64_t pending_path_key;
+    int pending_path_valid;
+    /* CMD_RESERVE: declared insertion span in pixels (0 = derive from the
+     * content bottom as always). Content taller than a declared span never
+     * extends the reservation — the projection clips it. */
+    float declared_span_px;
 };
+
+/* Defined below — mutually recursive with terminal_ydraw_ingest_record via
+ * nested GROUP bodies. */
+static void terminal_ydraw_walk_nested(struct yetty_yterminal_terminal *terminal,
+                                       struct terminal_ydraw_ingest_state *state,
+                                       const uint8_t *bytes, size_t byte_count);
+static void terminal_ydraw_route_delete(struct yetty_yterminal_terminal *terminal,
+                                        struct terminal_ydraw_ingest_state *state, uint32_t id);
 
 /* Anchor rich content on the cursor's current visible line in yvterm's OWN
  * grid. The grid owns a primitive/complex list per line on its scroll
@@ -1872,7 +2086,89 @@ static struct yetty_ycore_void_result terminal_ydraw_ingest_begin(
     struct pixel_size_result text_cell_res = yetty_yvterm_vterm_cell_size(terminal->grid);
     YETTY_RETURN_IF_ERR(yetty_ycore_void, text_cell_res, "terminal_ydraw ingest: cell size");
     state->text_cell = text_cell_res.value;
+    state->rich_density = 1.0f;
+    struct yetty_ycore_void_result density_res =
+        yetty_yvterm_vterm_rich_density(terminal->grid, &state->rich_density);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, density_res, "terminal_ydraw ingest: rich density");
     return YETTY_OK_VOID();
+}
+
+/* Complex-tier classifier for the drawable paths: SDF is probed FIRST with
+ * the HAS_ID bit masked — an id-carrying SDF prim has its top bit set and
+ * would otherwise be mistaken for a complex (garbage bounds, doomed factory
+ * calls, a phantom retained envelope). */
+static int terminal_ydraw_record_is_complex(uint32_t type)
+{
+    if (yetty_ysdf_primitive_size(type & ~YETTY_YDRAW_HAS_ID_FLAG) > 0u) {
+        return 0;
+    }
+    return yetty_ydraw_is_complex(type);
+}
+
+/* Effective bottom (px) of one insert's supplied subtree. This is the
+ * pre-scan that makes a REPLACING insert command-local and atomic: computed
+ * BEFORE any mutation, so a replacement that cannot fit its target's row
+ * span is skipped whole and the previous content stays intact. Structural
+ * markers carry no geometry; nested GROUP bodies recurse. Parse trouble just
+ * ends the scan — framing is the walk's concern. */
+static float terminal_ydraw_subtree_bottom_px(struct yetty_yterminal_terminal *terminal,
+                                              const uint8_t *bytes, size_t byte_count,
+                                              uint32_t depth)
+{
+    float bottom = 0.0f;
+    if (depth > TERMINAL_YDRAW_GROUP_DEPTH_MAX) {
+        return bottom;
+    }
+    while (byte_count >= sizeof(uint32_t)) {
+        struct yetty_ydraw_command command;
+        struct yetty_ycore_size_result step = yetty_ydraw_drawable_command_parse(
+            terminal->ydraw_registry, bytes, (uint32_t)byte_count, &command);
+        if (YETTY_IS_ERR(step)) {
+            yetty_ycore_error_destroy(step.error);
+            break;
+        }
+        if (step.value == 0 || step.value > byte_count || (step.value % sizeof(uint32_t)) != 0) {
+            break;
+        }
+        if (command.kind == YETTY_YDRAW_COMMAND_ADD && command.entry.data) {
+            const uint32_t *data = command.entry.data;
+            if (data[0] == YETTY_YDRAW_CMD_GROUP && step.value >= 12u) {
+                uint32_t payload_size = data[2];
+                size_t payload_limit = step.value - 12u;
+                float nested = terminal_ydraw_subtree_bottom_px(
+                    terminal, (const uint8_t *)(data + 3),
+                    payload_size <= payload_limit ? payload_size : payload_limit, depth + 1u);
+                if (nested > bottom) {
+                    bottom = nested;
+                }
+            } else if (data[0] != YETTY_YDRAW_RESOURCE_FONT && data[0] != YETTY_YDRAW_CMD_ZERO &&
+                       data[0] != YETTY_YDRAW_CMD_GROUP_REF && data[0] != YETTY_YDRAW_CMD_PAINT_Z &&
+                       data[0] != YETTY_YDRAW_CMD_PAINT_Z_END &&
+                       data[0] != YETTY_YDRAW_CMD_NODE_ID) {
+                struct rectangle_result aabb;
+                int have_aabb = 0;
+                if (terminal_ydraw_record_is_complex(data[0])) {
+                    aabb = yetty_ydraw_complex_record_aabb(data);
+                    have_aabb = 1;
+                } else if (command.entry.ops && command.entry.ops->aabb) {
+                    aabb = command.entry.ops->aabb(data);
+                    have_aabb = 1;
+                }
+                if (have_aabb) {
+                    if (YETTY_IS_OK(aabb)) {
+                        if (aabb.value.max.y > bottom) {
+                            bottom = aabb.value.max.y;
+                        }
+                    } else {
+                        yetty_ycore_error_destroy(aabb.error);
+                    }
+                }
+            }
+        }
+        bytes += step.value;
+        byte_count -= step.value;
+    }
+    return bottom;
 }
 
 /* Place one ADD record (complex or raw SDF/text/font) on the anchor line.
@@ -1883,15 +2179,220 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
                                          size_t size)
 {
     const uint32_t *data = entry->data;
-    /* Track the content's bottom for the space-reservation pass in finish.
-     * The FONT resource record ships glyph bytes, not drawn geometry, so it
-     * has no meaningful extent — skip it. Complexes carry their bounds at a
-     * fixed payload offset; SDF / text records expose them via the entry
-     * ops aabb. */
+    /* Structural commands dispatch by EXACT type ahead of the drawable
+     * paths — CMD_GROUP (0x80000002) would otherwise pass the is_complex
+     * range test and be mistaken for a figure envelope (garbage bounds, a
+     * phantom retained envelope, doomed materialize retries). */
+    if (data[0] == YETTY_YDRAW_CMD_NODE_ID && size >= 8u) {
+        state->pending_node_id = data[1];
+        state->pending_node_id_valid = 1;
+        state->ingested_records++;
+        return;
+    }
+    if (data[0] == YETTY_YDRAW_CMD_PATH && size >= 12u) {
+        /* Fold the absolute path (outermost first, from ROOT) into the
+         * ancestor-scope key for the NEXT update/delete. */
+        uint32_t path_count = data[1];
+        if (path_count == 0u || path_count > YETTY_YDRAW_CMD_PATH_MAX_IDS ||
+            (size_t)(8u + path_count * 4u) > size) {
+            return; /* malformed — command-local skip */
+        }
+        uint64_t key = YETTY_YVTERM_GROUP_KEY_ROOT;
+        for (uint32_t index = 0; index < path_count; ++index) {
+            key = yetty_yvterm_group_key_fold(key, data[2u + index]);
+        }
+        state->pending_path_key = key;
+        state->pending_path_valid = 1;
+        ydebug("ydraw ingest: CMD_PATH depth=%u key=%016llx", path_count, (unsigned long long)key);
+        state->ingested_records++;
+        return;
+    }
+    /* The path latch survives INTO a GROUP declaration (the addressed-
+     * insert form below); any other record drops it — it addresses the
+     * NEXT command only. */
+    int path_latch_valid = state->pending_path_valid;
+    uint64_t path_latch_key = state->pending_path_key;
+    state->pending_path_valid = 0;
+    if (data[0] == YETTY_YDRAW_CMD_GROUP) {
+        /* A pending node id does not cross a structural GROUP declaration. */
+        state->pending_node_id_valid = 0;
+        if (size < 12u) {
+            return;
+        }
+        uint32_t group_id = data[1];
+        uint32_t payload_size = data[2];
+        if (state->group_depth >= TERMINAL_YDRAW_GROUP_DEPTH_MAX) {
+            ydebug("ydraw ingest: GROUP id=%u nested too deep — skipped", group_id);
+            return;
+        }
+        /* Ancestor scope: a CMD_PATH latch at top level addresses the GROUP
+         * at any depth — the addressed-insert form (E5's reopen half): the
+         * command's own id is the final path component, and a LIVE key
+         * reopens in place exactly like a depth-1 reopen. A fresh key under
+         * a latched path is the missing-descendant CREATE, whose placement
+         * rules (join the parent's insertion) are not implemented yet —
+         * skipped explicitly rather than misplaced. */
+        uint64_t group_scope = state->scope_keys[state->group_depth];
+        int used_path_latch = 0;
+        if (state->group_depth == 0 && path_latch_valid) {
+            group_scope = path_latch_key;
+            used_path_latch = 1;
+        }
+        uint64_t group_key = yetty_yvterm_group_key_fold(group_scope, group_id);
+        if (used_path_latch) {
+            uint32_t live_probe = 0;
+            struct yetty_ycore_uint32_result probe_res =
+                yetty_yvterm_vterm_rich_group_query(terminal->grid, group_key, &live_probe);
+            if (YETTY_IS_ERR(probe_res)) {
+                yetty_ycore_error_destroy(probe_res.error);
+                return;
+            }
+            if (!probe_res.value) {
+                ydebug("ydraw ingest: GROUP id=%u at path — create-at-path not supported, skipped",
+                       group_id);
+                return;
+            }
+        }
+        /* Command-local atomicity for a REPLACING insert: if the path is
+         * live, the supplied subtree must fit the target's existing row span
+         * — checked BEFORE any mutation, so an oversized replacement skips
+         * whole and the previous content stays intact. */
+        uint32_t live_span = 0;
+        struct yetty_ycore_uint32_result live_res =
+            yetty_yvterm_vterm_rich_group_query(terminal->grid, group_key, &live_span);
+        if (YETTY_IS_ERR(live_res)) {
+            yetty_ycore_error_destroy(live_res.error);
+        } else if (live_res.value && state->text_cell.height > 0) {
+            float span_px = (float)(live_span ? live_span : 1u) * (float)state->text_cell.height;
+            /* Producer-logical bottom vs framebuffer span — scale by the
+             * committed rich density product (same unit rule as the
+             * reserve path). */
+            float density = state->rich_density > 0.0f ? state->rich_density : 1.0f;
+            float replacement_bottom =
+                density * terminal_ydraw_subtree_bottom_px(
+                              terminal, (const uint8_t *)(data + 3),
+                              payload_size <= (size - 12u) ? payload_size : (size - 12u),
+                              state->group_depth);
+            if (replacement_bottom > span_px) {
+                ydebug("ydraw ingest: GROUP id=%u replacement exceeds row span — skipped",
+                       group_id);
+                return;
+            }
+        }
+        struct yetty_ycore_uint32_result open_res =
+            yetty_yvterm_vterm_rich_group_open(terminal->grid, state->cursor_row, group_key);
+        if (YETTY_IS_ERR(open_res)) {
+            ydebug("ydraw ingest: GROUP id=%u open failed: %s", group_id, open_res.error.msg);
+            yetty_ycore_error_destroy(open_res.error);
+            return;
+        }
+        int reopened = open_res.value != 0;
+        state->ingested_records++;
+        if (reopened) {
+            state->reopen_depth++;
+        } else {
+            state->new_content = 1;
+        }
+        state->scope_keys[state->group_depth + 1u] = group_key;
+        state->group_depth++;
+        terminal_ydraw_walk_nested(terminal, state, (const uint8_t *)(data + 3),
+                                   payload_size <= (size - 12u) ? payload_size : (size - 12u));
+        state->group_depth--;
+        if (reopened) {
+            state->reopen_depth--;
+        }
+        struct yetty_ycore_void_result close_res =
+            yetty_yvterm_vterm_rich_group_close(terminal->grid);
+        if (YETTY_IS_ERR(close_res)) {
+            yetty_ycore_error_destroy(close_res.error);
+        }
+        return;
+    }
+    if (data[0] == YETTY_YDRAW_CMD_ZERO && size >= 8u && data[1] == 0u) {
+        if (state->group_depth > 0u) {
+            /* A full clear inside an open group scope would wipe the very
+             * block the scope appends into — command-local skip. */
+            ydebug("ydraw ingest: CMD_ZERO nested in a GROUP — skipped");
+            state->ingested_records++;
+            return;
+        }
+        /* Full-canvas clear embedded in the body (ygui-style full redraw:
+         * one CMD_ZERO + the new frame). Rings, cache and archive watermark
+         * — same reach as the YDRAW_CLEAR envelope. */
+        struct yetty_ycore_void_result zero_res = yetty_yvterm_vterm_clear_rich_all(terminal->grid);
+        if (YETTY_IS_ERR(zero_res)) {
+            yetty_ycore_error_destroy(zero_res.error);
+        }
+        state->ingested_records++;
+        return;
+    }
+    if (data[0] == YETTY_YDRAW_CMD_GROUP_REF) {
+        /* Shared/multi-parent references would turn the group tree into a
+         * graph; explicitly unsupported rather than silently ignored. */
+        ydebug("ydraw ingest: CMD_GROUP_REF unsupported — skipped");
+        state->ingested_records++;
+        return;
+    }
+    if (data[0] == YETTY_YDRAW_CMD_RESERVE && size >= 8u) {
+        /* Declared viewport span: fixes the batch's reservation regardless of
+         * how tall the content is. Clamped — the wire word is an arbitrary
+         * u32, and an unbounded value would round-trip through float above
+         * integer precision and turn the reserve advance into a runaway
+         * newline loop. RESERVE only DECLARES the span; it does not mark new
+         * content — a batch whose only novelty is a RESERVE is mutation-only
+         * and takes no placement (the contract's new content is new roots +
+         * anonymous drawables). */
+        uint32_t declared_px = data[1];
+        if (declared_px > TERMINAL_YDRAW_RESERVE_MAX_PX) {
+            ydebug("ydraw ingest: RESERVE %upx clamped to %upx", declared_px,
+                   (uint32_t)TERMINAL_YDRAW_RESERVE_MAX_PX);
+            declared_px = TERMINAL_YDRAW_RESERVE_MAX_PX;
+        }
+        state->declared_span_px = (float)declared_px;
+        state->ingested_records++;
+        return;
+    }
+    if (data[0] == YETTY_YDRAW_CMD_PAINT_Z && size >= 8u) {
+        /* Open an explicit paint-z scope: the records that follow (a
+         * complex and its label/legend prims) stack at this depth. */
+        int32_t z;
+        memcpy(&z, &data[1], sizeof(z));
+        struct yetty_ycore_void_result push_res =
+            yetty_yvterm_vterm_rich_push_paint_z(terminal->grid, z);
+        if (YETTY_IS_ERR(push_res)) {
+            yetty_ycore_error_destroy(push_res.error);
+        }
+        state->ingested_records++;
+        return;
+    }
+    if (data[0] == YETTY_YDRAW_CMD_PAINT_Z_END && size >= 8u) {
+        struct yetty_ycore_void_result pop_res =
+            yetty_yvterm_vterm_rich_pop_paint_z(terminal->grid);
+        if (YETTY_IS_ERR(pop_res)) {
+            yetty_ycore_error_destroy(pop_res.error);
+        }
+        state->ingested_records++;
+        return;
+    }
+    /* new_content is set below only AFTER a record actually lands (append /
+     * attach success) and only for placement-bearing records — a failed
+     * append, a failed factory, or a FONT resource (glyph bytes, no drawn
+     * geometry) must not mark the batch as new content, or finalization
+     * would reserve rows for nothing (the one-row floor keys off this). */
+    /* Resolve the record's effective AABB once: it feeds BOTH the batch's
+     * content-bottom (reservation) and the record's stored content-space
+     * extent (per-node scroll retirement footprints — needed for
+     * replacement content too, hence not reopen-gated). The FONT resource
+     * ships glyph bytes, not drawn geometry — skipped. Complexes carry
+     * their bounds at a fixed payload offset; SDF / text records expose
+     * them via the entry ops aabb. */
+    float extent_top_px = 0.0f;
+    float extent_bottom_px = 0.0f;
+    int extent_valid = 0;
     if (data[0] != YETTY_YDRAW_RESOURCE_FONT) {
         struct rectangle_result aabb;
         int have_aabb = 0;
-        if (yetty_ydraw_is_complex(data[0])) {
+        if (terminal_ydraw_record_is_complex(data[0])) {
             aabb = yetty_ydraw_complex_record_aabb(data);
             have_aabb = 1;
         } else if (entry->ops->aabb) {
@@ -1900,7 +2401,13 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
         }
         if (have_aabb) {
             if (YETTY_IS_OK(aabb)) {
-                if (aabb.value.max.y > state->content_bottom_px) {
+                if (isfinite(aabb.value.min.y) && isfinite(aabb.value.max.y) &&
+                    aabb.value.max.y >= aabb.value.min.y) {
+                    extent_top_px = aabb.value.min.y;
+                    extent_bottom_px = aabb.value.max.y;
+                    extent_valid = 1;
+                }
+                if (state->reopen_depth == 0 && aabb.value.max.y > state->content_bottom_px) {
                     state->content_bottom_px = aabb.value.max.y;
                 }
             } else {
@@ -1908,7 +2415,7 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
             }
         }
     }
-    if (yetty_ydraw_is_complex(data[0]) && terminal->complex_factory) {
+    if (terminal_ydraw_record_is_complex(data[0]) && terminal->complex_factory) {
         /* Retain the creating wire envelope on the line FIRST (verbatim, in
          * the same arena the SDF records use — the SDF pass skips
          * complex-type records). When the line ages past the scrollback
@@ -1916,8 +2423,13 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
          * what re-materializes it on scroll-back. Best-effort: a figure
          * without a retained envelope still displays, it just cannot be
          * rebuilt after eviction. */
-        struct yetty_ycore_uint32_result envelope_res = yetty_yvterm_vterm_append_primitive(
-            terminal->grid, state->cursor_row, data, (uint32_t)(size / sizeof(uint32_t)));
+        struct yetty_ycore_uint32_result envelope_res =
+            extent_valid
+                ? yetty_yvterm_vterm_append_primitive_extent(
+                      terminal->grid, state->cursor_row, data, (uint32_t)(size / sizeof(uint32_t)),
+                      extent_top_px, extent_bottom_px)
+                : yetty_yvterm_vterm_append_primitive(terminal->grid, state->cursor_row, data,
+                                                      (uint32_t)(size / sizeof(uint32_t)));
         if (YETTY_IS_ERR(envelope_res)) {
             yetty_ycore_error_destroy(envelope_res.error);
         }
@@ -1935,10 +2447,26 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
                 yetty_ycore_error_destroy(at.error);
             } else {
                 state->ingested_complexes++;
-                /* Make the figure addressable by later update envelopes:
-                 * ordinal within its creating envelope = stream id. */
-                yetty_ydraw_stream_registry_register(&terminal->stream_targets,
-                                                     state->ingested_complexes, ir.value);
+                if (state->reopen_depth == 0) {
+                    state->new_content = 1; /* runtime landed — placement-bearing */
+                }
+                /* An id-bearing complex (CMD_NODE_ID prefix) becomes the
+                 * addressable COMPLEX node at its path: the enclosing group
+                 * path folded with its OWN id. An anonymous complex is not
+                 * addressable (drawable-use-cases.md §2). */
+                if (state->pending_node_id_valid) {
+                    uint64_t node_key = yetty_yvterm_group_key_fold(
+                        state->scope_keys[state->group_depth], state->pending_node_id);
+                    ydebug("ydraw ingest: complex node id=%u key=%016llx", state->pending_node_id,
+                           (unsigned long long)node_key);
+                    state->pending_node_id_valid = 0; /* consumed */
+                    struct yetty_ycore_void_result bind_res =
+                        yetty_yvterm_vterm_rich_update_bind(terminal->grid, node_key);
+                    if (YETTY_IS_ERR(bind_res)) {
+                        ydebug("ydraw ingest: complex node bind FAILED: %s", bind_res.error.msg);
+                        yetty_ycore_error_destroy(bind_res.error);
+                    }
+                }
             }
         } else {
             ydebug("ydraw ingest: create_instance type=0x%08x FAILED: %s", data[0], ir.error.msg);
@@ -1947,13 +2475,343 @@ static void terminal_ydraw_ingest_record(struct yetty_yterminal_terminal *termin
     } else {
         /* Raw SDF prim / glyph / text-drawable-list / font record: store the
          * whole wire record on the line for the SDF render pass to consume. */
-        struct yetty_ycore_uint32_result ap = yetty_yvterm_vterm_append_primitive(
-            terminal->grid, state->cursor_row, data, (uint32_t)(size / sizeof(uint32_t)));
+        struct yetty_ycore_uint32_result ap =
+            extent_valid
+                ? yetty_yvterm_vterm_append_primitive_extent(
+                      terminal->grid, state->cursor_row, data, (uint32_t)(size / sizeof(uint32_t)),
+                      extent_top_px, extent_bottom_px)
+                : yetty_yvterm_vterm_append_primitive(terminal->grid, state->cursor_row, data,
+                                                      (uint32_t)(size / sizeof(uint32_t)));
         if (YETTY_IS_ERR(ap)) {
             yetty_ycore_error_destroy(ap.error); /* skip one bad record, keep parsing */
+        } else if (state->reopen_depth == 0 && data[0] != YETTY_YDRAW_RESOURCE_FONT) {
+            state->new_content = 1; /* stored, drawable — placement-bearing */
         }
     }
     state->ingested_records++;
+}
+
+/* Vterm entry points declared ahead of the regenerated api header so the
+ * first codegen pass resolves them. */
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_update_extent_refresh(
+    struct yetty_yclass_object *obj, uint64_t update_key, float content_top_px,
+    float content_bottom_px);
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_update_paint_z(
+    struct yetty_yclass_object *obj, uint64_t update_key, int32_t *out_paint_z);
+struct yetty_ycore_void_result yetty_yvterm_vterm_rich_group_reserve(
+    struct yetty_yclass_object *obj, uint64_t group_key, uint32_t extra_records,
+    uint32_t extra_words);
+
+/* One staged chrome replacement record: a validated view into the emitted
+ * drawable list, collected BEFORE any store mutation. */
+struct terminal_rechrome_staged_record {
+    const uint32_t *words;
+    uint32_t word_count;
+    float extent_top_px;
+    float extent_bottom_px;
+    int extent_valid;
+};
+
+/* Generous DoS ceiling on one chrome replacement's emitted bytes. This is
+ * NOT a contract narrowing — real chrome is a few KB; anything near this
+ * bound means a broken emit_chrome. The record COUNT is unbounded (the
+ * staging array sizes itself from the parsed stream). */
+enum { TERMINAL_RECHROME_MAX_BYTES = 1u << 20 };
+
+/* Parse the emitted chrome stream once: validate that it holds ONLY plain
+ * prim records (the figure never nests groups or complexes in its own
+ * chrome), count records + words, and — when `staged` is non-NULL — fill
+ * one staged view per record. Returns 1 on a fully valid stream. */
+static int terminal_rechrome_scan(struct yetty_yterminal_terminal *terminal, const uint8_t *bytes,
+                                  size_t byte_count, struct terminal_rechrome_staged_record *staged,
+                                  uint32_t *out_record_count, uint32_t *out_word_total)
+{
+    if (!bytes && byte_count != 0) {
+        return 0;
+    }
+    uint32_t record_count = 0;
+    uint32_t word_total = 0;
+    while (bytes && byte_count >= 2u * sizeof(uint32_t)) {
+        struct yetty_ydraw_command command;
+        struct yetty_ycore_size_result step = yetty_ydraw_drawable_command_parse(
+            terminal->ydraw_registry, bytes, (uint32_t)byte_count, &command);
+        if (YETTY_IS_ERR(step)) {
+            yetty_ycore_error_destroy(step.error);
+            return 0;
+        }
+        if (step.value == 0 || step.value > byte_count) {
+            return 0;
+        }
+        if (command.kind != YETTY_YDRAW_COMMAND_ADD || !command.entry.data || !command.entry.ops) {
+            return 0;
+        }
+        if (staged) {
+            struct terminal_rechrome_staged_record *slot = &staged[record_count];
+            slot->words = command.entry.data;
+            slot->word_count = (uint32_t)(step.value / sizeof(uint32_t));
+            slot->extent_valid = 0;
+            slot->extent_top_px = 0.0f;
+            slot->extent_bottom_px = 0.0f;
+            if (command.entry.ops->aabb) {
+                struct rectangle_result aabb = command.entry.ops->aabb(slot->words);
+                if (YETTY_IS_OK(aabb)) {
+                    if (isfinite(aabb.value.min.y) && isfinite(aabb.value.max.y) &&
+                        aabb.value.max.y >= aabb.value.min.y) {
+                        slot->extent_top_px = aabb.value.min.y;
+                        slot->extent_bottom_px = aabb.value.max.y;
+                        slot->extent_valid = 1;
+                    }
+                } else {
+                    yetty_ycore_error_destroy(aabb.error);
+                }
+            }
+        }
+        record_count++;
+        word_total += (uint32_t)(step.value / sizeof(uint32_t));
+        bytes += step.value;
+        byte_count -= step.value;
+    }
+    if (byte_count != 0) {
+        /* A ragged tail is NOT a valid stream — accepting it would
+         * silently truncate the replacement ("fully valid" contract). */
+        return 0;
+    }
+    *out_record_count = record_count;
+    *out_word_total = word_total;
+    return 1;
+}
+
+/* Locally rebuild a self-owned figure's chrome group after an update
+ * invalidated its layout (geometry / axis-range op). The figure re-emits
+ * its label prims for its CURRENT retained state (ops->emit_chrome) and
+ * the group named in its record is reopened IN PLACE — the same
+ * exact-subtree replacement a wire reopen performs, only no bytes ever
+ * crossed the wire.
+ *
+ * ATOMIC against the old chrome: the emitted stream is fully parsed and
+ * validated, the block's record/arena capacity AND the group's
+ * replacement-ordinal headroom are RESERVED, the figure's original
+ * paint-z is resolved and its ambient scope is pushed — every fallible
+ * step happens while the old chrome is still intact. After the reopen the
+ * staged appends are infallible by reservation. Returns 1 only on a
+ * complete commit; the caller keeps `chrome_dirty` set otherwise so a
+ * later update retries against the intact old chrome. */
+static int terminal_ydraw_local_rechrome(struct yetty_yterminal_terminal *terminal,
+                                         struct terminal_ydraw_ingest_state *state,
+                                         struct yetty_ydraw_complex *target, uint64_t update_key,
+                                         uint64_t parent_scope)
+{
+    uint64_t chrome_key = yetty_yvterm_group_key_fold(parent_scope, target->chrome_group_id);
+    /* Only REPLACE a chrome group the creation envelope established —
+     * a create here would open a stray block mid-update. */
+    struct yetty_ycore_uint32_result live_res =
+        yetty_yvterm_vterm_rich_group_query(terminal->grid, chrome_key, NULL);
+    if (YETTY_IS_ERR(live_res)) {
+        yetty_ycore_error_destroy(live_res.error);
+        return 0;
+    }
+    if (!live_res.value) {
+        ydebug("ydraw ingest: local rechrome skipped — chrome group %u not live",
+               target->chrome_group_id);
+        return 0;
+    }
+    struct yetty_ydraw_drawable_list_result list_res =
+        yetty_ydraw_drawable_list_config_buffer_create(NULL);
+    if (YETTY_IS_ERR(list_res)) {
+        yetty_ycore_error_destroy(list_res.error);
+        return 0;
+    }
+    struct yetty_ydraw_drawable_list *chrome_list = list_res.value;
+    struct yetty_ycore_void_result emit_res = target->ops->emit_chrome(target, chrome_list);
+    if (YETTY_IS_ERR(emit_res)) {
+        ydebug("ydraw ingest: local rechrome emit failed: %s", emit_res.error.msg);
+        yetty_ycore_error_destroy(emit_res.error);
+        yetty_ydraw_drawable_list_destroy(chrome_list);
+        return 0;
+    }
+
+    /* STAGE: size from the parsed stream itself — no fixed record cap
+     * narrowing the emit_chrome contract. Pass 1 validates + counts;
+     * pass 2 fills the exactly-sized staging array. */
+    const uint8_t *bytes = yetty_ydraw_drawable_list_data(chrome_list);
+    size_t byte_count = yetty_ydraw_drawable_list_size(chrome_list);
+    if (byte_count > (size_t)TERMINAL_RECHROME_MAX_BYTES) {
+        ydebug("ydraw ingest: local rechrome aborted — emitted chrome exceeds %u bytes",
+               (unsigned)TERMINAL_RECHROME_MAX_BYTES);
+        yetty_ydraw_drawable_list_destroy(chrome_list);
+        return 0;
+    }
+    uint32_t staged_count = 0;
+    uint32_t staged_words_total = 0;
+    if (!terminal_rechrome_scan(terminal, bytes, byte_count, NULL, &staged_count,
+                                &staged_words_total)) {
+        ydebug("ydraw ingest: local rechrome aborted — unexpected emitted content");
+        yetty_ydraw_drawable_list_destroy(chrome_list);
+        return 0;
+    }
+    struct terminal_rechrome_staged_record *staged = NULL;
+    if (staged_count) {
+        staged = calloc(staged_count, sizeof(*staged));
+        if (!staged) {
+            yetty_ydraw_drawable_list_destroy(chrome_list);
+            return 0;
+        }
+        uint32_t refill_count = 0;
+        uint32_t refill_words = 0;
+        if (!terminal_rechrome_scan(terminal, bytes, byte_count, staged, &refill_count,
+                                    &refill_words) ||
+            refill_count != staged_count) {
+            free(staged);
+            yetty_ydraw_drawable_list_destroy(chrome_list);
+            return 0;
+        }
+    }
+
+    /* RESERVE: block capacity + replacement-ordinal headroom — after
+     * this the commit below cannot fail. */
+    struct yetty_ycore_void_result reserve_res = yetty_yvterm_vterm_rich_group_reserve(
+        terminal->grid, chrome_key, staged_count, staged_words_total);
+    if (YETTY_IS_ERR(reserve_res)) {
+        ydebug("ydraw ingest: local rechrome reserve failed: %s", reserve_res.error.msg);
+        yetty_ycore_error_destroy(reserve_res.error);
+        free(staged);
+        yetty_ydraw_drawable_list_destroy(chrome_list);
+        return 0;
+    }
+
+    /* The figure's original depth — replacement chrome MUST keep it. An
+     * unresolvable z or a full ambient stack aborts here, before the
+     * destructive reopen, leaving the old chrome standing. */
+    int32_t figure_paint_z = 0;
+    struct yetty_ycore_void_result z_res =
+        yetty_yvterm_vterm_rich_update_paint_z(terminal->grid, update_key, &figure_paint_z);
+    if (YETTY_IS_ERR(z_res)) {
+        ydebug("ydraw ingest: local rechrome aborted — paint-z unresolved: %s", z_res.error.msg);
+        yetty_ycore_error_destroy(z_res.error);
+        free(staged);
+        yetty_ydraw_drawable_list_destroy(chrome_list);
+        return 0;
+    }
+    struct yetty_ycore_void_result push_res =
+        yetty_yvterm_vterm_rich_push_paint_z(terminal->grid, figure_paint_z);
+    if (YETTY_IS_ERR(push_res)) {
+        ydebug("ydraw ingest: local rechrome aborted — paint-z scope: %s", push_res.error.msg);
+        yetty_ycore_error_destroy(push_res.error);
+        /* The rejected push still counted into the store's overflow
+         * bookkeeping — issue ITS matching pop, or the envelope's next
+         * wire PAINT_Z_END would consume the leaked overflow instead of
+         * closing its real scope (mis-stamping every record after it). */
+        struct yetty_ycore_void_result balance_res =
+            yetty_yvterm_vterm_rich_pop_paint_z(terminal->grid);
+        if (YETTY_IS_ERR(balance_res)) {
+            yetty_ycore_error_destroy(balance_res.error);
+        }
+        free(staged);
+        yetty_ydraw_drawable_list_destroy(chrome_list);
+        return 0;
+    }
+
+    /* COMMIT: exact-subtree replacement + staged appends (infallible by
+     * reservation; the defensive absorb below covers nothing reachable). */
+    struct yetty_ycore_uint32_result open_res =
+        yetty_yvterm_vterm_rich_group_open(terminal->grid, state->cursor_row, chrome_key);
+    if (YETTY_IS_ERR(open_res)) {
+        ydebug("ydraw ingest: local rechrome reopen failed: %s", open_res.error.msg);
+        yetty_ycore_error_destroy(open_res.error);
+        struct yetty_ycore_void_result unwind_res =
+            yetty_yvterm_vterm_rich_pop_paint_z(terminal->grid);
+        if (YETTY_IS_ERR(unwind_res)) {
+            yetty_ycore_error_destroy(unwind_res.error);
+        }
+        free(staged);
+        yetty_ydraw_drawable_list_destroy(chrome_list);
+        return 0;
+    }
+    int complete = 1;
+    for (uint32_t index = 0; index < staged_count; index++) {
+        const struct terminal_rechrome_staged_record *slot = &staged[index];
+        struct yetty_ycore_uint32_result append_res =
+            slot->extent_valid
+                ? yetty_yvterm_vterm_append_primitive_extent(
+                      terminal->grid, state->cursor_row, slot->words, slot->word_count,
+                      slot->extent_top_px, slot->extent_bottom_px)
+                : yetty_yvterm_vterm_append_primitive(terminal->grid, state->cursor_row,
+                                                      slot->words, slot->word_count);
+        if (YETTY_IS_ERR(append_res)) {
+            ydebug("ydraw ingest: local rechrome append failed: %s", append_res.error.msg);
+            yetty_ycore_error_destroy(append_res.error);
+            complete = 0;
+        }
+    }
+    struct yetty_ycore_void_result pop_res = yetty_yvterm_vterm_rich_pop_paint_z(terminal->grid);
+    if (YETTY_IS_ERR(pop_res)) {
+        yetty_ycore_error_destroy(pop_res.error);
+    }
+    struct yetty_ycore_void_result close_res = yetty_yvterm_vterm_rich_group_close(terminal->grid);
+    if (YETTY_IS_ERR(close_res)) {
+        yetty_ycore_error_destroy(close_res.error);
+    }
+    free(staged);
+    yetty_ydraw_drawable_list_destroy(chrome_list);
+    if (complete) {
+        ydebug("ydraw ingest: chrome group %u locally rebuilt (%u records, z=%d)",
+               target->chrome_group_id, staged_count, figure_paint_z);
+    }
+    return complete;
+}
+
+/* Remember a figure whose local chrome replacement failed transiently so
+ * the envelope-close sweep retries it. Deduplicated; a full queue falls
+ * back to the figure's own chrome_dirty retry-on-next-update. */
+static void terminal_rechrome_retry_queue(struct yetty_yterminal_terminal *terminal,
+                                          uint64_t update_key, uint64_t parent_scope)
+{
+    for (uint32_t index = 0; index < terminal->rechrome_retry_count; ++index) {
+        if (terminal->rechrome_retry[index].update_key == update_key) {
+            return;
+        }
+    }
+    uint32_t capacity = sizeof(terminal->rechrome_retry) / sizeof(terminal->rechrome_retry[0]);
+    if (terminal->rechrome_retry_count >= capacity) {
+        ydebug("ydraw ingest: rechrome retry queue full — figure keeps chrome_dirty");
+        return;
+    }
+    terminal->rechrome_retry[terminal->rechrome_retry_count].update_key = update_key;
+    terminal->rechrome_retry[terminal->rechrome_retry_count].parent_scope = parent_scope;
+    terminal->rechrome_retry_count++;
+}
+
+/* Envelope-close retry sweep: attempt every queued chrome replacement
+ * again. Entries drop on success, on a vanished/clean target, or stay
+ * queued for the next envelope — convergence no longer depends on the
+ * SAME figure receiving another update. */
+static void terminal_rechrome_retry_sweep(struct yetty_yterminal_terminal *terminal,
+                                          struct terminal_ydraw_ingest_state *state)
+{
+    uint32_t write_index = 0;
+    for (uint32_t index = 0; index < terminal->rechrome_retry_count; ++index) {
+        uint64_t update_key = terminal->rechrome_retry[index].update_key;
+        uint64_t parent_scope = terminal->rechrome_retry[index].parent_scope;
+        struct yetty_ydraw_complex *target = NULL;
+        struct yetty_ycore_void_result target_res =
+            yetty_yvterm_vterm_rich_update_target(terminal->grid, update_key, &target);
+        if (YETTY_IS_ERR(target_res)) {
+            yetty_ycore_error_destroy(target_res.error);
+            continue; /* binding gone — drop */
+        }
+        if (!target || !target->chrome_dirty || !target->ops->emit_chrome ||
+            target->chrome_group_id == 0u) {
+            continue; /* vanished or already clean — drop */
+        }
+        if (terminal_ydraw_local_rechrome(terminal, state, target, update_key, parent_scope)) {
+            target->chrome_dirty = 0;
+            continue; /* converged — drop */
+        }
+        terminal->rechrome_retry[write_index].update_key = update_key;
+        terminal->rechrome_retry[write_index].parent_scope = parent_scope;
+        write_index++;
+    }
+    terminal->rechrome_retry_count = write_index;
 }
 
 /* Route one CMD_UPDATE command to the live figure registered under its
@@ -1968,9 +2826,51 @@ static void terminal_ydraw_route_update(struct yetty_yterminal_terminal *termina
     if (update->size < sizeof(uint32_t)) {
         return; /* no target_field word — nothing to dispatch */
     }
-    struct yetty_ydraw_complex *target =
-        yetty_ydraw_stream_registry_find(&terminal->stream_targets, update->id);
+    /* Ancestor scope: an explicit CMD_PATH latch wins (absolute, any depth);
+     * otherwise the ambient open-group scope (root at top level). The wire
+     * id is the FINAL path component either way. */
+    uint64_t update_scope =
+        state->pending_path_valid ? state->pending_path_key : state->scope_keys[state->group_depth];
+    state->pending_path_valid = 0; /* consumed */
+    uint64_t update_key = yetty_yvterm_group_key_fold(update_scope, update->id);
+    struct yetty_ydraw_complex *target = NULL;
+    struct yetty_ycore_void_result target_res =
+        yetty_yvterm_vterm_rich_update_target(terminal->grid, update_key, &target);
+    if (YETTY_IS_ERR(target_res)) {
+        yetty_ycore_error_destroy(target_res.error);
+        return;
+    }
     if (!target || !target->ops || !target->ops->update) {
+        /* Not a complex — a GROUP node at this path receives a STATE-FIELD
+         * write instead (what update means depends on the node's kind). The
+         * only field today is the translation offset: [f32 x][f32 y],
+         * absolute. Anything unresolvable stays a graceful no-op. */
+        uint32_t state_field;
+        memcpy(&state_field, update->data, sizeof(state_field));
+        if (state_field == YETTY_YDRAW_GROUP_FIELD_CLIP &&
+            update->size >= sizeof(uint32_t) + 4u * sizeof(float)) {
+            float clip_rect[4];
+            memcpy(clip_rect, update->data + sizeof(uint32_t), sizeof(clip_rect));
+            struct yetty_ycore_void_result clip_res = yetty_yvterm_vterm_rich_group_clip_set(
+                terminal->grid, update_key, clip_rect[0], clip_rect[1], clip_rect[2], clip_rect[3]);
+            if (YETTY_IS_ERR(clip_res)) {
+                ydebug("ydraw ingest: group clip id=%u: %s", update->id, clip_res.error.msg);
+                yetty_ycore_error_destroy(clip_res.error);
+            }
+            return;
+        }
+        if (state_field == YETTY_YDRAW_GROUP_FIELD_OFFSET &&
+            update->size >= sizeof(uint32_t) + 2u * sizeof(float)) {
+            float offset_pair[2];
+            memcpy(offset_pair, update->data + sizeof(uint32_t), sizeof(offset_pair));
+            struct yetty_ycore_void_result offset_res = yetty_yvterm_vterm_rich_group_offset_set(
+                terminal->grid, update_key, offset_pair[0], offset_pair[1]);
+            if (YETTY_IS_ERR(offset_res)) {
+                ydebug("ydraw ingest: group offset id=%u: %s", update->id, offset_res.error.msg);
+                yetty_ycore_error_destroy(offset_res.error);
+            }
+            return;
+        }
         ydebug("ydraw ingest: CMD_UPDATE id=%u has no live updatable target", update->id);
         return;
     }
@@ -1981,6 +2881,109 @@ static void terminal_ydraw_route_update(struct yetty_yterminal_terminal *termina
     if (YETTY_IS_ERR(update_res)) {
         ydebug("ydraw ingest: CMD_UPDATE id=%u failed: %s", update->id, update_res.error.msg);
         yetty_ycore_error_destroy(update_res.error);
+        return;
+    }
+    /* Retain the accepted update so the figure re-materializes with it after
+     * hot-tier eviction (live-first budget — see the grid). The payload tail
+     * is journaled as whole words; a ragged byte tail cannot round-trip the
+     * word-aligned wire framing and is not journaled. */
+    uint32_t payload_bytes = update->size - (uint32_t)sizeof(uint32_t);
+    if ((payload_bytes % sizeof(uint32_t)) == 0u) {
+        struct yetty_ycore_void_result journal_res = yetty_yvterm_vterm_rich_update_journal(
+            terminal->grid, update_key, target_field,
+            (const uint32_t *)(update->data + sizeof(uint32_t)),
+            payload_bytes / (uint32_t)sizeof(uint32_t));
+        if (YETTY_IS_ERR(journal_res)) {
+            yetty_ycore_error_destroy(journal_res.error);
+        }
+    } else {
+        /* Ragged byte tail: applied live but not journalable — poison the
+         * record's journal so a PARTIAL history can never replay as if it
+         * were the complete current state. */
+        struct yetty_ycore_void_result poison_res =
+            yetty_yvterm_vterm_rich_update_journal_poison(terminal->grid, update_key);
+        if (YETTY_IS_ERR(poison_res)) {
+            yetty_ycore_error_destroy(poison_res.error);
+        }
+    }
+    /* Keep the retained scroll-retirement footprint in step with the
+     * runtime: a geometry/range op moves the drawable's effective AABB,
+     * and retirement (plus the ancestor group's subtree union) must
+     * judge what is actually drawn. The block's immutable row span never
+     * changes; a same-value write for data-only updates is harmless. */
+    if (isfinite(target->bounds.min.y) && isfinite(target->bounds.max.y) &&
+        target->bounds.max.y >= target->bounds.min.y) {
+        struct yetty_ycore_void_result extent_res = yetty_yvterm_vterm_rich_update_extent_refresh(
+            terminal->grid, update_key, target->bounds.min.y, target->bounds.max.y);
+        if (YETTY_IS_ERR(extent_res)) {
+            yetty_ycore_error_destroy(extent_res.error);
+        }
+    }
+    /* A geometry / axis-range op invalidated the figure's chrome layout:
+     * regenerate the chrome group LOCALLY from the figure's retained
+     * state. The wire carried only the tiny op — the labels never
+     * re-ship. chrome_dirty clears ONLY on a complete commit; a staged
+     * or partial failure keeps it set AND queues the figure for the
+     * envelope-close retry sweep — a figure that goes quiet after this
+     * one op still converges. */
+    if (target->chrome_dirty && target->ops->emit_chrome && target->chrome_group_id != 0u) {
+        if (terminal_ydraw_local_rechrome(terminal, state, target, update_key, update_scope)) {
+            target->chrome_dirty = 0;
+        } else {
+            terminal_rechrome_retry_queue(terminal, update_key, update_scope);
+        }
+    }
+}
+
+/* Route one CMD_DELETE to the grid's live group index. Unknown/sealed ids
+ * are logged and absorbed (fire-and-forget wire; a later ACK extension
+ * surfaces them). */
+static void terminal_ydraw_route_delete(struct yetty_yterminal_terminal *terminal,
+                                        struct terminal_ydraw_ingest_state *state, uint32_t id)
+{
+    state->ingested_records++;
+    uint64_t delete_scope =
+        state->pending_path_valid ? state->pending_path_key : state->scope_keys[state->group_depth];
+    state->pending_path_valid = 0; /* consumed */
+    uint64_t delete_key = yetty_yvterm_group_key_fold(delete_scope, id);
+    struct yetty_ycore_void_result delete_res =
+        yetty_yvterm_vterm_rich_group_delete(terminal->grid, delete_key);
+    if (YETTY_IS_ERR(delete_res)) {
+        ydebug("ydraw ingest: CMD_DELETE id=%u: %s", id, delete_res.error.msg);
+        yetty_ycore_error_destroy(delete_res.error);
+    }
+}
+
+/* Walk a nested GROUP body: records back to back, parsed with the same
+ * registry stride machinery the wire iterator uses. ADDs (and nested
+ * GROUPs, recursively through ingest_record) apply under the open group
+ * scope; DELETE/UPDATE route like top-level commands. Malformed tails are
+ * dropped from the first bad stride. */
+static void terminal_ydraw_walk_nested(struct yetty_yterminal_terminal *terminal,
+                                       struct terminal_ydraw_ingest_state *state,
+                                       const uint8_t *bytes, size_t byte_count)
+{
+    while (byte_count >= sizeof(uint32_t)) {
+        struct yetty_ydraw_command command;
+        struct yetty_ycore_size_result step = yetty_ydraw_drawable_command_parse(
+            terminal->ydraw_registry, bytes, (uint32_t)byte_count, &command);
+        if (YETTY_IS_ERR(step)) {
+            yetty_ycore_error_destroy(step.error);
+            return;
+        }
+        if (step.value == 0 || step.value > byte_count) {
+            return;
+        }
+        if (command.kind == YETTY_YDRAW_COMMAND_DELETE) {
+            terminal_ydraw_route_delete(terminal, state, command.id);
+        } else if (command.kind == YETTY_YDRAW_COMMAND_UPDATE) {
+            terminal_ydraw_route_update(terminal, state, &command.update);
+        } else if (command.kind == YETTY_YDRAW_COMMAND_ADD && command.entry.data &&
+                   command.entry.ops) {
+            terminal_ydraw_ingest_record(terminal, state, &command.entry, step.value);
+        }
+        bytes += step.value;
+        byte_count -= step.value;
     }
 }
 
@@ -1990,95 +2993,195 @@ static void terminal_ydraw_ingest_finish(struct yetty_yterminal_terminal *termin
     ydebug("ydraw ingest: %u records (%u complexes) bottom=%.0fpx ok=%d", state->ingested_records,
            state->ingested_complexes, state->content_bottom_px, ok);
 
+    /* Retry chrome replacements that failed transiently in an EARLIER
+     * envelope — every envelope boundary is a convergence point, not just
+     * the failed figure's own next update. */
+    if (terminal->rechrome_retry_count) {
+        terminal_rechrome_retry_sweep(terminal, state);
+    }
+
     /* Reserve vertical space for this envelope's content by advancing the
-     * libvterm cursor that many rows (newlines drive normal scrollback +
-     * rolling_row bookkeeping). Only the receiver knows the cell height, so this
-     * row count cannot be computed by the producer. */
+     * libvterm cursor (newlines drive normal scrollback + rolling_row
+     * bookkeeping). Only the receiver knows the cell height, so this row
+     * count cannot be computed by the producer. The bounds are checked here
+     * because both inputs are wire-controlled: content_bottom_px accumulates
+     * producer AABB floats (can be NaN/inf), and the declared span is an
+     * arbitrary u32 (clamped at parse, re-clamped here). */
     uint32_t reserve_rows = 0u;
-    if (ok && state->content_bottom_px > 0.0f && state->text_cell.height > 0) {
+    float reserve_bottom_px =
+        state->declared_span_px > 0.0f ? state->declared_span_px : state->content_bottom_px;
+    if (ok && state->new_content && state->text_cell.height > 0) {
+        if (!isfinite(reserve_bottom_px) || reserve_bottom_px < 0.0f) {
+            reserve_bottom_px = 0.0f;
+        }
+        /* The wire authors spans/extents in PRODUCER-LOGICAL pixels; the
+         * cell height is CURRENT framebuffer pixels — scale by the grid's
+         * committed rich density product (display density x structural
+         * cell zoom) BEFORE the row conversion, the same value the
+         * retirement math judges this content by (at scale 2 an unscaled
+         * RESERVE(300) would reserve about half the needed rows). */
+        reserve_bottom_px *= state->rich_density > 0.0f ? state->rich_density : 1.0f;
+        if (reserve_bottom_px > (float)TERMINAL_YDRAW_RESERVE_MAX_PX) {
+            reserve_bottom_px = (float)TERMINAL_YDRAW_RESERVE_MAX_PX;
+        }
+        /* Ceil the pixel bottom BEFORE the integer division — truncating
+         * first under-reserves fractional bounds (a 10.1px bottom on a 10px
+         * cell needs TWO rows), and fractional AABBs are normal for strokes
+         * and transformed geometry. */
         uint32_t cell_h = (uint32_t)state->text_cell.height;
-        reserve_rows = ((uint32_t)state->content_bottom_px + cell_h - 1u) / cell_h;
-        uint32_t remaining = reserve_rows;
-        char newlines[256];
-        memset(newlines, '\n', sizeof(newlines));
-        while (remaining > 0u) {
-            uint32_t chunk = remaining < sizeof(newlines) ? remaining : (uint32_t)sizeof(newlines);
-            struct yetty_ycore_void_result feed_res =
-                yetty_yvterm_vterm_feed(terminal->grid, newlines, chunk);
-            if (YETTY_IS_ERR(feed_res)) {
-                yetty_ycore_error_destroy(feed_res.error);
-                break;
+        uint32_t reserve_px = (uint32_t)ceilf(reserve_bottom_px);
+        reserve_rows = (reserve_px + cell_h - 1u) / cell_h;
+        if (reserve_rows == 0u) {
+            /* A successful provisional insertion with no visible extent (an
+             * empty addressable group, GROUP(7){}) still takes its minimum
+             * ONE-row placement — one row of surface, one cursor advance. */
+            reserve_rows = 1u;
+        }
+        if (reserve_rows > TERMINAL_YDRAW_RESERVE_MAX_ROWS) {
+            reserve_rows = TERMINAL_YDRAW_RESERVE_MAX_ROWS;
+        }
+        /* Declare the insertion's span BEFORE the advance: the advance can
+         * scroll, and the lifecycle paths (sealing, line recycling) must see
+         * the block's true coverage — with span still unset a full-height
+         * insertion would be sealed or destroyed during its own creation.
+         * The returned advance is clamped on the alternate screen (no
+         * history: the reserve must never scroll away its own content — the
+         * cursor stops on the last row instead of below the block). */
+        uint32_t advance_rows = reserve_rows;
+        struct yetty_ycore_uint32_result declare_res =
+            yetty_yvterm_vterm_rich_span_declare(terminal->grid, reserve_rows);
+        if (YETTY_IS_ERR(declare_res)) {
+            yetty_ycore_error_destroy(declare_res.error);
+        } else {
+            advance_rows = declare_res.value;
+        }
+        /* Chunked advance with handle re-homing: an advance deeper than the
+         * ring's history capacity must not recycle the line carrying the
+         * provisional block's handle before relocation. A FAILED advance
+         * (re-home allocation, tracking invariant) means the declared
+         * placement can no longer be realized — finalizing the full span
+         * against a partial advance would let later text start inside the
+         * claimed insertion, so the provisional insertion is ABORTED whole
+         * (command-local: previous content is untouched, this batch's new
+         * content is discarded). */
+        struct yetty_ycore_void_result advance_res =
+            yetty_yvterm_vterm_rich_reserve_advance(terminal->grid, advance_rows);
+        if (YETTY_IS_ERR(advance_res)) {
+            ydebug("ydraw ingest: reserve advance failed (%s) — aborting the insertion",
+                   advance_res.error.msg);
+            yetty_ycore_error_destroy(advance_res.error);
+            struct yetty_ycore_void_result abort_res =
+                yetty_yvterm_vterm_rich_batch_abort(terminal->grid);
+            if (YETTY_IS_ERR(abort_res)) {
+                yetty_ycore_error_destroy(abort_res.error);
             }
-            remaining -= chunk;
+            reserve_rows = 0u; /* nothing to finalize */
         }
     }
 
-    /* Re-home the just-ingested rich block (complexes + SDF records, attached on
-     * the top line during ingestion) onto its BOTTOM line, so the figure leaves
-     * the scrollback only when its lowest overlapping line is evicted — not its
-     * first. After the reserve newlines the cursor sits on the line just below
-     * the block, so the grid derives the block's bottom (cursor − 1) and top
-     * (cursor − reserve_rows) from reserve_rows. */
-    if (ok && reserve_rows > 0u) {
-        struct yetty_ycore_void_result relocate_res =
-            yetty_yvterm_vterm_relocate_rich_to_bottom(terminal->grid, reserve_rows);
-        if (YETTY_IS_ERR(relocate_res)) {
-            yetty_ycore_error_destroy(relocate_res.error);
-        }
+    /* Finalize the batch UNCONDITIONALLY: relocation re-homes a placed block
+     * onto its bottom-owner line (derived from its own timeline anchors, so
+     * a clamped advance cannot skew it) and, placement or not, closes the
+     * provisional insertion — the next envelope must start fresh. */
+    struct yetty_ycore_void_result relocate_res =
+        yetty_yvterm_vterm_relocate_rich_to_bottom(terminal->grid, reserve_rows);
+    if (YETTY_IS_ERR(relocate_res)) {
+        yetty_ycore_error_destroy(relocate_res.error);
+    }
+
+    /* Drop any paint-z scope left open by an unbalanced envelope, so it
+     * cannot bleed onto the next envelope's records. */
+    struct yetty_ycore_void_result reset_res =
+        yetty_yvterm_vterm_rich_reset_paint_z(terminal->grid);
+    if (YETTY_IS_ERR(reset_res)) {
+        yetty_ycore_error_destroy(reset_res.error);
     }
 }
 
-/* Ingest one YDRAW_BIN envelope into yvterm's own grid. Records are
- * streamed via the drawable iterator and anchored per line on the grid's
- * scroll ring — SDF shapes, text-drawable-lists (with wire-shipped
- * fonts), and complexes alike; whatever sits on a line scrolls
- * with the text for free. ycat/ypdf/markdown all flow through here. */
-static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
-    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+/* Apply one complete buffered YDRAW body — the wire-order, nontransactional
+ * batch of the contract (drawable-use-cases.md §4): commands execute in
+ * declared order through the shared record path (anonymous adds, GROUP
+ * scopes, DELETE/UPDATE routing); each insert is command-local (a replacing
+ * insert pre-scans its subtree against the target's row span before any
+ * mutation); a failed command never rolls back earlier ones. Framing trouble
+ * drops the malformed tail (the walk stops where no boundary is
+ * recoverable). Finalization runs AFTER the commands: one cursor advance by
+ * the batch's insertion row span, then the resulting scroll/sealing. */
+static struct yetty_ycore_void_result terminal_ydraw_apply_body(
+    struct yetty_yterminal_terminal *terminal, const uint8_t *bytes, size_t byte_count)
 {
     struct terminal_ydraw_ingest_state state;
     struct yetty_ycore_void_result begin_res = terminal_ydraw_ingest_begin(terminal, &state);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "terminal_ydraw_consume_bin: begin");
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "terminal_ydraw_apply_body: begin");
+    terminal_ydraw_walk_nested(terminal, &state, bytes, byte_count);
+    terminal_ydraw_ingest_finish(terminal, &state, 1);
+    return YETTY_OK_VOID();
+}
 
-    struct yetty_ydraw_drawable_iterator iter = {0};
-    struct yetty_ycore_void_result init_res =
-        yetty_ydraw_drawable_iterator_init(&iter, sm, terminal->ydraw_registry);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, init_res, "terminal_ydraw: iterator init");
-
-    struct yetty_ycore_void_result result = YETTY_OK_VOID();
-    for (;;) {
-        struct yetty_ydraw_drawable_iterator_status_result step =
-            yetty_ydraw_drawable_iterator_next(&iter);
-        if (YETTY_IS_ERR(step)) {
-            result = YETTY_ERR(yetty_ycore_void, "terminal_ydraw: iterator next", step);
-            break;
-        }
-        if (step.value == YETTY_YDRAW_ITERATOR_EOE) {
-            break;
-        }
-        if (step.value == YETTY_YDRAW_ITERATOR_OK &&
-            iter.command.kind == YETTY_YDRAW_COMMAND_UPDATE) {
-            terminal_ydraw_route_update(terminal, &state, &iter.command.update);
-            continue;
-        }
-        if (step.value != YETTY_YDRAW_ITERATOR_OK || iter.command.kind != YETTY_YDRAW_COMMAND_ADD) {
-            continue; /* DELETE not modelled yet — skip cleanly */
-        }
-        if (!iter.command.entry.data || !iter.command.entry.ops || !iter.command.entry.ops->size) {
-            continue;
-        }
-        struct yetty_ycore_size_result size_res =
-            iter.command.entry.ops->size(iter.command.entry.data);
-        if (YETTY_IS_ERR(size_res)) {
-            yetty_ycore_error_destroy(size_res.error);
-            continue;
-        }
-        terminal_ydraw_ingest_record(terminal, &state, &iter.command.entry, size_res.value);
+/* Ingest one YDRAW_BIN envelope into yvterm's own grid: the whole decoded
+ * body is buffered, structurally validated, then applied — SDF shapes,
+ * text-drawable-lists (with wire-shipped fonts), complexes, and the
+ * GROUP/DELETE/UPDATE commands alike. ycat/ypdf/markdown flow through
+ * here. The leading 24-byte serialized-envelope header (shared with the
+ * in-process MIME path) is skipped when present. */
+static struct yetty_ycore_void_result terminal_ydraw_consume_bin(
+    struct yetty_yterminal_terminal *terminal, struct yetty_ywire_wire_statemachine *sm)
+{
+    enum { YDRAW_BODY_INITIAL_CAPACITY = 64u * 1024u, YDRAW_SERIALIZED_HEADER_BYTES = 24 };
+    /* Hard ceiling on one buffered envelope: a child emitting an unbounded
+     * or unterminated rich DCS stream must not exhaust terminal memory. */
+    const size_t YDRAW_BODY_MAX_BYTES = 256u * 1024u * 1024u;
+    size_t capacity = YDRAW_BODY_INITIAL_CAPACITY;
+    size_t length = 0;
+    uint8_t *buffer = malloc(capacity);
+    if (!buffer) {
+        return YETTY_ERR(yetty_ycore_void, "terminal_ydraw: body buffer alloc");
     }
-
-    yetty_ydraw_drawable_iterator_destroy(&iter);
-    terminal_ydraw_ingest_finish(terminal, &state, YETTY_IS_OK(result));
-    return result;
+    for (;;) {
+        if (length == capacity) {
+            if (capacity >= YDRAW_BODY_MAX_BYTES) {
+                free(buffer);
+                return YETTY_ERR(yetty_ycore_void, "terminal_ydraw: envelope exceeds the body cap");
+            }
+            size_t new_capacity = capacity * 2u;
+            uint8_t *grown = realloc(buffer, new_capacity);
+            if (!grown) {
+                free(buffer);
+                return YETTY_ERR(yetty_ycore_void, "terminal_ydraw: body buffer grow");
+            }
+            buffer = grown;
+            capacity = new_capacity;
+        }
+        struct yetty_ycore_size_result read_res =
+            yetty_ywire_wire_statemachine_read(sm, buffer + length, capacity - length);
+        if (YETTY_IS_ERR(read_res)) {
+            free(buffer);
+            return YETTY_ERR(yetty_ycore_void, "terminal_ydraw: body read", read_res);
+        }
+        if (read_res.value == 0) {
+            break; /* envelope end */
+        }
+        length += read_res.value;
+    }
+    const uint8_t *body = buffer;
+    size_t body_length = length;
+    if (length >= YDRAW_SERIALIZED_HEADER_BYTES) {
+        uint32_t magic = 0;
+        memcpy(&magic, buffer, sizeof(magic));
+        if (magic == 0x31425059u /* 'YPB1' */) {
+            uint32_t declared = 0;
+            memcpy(&declared, buffer + 20, sizeof(declared));
+            body = buffer + YDRAW_SERIALIZED_HEADER_BYTES;
+            body_length = length - YDRAW_SERIALIZED_HEADER_BYTES;
+            if (declared < body_length) {
+                body_length = declared;
+            }
+        }
+    }
+    struct yetty_ycore_void_result apply_res =
+        terminal_ydraw_apply_body(terminal, body, body_length);
+    free(buffer);
+    return apply_res;
 }
 
 /* Ingest a serialized drawable-list blob already sitting in memory — the
@@ -2107,34 +3210,260 @@ struct yetty_ycore_void_result yetty_yterminal_mime_ingest_serialized(
     if (byte_count < body_len) {
         body_len = byte_count;
     }
-    const uint8_t *cursor = bytes + SERIALIZED_HEADER_BYTES;
+    /* One shared buffered path with the wire ingest: validate the complete
+     * body, then apply. */
+    return terminal_ydraw_apply_body(terminal, bytes + SERIALIZED_HEADER_BYTES, body_len);
+}
 
-    struct terminal_ydraw_ingest_state state;
-    struct yetty_ycore_void_result begin_res = terminal_ydraw_ingest_begin(terminal, &state);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, begin_res, "mime ingest: begin");
+/*===========================================================================
+ * Headless ingest harness (#728) — the producer→terminal acceptance seam.
+ *
+ * A terminal slice with ONLY the ydraw ingest surface wired: the content
+ * grid figure (CPU model — GPU init is a guarded no-op without a
+ * runtime), the default drawable-list registry, and an EMPTY complex
+ * factory registry the test populates with its own instrumented concrete
+ * factory. No PTY, no event loop, no fonts, no wire statemachine.
+ *
+ * Tests feed the EXACT serialized envelope bytes a producer ships
+ * (yetty_ydraw_drawable_list_serialize output — what ygui2's
+ * framework_ship encodes into the DCS payload) through
+ * yetty_yterminal_mime_ingest_serialized(), which runs the SAME
+ * terminal_ydraw_apply_body pipeline as the PTY wire path: record walk,
+ * scope folding, NODE_ID binding, CMD_PATH'd update routing, journal,
+ * extent refresh and receiver-local chrome replacement.
+ *=========================================================================*/
 
-    struct yetty_ycore_void_result result = YETTY_OK_VOID();
-    while (body_len >= sizeof(uint32_t)) {
-        struct yetty_ydraw_command command;
-        struct yetty_ycore_size_result step = yetty_ydraw_drawable_command_parse(
-            terminal->ydraw_registry, cursor, (uint32_t)body_len, &command);
-        if (YETTY_IS_ERR(step)) {
-            result = YETTY_ERR(yetty_ycore_void, "mime ingest: command parse", step);
-            break;
+struct yetty_yterminal_terminal_result yetty_yterminal_ingest_harness_open(uint32_t cols,
+                                                                           uint32_t rows)
+{
+    struct yetty_yclass_ctx terminal_ctx = {0};
+    struct yetty_yclass_object_ptr_result object_res =
+        yetty_yterminal_terminal_create(&terminal_ctx);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, object_res, "ingest harness: terminal object");
+    struct yetty_yclass_object *terminal_object = object_res.value;
+    struct yetty_yterminal_terminal_ptr_result terminal_res =
+        yetty_yterminal_terminal_from(terminal_object);
+    if (YETTY_IS_ERR(terminal_res)) {
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(terminal_object);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
         }
-        if (step.value == 0 || step.value > body_len) {
-            result = YETTY_ERR(yetty_ycore_void, "mime ingest: bad command stride");
-            break;
-        }
-        if (command.kind == YETTY_YDRAW_COMMAND_ADD && command.entry.data && command.entry.ops) {
-            terminal_ydraw_ingest_record(terminal, &state, &command.entry, step.value);
-        }
-        cursor += step.value;
-        body_len -= step.value;
+        return YETTY_ERR(yetty_yterminal_terminal, "ingest harness: from_obj", terminal_res);
     }
+    struct yetty_yterminal_terminal *terminal = terminal_res.value;
+    /* The view vtable and emit yface, as terminal_open installs them —
+     * the zoom/resize contract test dispatches REAL view events at the
+     * harness and captures the resulting host→client envelopes. */
+    terminal->view.ops = &terminal_view_ops;
+    terminal->view.id = yetty_yui_view_next_id();
+    struct yetty_yface_ptr_result yface_res = yetty_yface_create();
+    if (YETTY_IS_ERR(yface_res)) {
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(terminal_object);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        return YETTY_ERR(yetty_yterminal_terminal, "ingest harness: emit yface", yface_res);
+    }
+    terminal->emit_yface = yface_res.value;
+    terminal->cols = cols;
+    terminal->rows = rows;
+    terminal->layout_content_scale = 1.0f;
 
-    terminal_ydraw_ingest_finish(terminal, &state, YETTY_IS_OK(result));
-    return result;
+    struct yetty_ydraw_drawable_list_registry_ptr_result registry_res =
+        yetty_ydraw_drawable_list_registry_create_default();
+    if (YETTY_IS_ERR(registry_res)) {
+        struct yetty_ycore_void_result yface_destroy_res =
+            yetty_yface_destroy(terminal->emit_yface);
+        if (YETTY_IS_ERR(yface_destroy_res)) {
+            yetty_ycore_error_destroy(yface_destroy_res.error);
+        }
+        terminal->emit_yface = NULL;
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(terminal_object);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        return YETTY_ERR(yetty_yterminal_terminal, "ingest harness: registry", registry_res);
+    }
+    terminal->ydraw_registry = registry_res.value;
+
+    struct yetty_ydraw_complex_factory_ptr_result factory_res =
+        yetty_ydraw_complex_factory_create(NULL, NULL, (WGPUTextureFormat)0, NULL, NULL);
+    if (YETTY_IS_ERR(factory_res)) {
+        struct yetty_ycore_void_result yface_destroy_res =
+            yetty_yface_destroy(terminal->emit_yface);
+        if (YETTY_IS_ERR(yface_destroy_res)) {
+            yetty_ycore_error_destroy(yface_destroy_res.error);
+        }
+        terminal->emit_yface = NULL;
+        yetty_ydraw_drawable_list_registry_destroy(terminal->ydraw_registry);
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(terminal_object);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        return YETTY_ERR(yetty_yterminal_terminal, "ingest harness: complex factory", factory_res);
+    }
+    terminal->complex_factory = factory_res.value;
+
+    /* The CPU content model: GPU init inside is a guarded no-op with a
+     * NULL context; the figure exists as the ingest target. The terminal
+     * object itself is the sink host, as in the real wiring. */
+    struct yetty_yclass_object_ptr_result grid_res =
+        yetty_yvterm_vterm_figure_create(cols, rows, NULL, terminal_object);
+    if (YETTY_IS_ERR(grid_res)) {
+        struct yetty_ycore_void_result yface_destroy_res =
+            yetty_yface_destroy(terminal->emit_yface);
+        if (YETTY_IS_ERR(yface_destroy_res)) {
+            yetty_ycore_error_destroy(yface_destroy_res.error);
+        }
+        terminal->emit_yface = NULL;
+        yetty_ydraw_complex_factory_destroy(terminal->complex_factory);
+        yetty_ydraw_drawable_list_registry_destroy(terminal->ydraw_registry);
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(terminal_object);
+        if (YETTY_IS_ERR(free_res)) {
+            yetty_ycore_error_destroy(free_res.error);
+        }
+        return YETTY_ERR(yetty_yterminal_terminal, "ingest harness: grid figure", grid_res);
+    }
+    terminal->grid = grid_res.value;
+    return YETTY_OK(yetty_yterminal_terminal, terminal);
+}
+
+/* The harness's complex-factory registry — the test registers its
+ * instrumented concrete factory here before feeding envelopes. */
+struct yetty_ydraw_complex_factory *yetty_yterminal_ingest_harness_factory(
+    struct yetty_yterminal_terminal *terminal)
+{
+    return terminal ? terminal->complex_factory : NULL;
+}
+
+/* The harness's content grid figure (yvterm:vterm object) — the
+ * assertion surface; its composed model is reachable through
+ * yetty_yvterm_vterm_grid_object(). Borrowed. */
+struct yetty_yclass_object *yetty_yterminal_ingest_harness_grid(
+    struct yetty_yterminal_terminal *terminal)
+{
+    return terminal ? terminal->grid : NULL;
+}
+
+/* Subscribe the harness terminal to the pane-wide resize family — what a
+ * real client's CLIENT_INPUT_SUB envelope with the RESIZE bit latches.
+ * The zoom/geometry regression drives the production view-event path and
+ * captures the resulting envelope through the harness PTY below. */
+struct yetty_ycore_void_result yetty_yterminal_ingest_harness_subscribe_pane(
+    struct yetty_yterminal_terminal *terminal)
+{
+    if (!terminal) {
+        return YETTY_ERR(yetty_ycore_void, "ingest harness subscribe: NULL terminal");
+    }
+    terminal->resize_subscribed = 1;
+    return YETTY_OK_VOID();
+}
+
+/* Install a (test-owned, borrowed) PTY backend on the harness terminal —
+ * the capture point for host→client OSC envelopes (resize) and the
+ * resize sink the zoom path drives. The caller keeps ownership and must
+ * outlive the harness. */
+struct yetty_ycore_void_result yetty_yterminal_ingest_harness_set_pty(
+    struct yetty_yterminal_terminal *terminal, struct yetty_platform_pty *pty)
+{
+    if (!terminal) {
+        return YETTY_ERR(yetty_ycore_void, "ingest harness set_pty: NULL terminal");
+    }
+    terminal->context.pty = pty;
+    return YETTY_OK_VOID();
+}
+
+/* Set the harness's committed content scale (HiDPI density): both halves
+ * of the unit rule together — the terminal's layout scale and the grid's
+ * rich density product (reserve/span conversion AND per-node retirement
+ * read the latter). Producer envelopes stay logical; the receiver
+ * converts. The harness's cell metrics are FIXED (no font re-derive), so
+ * the product is set to the bare density — the production transition
+ * (yetty_yvterm_vterm_set_content_scale) instead rebases the structural
+ * baseline because its cells rescale in the same geometry pass. */
+struct yetty_ycore_void_result yetty_yterminal_ingest_harness_set_scale(
+    struct yetty_yterminal_terminal *terminal, float content_scale)
+{
+    if (!terminal) {
+        return YETTY_ERR(yetty_ycore_void, "ingest harness set_scale: NULL terminal");
+    }
+    if (!(isfinite(content_scale) && content_scale > 0.0f)) {
+        return YETTY_ERR(yetty_ycore_void, "ingest harness set_scale: must be positive finite");
+    }
+    terminal->layout_content_scale = content_scale;
+    if (terminal->grid) {
+        struct yetty_yclass_object_ptr_result grid_obj_res =
+            yetty_yvterm_vterm_grid_object(terminal->grid);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, grid_obj_res, "ingest harness set_scale: grid");
+        struct yetty_ycore_void_result density_res =
+            yetty_yvterm_grid_set_rich_density(grid_obj_res.value, content_scale);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, density_res, "ingest harness set_scale: density");
+    }
+    return YETTY_OK_VOID();
+}
+
+struct yetty_ycore_void_result yetty_yterminal_ingest_harness_close(
+    struct yetty_yterminal_terminal *terminal)
+{
+    if (!terminal) {
+        return YETTY_ERR(yetty_ycore_void, "ingest harness close: NULL terminal");
+    }
+    /* Best-effort teardown, mirroring terminal_destroy's ordering: the
+     * grid figure first (it owns runtimes minted by the factory), then
+     * the factory, then the registry (OWNED here, unlike the borrowed
+     * framework instance the real terminal uses). */
+    struct yetty_ycore_void_result first_err = YETTY_OK_VOID();
+    bool have_err = false;
+    if (terminal->grid) {
+        struct yetty_ycore_void_result grid_destroy_res = yetty_yfigure_destroy(terminal->grid);
+        if (YETTY_IS_ERR(grid_destroy_res)) {
+            first_err = grid_destroy_res;
+            have_err = true;
+        }
+        terminal->grid = NULL;
+    }
+    if (terminal->complex_factory) {
+        yetty_ydraw_complex_factory_destroy(terminal->complex_factory);
+        terminal->complex_factory = NULL;
+    }
+    if (terminal->ydraw_registry) {
+        yetty_ydraw_drawable_list_registry_destroy(terminal->ydraw_registry);
+        terminal->ydraw_registry = NULL;
+    }
+    if (terminal->emit_yface) {
+        struct yetty_ycore_void_result yface_destroy_res =
+            yetty_yface_destroy(terminal->emit_yface);
+        terminal->emit_yface = NULL;
+        if (YETTY_IS_ERR(yface_destroy_res)) {
+            if (!have_err) {
+                first_err = yface_destroy_res;
+                have_err = true;
+            } else {
+                yetty_ycore_error_destroy(yface_destroy_res.error);
+            }
+        }
+    }
+    struct yetty_yclass_object_ptr_result object_res = yetty_yterminal_terminal_to(terminal);
+    if (YETTY_IS_OK(object_res)) {
+        struct yetty_ycore_void_result free_res = yetty_yclass_object_free(object_res.value);
+        if (YETTY_IS_ERR(free_res)) {
+            if (!have_err) {
+                first_err = free_res;
+                have_err = true;
+            } else {
+                yetty_ycore_error_destroy(free_res.error);
+            }
+        }
+    } else if (!have_err) {
+        first_err = (struct yetty_ycore_void_result){.ok = 0, .error = object_res.error};
+        have_err = true;
+    } else {
+        yetty_ycore_error_destroy(object_res.error);
+    }
+    if (have_err) {
+        return YETTY_ERR(yetty_ycore_void, "ingest harness close", first_err);
+    }
+    return YETTY_OK_VOID();
 }
 
 struct yetty_yterminal_mime_env yetty_yterminal_mime_env_get(
@@ -3074,6 +4403,15 @@ struct yetty_yterminal_terminal_result yetty_yterminal_terminal_open(
     YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, clear_hook_res,
                         "terminal_create: set clear hook failed");
 
+    /* On a terminal reset (RIS via `reset`, or DECSTR) drop the client-input
+     * subscriptions the way libvterm drops its DEC mouse modes — otherwise a
+     * client that died without unsubscribing leaves the pane spraying mouse
+     * envelopes at the shell with no user-reachable cure. */
+    struct yetty_ycore_void_result reset_hook_res = yetty_yvterm_vterm_set_reset_hook(
+        terminal->grid, terminal_reset_subscriptions_callback, terminal);
+    YETTY_RETURN_IF_ERR(yetty_yterminal_terminal, reset_hook_res,
+                        "terminal_create: set reset hook failed");
+
     /* Figure re-materialization for the tiered scroll buffer: lines aging past
      * the scrollback hot window lose their figure runtimes but keep the
      * creating wire envelopes; this hook replays an envelope through the
@@ -3637,6 +4975,19 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
                 terminal->zoom_base_cell.height *= density_ratio;
             }
             terminal->layout_content_scale = live_scale;
+            /* The retained side transitions ATOMICALLY with the layout
+             * scale: renderer density + grid rich density move together
+             * and the structural-zoom baseline rebases, so retained
+             * logical content neither mis-retires nor misclassifies the
+             * density-driven cell growth as cell zoom. */
+            if (terminal->grid) {
+                struct yetty_ycore_void_result scale_res =
+                    yetty_yvterm_vterm_set_content_scale(terminal->grid, live_scale);
+                if (YETTY_IS_ERR(scale_res)) {
+                    ywarn("terminal: density transition: %s", scale_res.error.msg);
+                    yetty_ycore_error_destroy(scale_res.error);
+                }
+            }
         }
     }
 
@@ -3690,10 +5041,18 @@ static struct yetty_ycore_void_result terminal_apply_pane_geometry(
      * place its overlay in the reserved band — it needs the whole pane, not
      * the inset content rect. Telnet/guest clients have no TIOCGWINSZ pixels,
      * so this OSC is their only resize signal. Best-effort (drop the error). */
-    if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed ||
-        terminal->resize_subscribed) {
+    if (terminal->mouse_move_subscribed || terminal->mouse_click_subscribed) {
+        /* DEC figure path: figure-tagged envelope. */
         struct yetty_ycore_void_result er =
             terminal_emit_card_resize(terminal, terminal->focused_figure_id, pane_w, pane_h);
+        if (YETTY_IS_ERR(er)) {
+            yetty_ycore_error_destroy(er.error);
+        }
+    }
+    if (terminal->resize_subscribed || terminal->pane_mouse_click_subscribed ||
+        terminal->pane_mouse_move_subscribed || terminal->pane_mouse_wheel_subscribed) {
+        /* Pane-wide subscription: pane-wide envelope. */
+        struct yetty_ycore_void_result er = terminal_emit_pane_resize(terminal, pane_w, pane_h);
         if (YETTY_IS_ERR(er)) {
             yetty_ycore_error_destroy(er.error);
         }
@@ -4092,17 +5451,33 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 (float)new_rows * cell_h_target);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, content_rect_res,
                                 "terminal_view_on_event: zoom content rect");
-            if (terminal->context.pty->ops->resize) {
-                struct yetty_ycore_void_result pr = terminal->context.pty->ops->resize(
-                    terminal->context.pty, new_cols, new_rows, new_cols * (uint32_t)new_cell.width,
-                    new_rows * (uint32_t)new_cell.height);
-                YETTY_RETURN_IF_ERR(yetty_ycore_int, pr,
-                                    "terminal_view_on_event: pty resize (zoom) failed");
+            /* NO second PTY resize here: terminal_resize_grid above owns
+             * that operation (one TIOCSWINSZ/SIGWINCH, one NAWS, one peer
+             * callback per transition), and a redundant call was also a
+             * second failure point BETWEEN the committed rich scale and
+             * the client envelope below — failing there stranded ygui2
+             * on its old viewport and input divisor. */
+            /* The committed rich projection JUST changed — publish it to
+             * the pane-wide subscription set (same set the ordinary
+             * geometry path serves) in the SAME transition: an attached
+             * drawable-tree client must reflow to the new logical
+             * viewport the moment its retained content starts rendering
+             * at the new scale, or it magnifies/clips with a stale input
+             * divisor instead of reflowing. */
+            if (terminal->resize_subscribed || terminal->pane_mouse_click_subscribed ||
+                terminal->pane_mouse_move_subscribed || terminal->pane_mouse_wheel_subscribed) {
+                struct yetty_ycore_void_result er =
+                    terminal_emit_pane_resize(terminal, view_w, view_h);
+                if (YETTY_IS_ERR(er)) {
+                    yetty_ycore_error_destroy(er.error);
+                }
             }
         }
 
-        terminal->context.yetty_context.event_loop->ops->request_render(
-            terminal->context.yetty_context.event_loop);
+        if (terminal->context.yetty_context.event_loop) {
+            terminal->context.yetty_context.event_loop->ops->request_render(
+                terminal->context.yetty_context.event_loop);
+        }
         return YETTY_OK(yetty_ycore_int, 1);
     }
 
@@ -4202,8 +5577,9 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         float ly_sel = event->mouse.y - view->bounds.y;
         int in_bounds = !(lx_sel < 0.0f || ly_sel < 0.0f || lx_sel >= view->bounds.w ||
                           ly_sel >= view->bounds.h);
-        int term_owns_click =
-            !terminal->mouse_click_subscribed && !terminal_scrollback_is_active(terminal);
+        int term_owns_click = !terminal->mouse_click_subscribed &&
+                              !terminal->pane_mouse_click_subscribed &&
+                              !terminal_scrollback_is_active(terminal);
 
         /* X-Windows-style middle-click paste. Button 2 press inside the
          * pane, when no subscriber owns the click, pulls the current
@@ -4331,21 +5707,66 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             }
         }
 
-        if (!terminal->mouse_click_subscribed) {
+        if (!terminal->mouse_click_subscribed && !terminal->pane_mouse_click_subscribed) {
             return YETTY_OK(yetty_ycore_int, 0);
         }
         float lx = event->mouse.x - view->bounds.x;
         float ly = event->mouse.y - view->bounds.y;
-        if (lx < 0.0f || ly < 0.0f || lx >= view->bounds.w || ly >= view->bounds.h) {
-            return YETTY_OK(yetty_ycore_int, 0);
-        }
+        int click_in_bounds =
+            !(lx < 0.0f || ly < 0.0f || lx >= view->bounds.w || ly >= view->bounds.h);
         int btn = event->mouse.button;
         int press = (event->type == YETTY_YCORE_MOUSE_DOWN) ? 1 : 0;
+        if (press && !click_in_bounds) {
+            return YETTY_OK(yetty_ycore_int, 0); /* capture never starts outside */
+        }
+        int capture_held = terminal->mouse_buttons_held != 0;
         if (press) {
             terminal->mouse_buttons_held |= (1 << btn);
         } else {
             terminal->mouse_buttons_held &= ~(1 << btn);
         }
+        int release_ends_capture = !press && terminal->mouse_buttons_held == 0;
+
+        /* CAPTURED events (any button already held) route to the OWNER
+         * recorded at the starting press — in or out of bounds — so a
+         * figure keeps its release beyond the pane edge and a pane
+         * background drag cannot switch to a figure it crosses. */
+        if (capture_held && terminal->mouse_capture_figure_id != 0 &&
+            terminal->mouse_click_subscribed) {
+            struct yetty_yfigure_hit_result hit_res = terminal_resolve_figure_hit(
+                terminal, event->mouse.x, event->mouse.y, terminal->mouse_capture_figure_id);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                "terminal_view_on_event: resolve hit (captured button)");
+            struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
+                terminal, terminal->mouse_capture_figure_id, hit_res.value.local_x,
+                hit_res.value.local_y, btn, press, 0.0f, event->mouse.mods);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                "terminal_view_on_event: emit captured figure button failed");
+            if (release_ends_capture) {
+                terminal->mouse_capture_figure_id = 0;
+                terminal->mouse_capture_pane = 0;
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        if (capture_held && terminal->mouse_capture_pane && terminal->pane_mouse_click_subscribed) {
+            struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
+                terminal, 0u, lx, ly, btn, press, 0.0f, event->mouse.mods);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                "terminal_view_on_event: emit captured pane button failed");
+            if (release_ends_capture) {
+                terminal->mouse_capture_figure_id = 0;
+                terminal->mouse_capture_pane = 0;
+            }
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        if (release_ends_capture) {
+            terminal->mouse_capture_figure_id = 0;
+            terminal->mouse_capture_pane = 0;
+        }
+        if (!click_in_bounds) {
+            return YETTY_OK(yetty_ycore_int, 0); /* unowned out-of-bounds event */
+        }
+        uint32_t owning_figure_id = 0;
 
         /* Figure-aware path. Focus tracking is click-only: a press
          * updates focused_figure_id (and emits an SC_FOCUS transition
@@ -4390,12 +5811,31 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                 hit = hit_res.value;
             }
             if (hit.figure_id != 0) {
+                owning_figure_id = hit.figure_id;
                 struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
                     terminal, hit.figure_id, hit.local_x, hit.local_y, btn, press, 0.0f,
                     event->mouse.mods);
                 YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
                                     "terminal_view_on_event: emit_card_mouse_button failed");
             }
+        }
+
+        /* Pane-wide fallback: no yscene figure owns the click and the client
+         * subscribed pane mouse — a drawable-tree surface has no figures, so
+         * this is its only click path. Pane-local pixels, figure_id 0. */
+        int pane_owns_click = 0;
+        if (owning_figure_id == 0 && terminal->pane_mouse_click_subscribed) {
+            pane_owns_click = 1;
+            struct yetty_ycore_void_result mouse_res = terminal_emit_card_mouse_button(
+                terminal, 0u, lx, ly, btn, press, 0.0f, event->mouse.mods);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, mouse_res,
+                                "terminal_view_on_event: emit pane mouse_button failed");
+        }
+
+        /* A press that STARTED capture records its owner for the drag. */
+        if (press && !capture_held) {
+            terminal->mouse_capture_figure_id = owning_figure_id;
+            terminal->mouse_capture_pane = owning_figure_id == 0 && pane_owns_click;
         }
 
         return YETTY_OK(yetty_ycore_int, 1);
@@ -4442,29 +5882,67 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
             return YETTY_OK(yetty_ycore_int, 1);
         }
 
-        if (!terminal->mouse_move_subscribed) {
+        if (!terminal->mouse_move_subscribed && !terminal->pane_mouse_move_subscribed) {
             return YETTY_OK(yetty_ycore_int, 0);
         }
         float lx = event->mouse.x - view->bounds.x;
         float ly = event->mouse.y - view->bounds.y;
-        if (lx < 0.0f || ly < 0.0f || lx >= view->bounds.w || ly >= view->bounds.h) {
-            return YETTY_OK(yetty_ycore_int, 0);
+        int move_in_bounds =
+            !(lx < 0.0f || ly < 0.0f || lx >= view->bounds.w || ly >= view->bounds.h);
+
+        /* CAPTURED motion routes to the drag's recorded OWNER, in or out of
+         * bounds (desktop drag semantics) — never re-hit-tested, so a pane
+         * background drag cannot hand itself to a figure it crosses. */
+        if (terminal->mouse_buttons_held && terminal->mouse_capture_figure_id != 0 &&
+            terminal->mouse_move_subscribed) {
+            struct yetty_yfigure_hit_result hit_res = terminal_resolve_figure_hit(
+                terminal, event->mouse.x, event->mouse.y, terminal->mouse_capture_figure_id);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                "terminal_view_on_event: resolve hit (captured move)");
+            struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
+                terminal, terminal->mouse_capture_figure_id, hit_res.value.local_x,
+                hit_res.value.local_y, terminal->mouse_buttons_held);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                "terminal_view_on_event: emit captured figure move failed");
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        if (terminal->mouse_buttons_held && terminal->mouse_capture_pane &&
+            terminal->pane_mouse_move_subscribed) {
+            struct yetty_ycore_void_result mr =
+                terminal_emit_card_mouse_move(terminal, 0u, lx, ly, terminal->mouse_buttons_held);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                "terminal_view_on_event: emit captured pane move failed");
+            return YETTY_OK(yetty_ycore_int, 1);
+        }
+        if (!move_in_bounds) {
+            return YETTY_OK(yetty_ycore_int, 0); /* unowned out-of-bounds motion */
         }
 
-        /* Figure-aware path. Drag = mouse held while moving; route the
-         * captured figure (the one focused at button-down). Window coords
-         * (not pane-local) for the same reason as the MOUSE_DOWN handler
-         * above — figure rects carry viewport_offset already. */
-        uint32_t captured = terminal->mouse_buttons_held ? terminal->focused_figure_id : 0u;
-        struct yetty_yfigure_hit_result hit_res =
-            terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, captured);
-        YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res, "terminal_view_on_event: resolve hit (move)");
-        struct yetty_yfigure_hit hit = hit_res.value;
-        if (hit.figure_id != 0) {
-            struct yetty_ycore_void_result mr = terminal_emit_card_mouse_move(
-                terminal, hit.figure_id, hit.local_x, hit.local_y, terminal->mouse_buttons_held);
+        /* Hover (no capture). Figure hit first, then the pane fallback. */
+        uint32_t move_owner_figure_id = 0;
+        if (terminal->mouse_move_subscribed) {
+            struct yetty_yfigure_hit_result hit_res =
+                terminal_resolve_figure_hit(terminal, event->mouse.x, event->mouse.y, 0);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, hit_res,
+                                "terminal_view_on_event: resolve hit (move)");
+            struct yetty_yfigure_hit hit = hit_res.value;
+            if (hit.figure_id != 0) {
+                move_owner_figure_id = hit.figure_id;
+                struct yetty_ycore_void_result mr =
+                    terminal_emit_card_mouse_move(terminal, hit.figure_id, hit.local_x, hit.local_y,
+                                                  terminal->mouse_buttons_held);
+                YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                    "terminal_view_on_event: emit_card_mouse_move failed");
+            }
+        }
+
+        /* Pane-wide fallback (see MOUSE_DOWN): unowned motion goes to a
+         * pane-subscribed client with pane-local pixels. */
+        if (move_owner_figure_id == 0 && terminal->pane_mouse_move_subscribed) {
+            struct yetty_ycore_void_result mr =
+                terminal_emit_card_mouse_move(terminal, 0u, lx, ly, terminal->mouse_buttons_held);
             YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
-                                "terminal_view_on_event: emit_card_mouse_move failed");
+                                "terminal_view_on_event: emit pane mouse_move failed");
         }
 
         return YETTY_OK(yetty_ycore_int, 1);
@@ -4483,8 +5961,10 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
         }
 
         /* Once in scrollback view, wheel always drives history. Otherwise
-         * if a figure is under the cursor, the wheel goes outbound; else
-         * scrollback. */
+         * if a figure is under the cursor, the wheel goes outbound; else a
+         * pane-wide wheel subscription claims it (a fullscreen drawable app
+         * scrolls its own content — same philosophy as ?1502 claiming the
+         * scroll keys); else scrollback. */
         int wheel_mods = event->mouse_scroll.mods;
         if (!terminal_scrollback_is_active(terminal) && terminal->mouse_click_subscribed) {
             /* Window coords, same reason as MOUSE_DOWN. */
@@ -4502,6 +5982,13 @@ static struct yetty_ycore_int_result terminal_view_on_event(struct yetty_yui_vie
                     "terminal_view_on_event: emit_card_mouse_button (wheel) failed");
                 return YETTY_OK(yetty_ycore_int, 1);
             }
+        }
+        if (!terminal_scrollback_is_active(terminal) && terminal->pane_mouse_wheel_subscribed) {
+            struct yetty_ycore_void_result mr = terminal_emit_card_mouse_button(
+                terminal, 0u, lx, ly, 0, 0, event->mouse_scroll.dy, wheel_mods);
+            YETTY_RETURN_IF_ERR(yetty_ycore_int, mr,
+                                "terminal_view_on_event: emit pane wheel failed");
+            return YETTY_OK(yetty_ycore_int, 1);
         }
 
         /* Modifier'd wheels (Ctrl / Ctrl-Shift) belong to the app-level

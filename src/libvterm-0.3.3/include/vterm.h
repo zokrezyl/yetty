@@ -325,6 +325,10 @@ typedef struct {
     int (*setlineinfo)(int row, const VTermLineInfo *newinfo, const VTermLineInfo *oldinfo,
                        void *user);
     int (*sb_clear)(void *user);
+    /* Terminal reset: RIS (hard=1) or DECSTR (hard=0). Fires after the state
+     * itself has been reset, so embedder-side per-session state (custom
+     * subscriptions, opt-ins) can be dropped the way mouse_flags are. */
+    int (*reset)(int hard, void *user);
 } VTermStateCallbacks;
 
 typedef struct {

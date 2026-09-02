@@ -175,6 +175,8 @@ void yetty_ywire_connection_input_barrier_arm(struct yetty_ywire_connection *con
                                               int deadline_ms);
 int yetty_ywire_connection_input_barrier_hold(struct yetty_ywire_connection *connection,
                                               const void *bytes, size_t len);
+void yetty_ywire_connection_input_barrier_client_present(struct yetty_ywire_connection *connection,
+                                                         int present);
 int yetty_ywire_connection_input_barrier_release(struct yetty_ywire_connection *connection,
                                                  struct yetty_ycore_buffer *out);
 int yetty_ywire_connection_input_barrier_release_forced(struct yetty_ywire_connection *connection,

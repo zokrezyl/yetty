@@ -998,18 +998,30 @@ int yetty_ywire_connection_input_barrier_hold(struct yetty_ywire_connection *con
     return 1;
 }
 
+void yetty_ywire_connection_input_barrier_client_present(struct yetty_ywire_connection *connection,
+                                                         int present)
+{
+    if (connection) {
+        connection->input_barrier_client_present = present ? 1 : 0;
+    }
+}
+
 int yetty_ywire_connection_input_barrier_release(struct yetty_ywire_connection *connection,
                                                  struct yetty_ycore_buffer *out)
 {
-    /* Release the held keystrokes once the client is GONE (no dynamic channels
-     * remain) OR the barrier's host-side deadline has passed (a wedged client) —
-     * the pane reads them exactly once. Nothing releases while the client still
-     * has a channel open AND the deadline holds, so a still-running client never
-     * gets its own input replayed early. */
+    /* Release the held keystrokes once the client is GONE — no dynamic
+     * channels remain AND no RPC-less presence marker (the DCS client-input
+     * subscription; cleared by its flags=0 unsubscribe) — OR the barrier's
+     * host-side deadline has passed (a wedged client). The pane reads them
+     * exactly once. Nothing releases while the client is still present and
+     * the deadline holds, so a running client never gets its own input
+     * replayed early. Framework clients stop reading stdin before they
+     * unsubscribe, so the release cannot race their reads. */
     if (!connection || !connection->input_barrier_armed) {
         return 0;
     }
-    int client_gone = connection_open_dynamic_count(connection) == 0;
+    int client_gone =
+        connection_open_dynamic_count(connection) == 0 && !connection->input_barrier_client_present;
     int expired = barrier_deadline_passed(connection);
     if (!client_gone && !expired) {
         return 0;

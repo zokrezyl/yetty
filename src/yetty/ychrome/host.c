@@ -332,8 +332,8 @@ static struct yetty_ychrome_host_ptr_result host_alloc(struct yetty_yclass_objec
      * deltas back to fb px for the wire (window_chrome_resize_by/drag_by).
      * Plain function (no codegen), forward-declared here since it isn't
      * a virtual class method exposed in the generated header. */
-    struct yetty_ycore_void_result yetty_ychrome_set_content_scale(
-        struct yetty_yclass_object *obj, float content_scale);
+    struct yetty_ycore_void_result yetty_ychrome_set_content_scale(struct yetty_yclass_object * obj,
+                                                                   float content_scale);
     struct yetty_ycore_void_result scale_result =
         yetty_ychrome_set_content_scale(host->chrome, host->content_scale);
     if (YETTY_IS_ERR(scale_result)) {

@@ -88,7 +88,7 @@ class Figure(_rt.YClass):
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_yfigure_dump_state", _t.yetty_ycore_char_ptr_result, [c_void_p, c_int])
-        res = _rt.result_from_c(_fn(self._handle, indent), _rt.decode_cstr)
+        res = _rt.result_from_c(_fn(self._handle, indent), _rt.take_owned_cstr)
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -394,7 +394,7 @@ def dump(self: Any, indent: int) -> _rt.Result[str | None]:
     """Call `yetty_yfigure_dump`."""
     _fn = _rt.cfn("yetty_yfigure_dump", _t.yetty_ycore_char_ptr_result, [c_void_p, c_int])
     res = _fn(_rt.handle(self), indent)
-    return _rt.result_from_c(res, _rt.decode_cstr)
+    return _rt.result_from_c(res, _rt.take_owned_cstr)
 
 def container_clear_all(obj: Any) -> _rt.Result[None]:
     """Call `yetty_yfigure_container_clear_all`."""

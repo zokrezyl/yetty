@@ -356,17 +356,17 @@ struct yetty_ycore_void_result yetty_ydrawlist2_text_color_set(struct yetty_ycla
     return YETTY_OK_VOID();
 }
 
-struct uint32_result yetty_ydrawlist2_text_layer_get(struct yetty_yclass_object *obj)
+struct yetty_ycore_int_result yetty_ydrawlist2_text_layer_get(struct yetty_yclass_object *obj)
 {
     struct yetty_ydrawlist2_text_ptr_result data = yetty_ydrawlist2_text_from(obj);
     if (YETTY_IS_ERR(data)) {
-        return YETTY_ERR(uint32, "yetty_ydrawlist2_text_layer_get: data block", data);
+        return YETTY_ERR(yetty_ycore_int, "yetty_ydrawlist2_text_layer_get: data block", data);
     }
-    return YETTY_OK(uint32, data.value->layer);
+    return YETTY_OK(yetty_ycore_int, data.value->layer);
 }
 
 struct yetty_ycore_void_result yetty_ydrawlist2_text_layer_set(struct yetty_yclass_object *obj,
-                                                               uint32_t value)
+                                                               int32_t value)
 {
     struct yetty_ydrawlist2_text_ptr_result data = yetty_ydrawlist2_text_from(obj);
     if (YETTY_IS_ERR(data)) {

@@ -844,6 +844,334 @@ static struct yetty_ycore_void_result yplot_emit_colorbar(struct yetty_ydraw_dra
     return YETTY_OK_VOID();
 }
 
+/* Margin/inset layout of one figure: the tick/label plan plus the legend /
+ * colorbar strip decisions, applied by INSETTING u->bounds_* from the full
+ * figure rect down to the plot rect (and writing the tick steps the shader
+ * grids on). One computation shared by the initial emission and the
+ * receiving host's local re-plan (yetty_yplot_record_rechrome). */
+struct yplot_figure_layout {
+    struct yplot_label_plan plan;
+    bool show_legend;
+    bool show_colorbar;
+    float figure_x;
+    float figure_y;
+    float figure_w;
+    float figure_h;
+    float figure_max_x;
+};
+
+static struct yplot_figure_layout yplot_layout_figure(
+    struct yetty_yplot_uniforms *u, const struct yetty_yplot_render_config *config,
+    const struct yplot_legend_entry *legend_entries, size_t legend_count)
+{
+    struct yplot_figure_layout layout = {0};
+
+    /* Full figure extents BEFORE any label inset — the drawable list scene
+     * must span these so the bottom/left labels in the reserved margins are
+     * not clipped and the scrollback figure reserves enough rows. */
+    layout.figure_x = u->bounds_x;
+    layout.figure_y = u->bounds_y;
+    layout.figure_w = u->bounds_w;
+    layout.figure_h = u->bounds_h;
+    layout.figure_max_x = u->bounds_x + u->bounds_w;
+
+    /* Reserve label margins by insetting the plot rect; the shader positions
+     * and clips the plot to bounds_*, so the margins stay transparent for
+     * the label text prims. */
+    layout.plan = yplot_plan_labels(u, config);
+
+    /* Field plots get a colorbar in the right margin instead of a legend
+     * (they render exactly one function, so there is nothing to name). */
+    bool is_field = (u->flags & YETTY_YPLOT_FLAG_FIELD) != 0u;
+    float colorbar_margin = 0.0f;
+    if (layout.plan.enabled && is_field) {
+        colorbar_margin = yplot_colorbar_margin(u, &layout.plan);
+        float plot_width_left = u->bounds_w - layout.plan.left_margin - colorbar_margin;
+        if (colorbar_margin <= u->bounds_w * 0.4f && plot_width_left >= 20.0f) {
+            layout.show_colorbar = true;
+        } else {
+            colorbar_margin = 0.0f;
+        }
+    }
+
+    /* A legend is drawn only alongside the axis labels (same FLAG_LABELS
+     * gate). By default it needs two named curves to be worth its margin;
+     * the config can force it on for one curve or suppress it entirely. */
+    size_t legend_minimum = 2;
+    if (config && config->legend_mode == YETTY_YPLOT_LEGEND_ON) {
+        legend_minimum = 1;
+    } else if (config && config->legend_mode == YETTY_YPLOT_LEGEND_OFF) {
+        legend_minimum = SIZE_MAX;
+    }
+    float legend_margin = 0.0f;
+    if (layout.plan.enabled && !is_field && legend_entries && legend_count >= legend_minimum) {
+        legend_margin = yplot_legend_margin(legend_entries, legend_count, layout.plan.font_size);
+        float plot_width_left = u->bounds_w - layout.plan.left_margin - legend_margin;
+        if (legend_margin > 0.0f && legend_margin <= u->bounds_w * 0.4f &&
+            plot_width_left >= 20.0f) {
+            layout.show_legend = true;
+        } else {
+            legend_margin = 0.0f;
+        }
+    }
+
+    if (layout.plan.enabled) {
+        u->bounds_x += layout.plan.left_margin;
+        u->bounds_w -= layout.plan.left_margin;
+        u->bounds_y += layout.plan.top_margin;
+        u->bounds_h -=
+            layout.plan.top_margin + layout.plan.bottom_margin + layout.plan.x_label_margin;
+        /* Tell the shader where the labelled ticks sit so the grid lands
+         * under them (0 = log axis or no tick info: shader handles both). */
+        u->x_step = layout.plan.x_log ? 0.0f : (float)layout.plan.x_step;
+        u->y_step = layout.plan.y_log ? 0.0f : (float)layout.plan.y_step;
+    }
+    if (layout.show_legend) {
+        u->bounds_w -= legend_margin;
+    }
+    if (layout.show_colorbar) {
+        u->bounds_w -= colorbar_margin;
+    }
+    return layout;
+}
+
+/* Emit every chrome prim of a laid-out figure — tick labels, the title /
+ * axis-name strips, the legend and the colorbar. `u` holds the INSET plot
+ * rect the layout produced. */
+static struct yetty_ycore_void_result yplot_emit_chrome_prims(
+    struct yetty_ydraw_drawable_list *dest, const struct yetty_yplot_uniforms *u,
+    const struct yplot_figure_layout *layout, const struct yetty_yplot_render_config *config,
+    const struct yplot_legend_entry *legend_entries, size_t legend_count)
+{
+    if (layout->plan.enabled) {
+        struct yetty_ycore_void_result label_res =
+            yplot_emit_axis_labels(dest, u, &layout->plan, layout->figure_max_x);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, label_res, "yplot: axis labels");
+        if (layout->plan.have_title || layout->plan.have_x_label || layout->plan.have_y_label) {
+            struct yetty_ycore_void_result chrome_res =
+                yplot_emit_chrome(dest, u, &layout->plan, layout->figure_x, layout->figure_y,
+                                  layout->figure_w, layout->figure_h, config);
+            YETTY_RETURN_IF_ERR(yetty_ycore_void, chrome_res, "yplot: figure chrome");
+        }
+    }
+    if (layout->show_legend) {
+        /* The strip's left edge is the inset plot's right edge. */
+        float margin_left = u->bounds_x + u->bounds_w;
+        struct yetty_ycore_void_result legend_res =
+            yplot_emit_legend(dest, u, &layout->plan, margin_left, legend_entries, legend_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, legend_res, "yplot: legend");
+    }
+    if (layout->show_colorbar) {
+        float margin_left = u->bounds_x + u->bounds_w;
+        struct yetty_ycore_void_result colorbar_res =
+            yplot_emit_colorbar(dest, u, &layout->plan, margin_left);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, colorbar_res, "yplot: colorbar");
+    }
+    return YETTY_OK_VOID();
+}
+
+/* Chrome-state tail — appended INSIDE the record payload after the data
+ * buffers when the figure owns its chrome (config->chrome_group_id != 0).
+ * Every storage consumer (the shader, the chunked sample updater) walks
+ * the self-describing [bytecode_len][bytecode][data_count][len][samples]…
+ * layout by its declared counts, so trailing words are invisible to them;
+ * only the tail parser looks past the last data buffer. Layout (words):
+ *   [0] YPLOT_CHROME_TAIL_MAGIC
+ *   [1] words following this one (total tail words - 2)
+ *   [2] chrome_group_id
+ *   [3..6] figure_x / figure_y / figure_w / figure_h (f32 bits, PRE-inset)
+ *   [7] legend_mode
+ *   [8] legend_count
+ *   [9 .. 9+legend_count) legend colors (ARGB)
+ *   [9+legend_count] strings_bytes
+ *   [...] NUL-terminated strings, word-padded:
+ *         title, x_label, y_label, then legend_count names. */
+enum { YPLOT_CHROME_TAIL_MAGIC = 0x59504331 }; /* "YPC1" */
+
+#define YPLOT_CHROME_MAX_LEGEND (YETTY_YEXPR_MAX_PLOT_DEFS + 8)
+
+static size_t yplot_chrome_strings_bytes(const struct yetty_yplot_render_config *config,
+                                         const struct yplot_legend_entry *legend,
+                                         size_t legend_count)
+{
+    size_t bytes = strlen(config && config->title ? config->title : "") + 1u;
+    bytes += strlen(config && config->x_label ? config->x_label : "") + 1u;
+    bytes += strlen(config && config->y_label ? config->y_label : "") + 1u;
+    for (size_t i = 0; i < legend_count; i++) {
+        bytes += strlen(legend[i].name ? legend[i].name : "") + 1u;
+    }
+    return bytes;
+}
+
+static size_t yplot_chrome_tail_words(const struct yetty_yplot_render_config *config,
+                                      const struct yplot_legend_entry *legend, size_t legend_count)
+{
+    size_t strings_bytes = yplot_chrome_strings_bytes(config, legend, legend_count);
+    return 2u /* magic + count */ + 7u /* id, rect, legend_mode, legend_count */ + legend_count +
+           1u /* strings_bytes */ + (strings_bytes + 3u) / 4u;
+}
+
+static char *yplot_chrome_pack_string(char *cursor, const char *text)
+{
+    size_t length = strlen(text ? text : "");
+    if (length) {
+        memcpy(cursor, text, length);
+    }
+    cursor[length] = '\0';
+    return cursor + length + 1u;
+}
+
+static void yplot_chrome_tail_write(uint32_t *tail, const struct yplot_figure_layout *layout,
+                                    const struct yetty_yplot_render_config *config,
+                                    const struct yplot_legend_entry *legend, size_t legend_count)
+{
+    size_t total_words = yplot_chrome_tail_words(config, legend, legend_count);
+    size_t strings_bytes = yplot_chrome_strings_bytes(config, legend, legend_count);
+    tail[0] = YPLOT_CHROME_TAIL_MAGIC;
+    tail[1] = (uint32_t)(total_words - 2u);
+    tail[2] = config->chrome_group_id;
+    memcpy(&tail[3], &layout->figure_x, sizeof(float));
+    memcpy(&tail[4], &layout->figure_y, sizeof(float));
+    memcpy(&tail[5], &layout->figure_w, sizeof(float));
+    memcpy(&tail[6], &layout->figure_h, sizeof(float));
+    tail[7] = (uint32_t)config->legend_mode;
+    tail[8] = (uint32_t)legend_count;
+    for (size_t i = 0; i < legend_count; i++) {
+        tail[9u + i] = legend[i].color;
+    }
+    uint32_t *strings_len_word = &tail[9u + legend_count];
+    *strings_len_word = (uint32_t)strings_bytes;
+    /* Zero the final padded word first so the record bytes are
+     * deterministic regardless of the strings' lengths. */
+    strings_len_word[1u + (strings_bytes + 3u) / 4u - 1u] = 0u;
+    char *cursor = (char *)(strings_len_word + 1u);
+    cursor = yplot_chrome_pack_string(cursor, config ? config->title : NULL);
+    cursor = yplot_chrome_pack_string(cursor, config ? config->x_label : NULL);
+    cursor = yplot_chrome_pack_string(cursor, config ? config->y_label : NULL);
+    for (size_t i = 0; i < legend_count; i++) {
+        cursor = yplot_chrome_pack_string(cursor, legend[i].name);
+    }
+}
+
+/* Parsed view of a record's chrome tail. String pointers alias the record
+ * bytes; `tail` is the mutable word view used to patch the figure rect. */
+struct yplot_chrome_state {
+    uint32_t chrome_group_id;
+    float figure_x;
+    float figure_y;
+    float figure_w;
+    float figure_h;
+    uint32_t legend_mode;
+    uint32_t legend_count;
+    const uint32_t *legend_colors;
+    const char *title;
+    const char *x_label;
+    const char *y_label;
+    const char *legend_names[YPLOT_CHROME_MAX_LEGEND];
+    uint32_t *tail;
+};
+
+static const char *yplot_chrome_next_string(const char **cursor, const char *end)
+{
+    const char *start = *cursor;
+    const char *walk = start;
+    while (walk < end && *walk) {
+        walk++;
+    }
+    if (walk >= end) {
+        return NULL; /* unterminated */
+    }
+    *cursor = walk + 1u;
+    return start;
+}
+
+static struct yetty_ycore_void_result yplot_chrome_tail_parse(uint8_t *record_bytes,
+                                                              size_t record_size,
+                                                              struct yplot_chrome_state *out)
+{
+    memset(out, 0, sizeof(*out));
+    if (!record_bytes || record_size < (2u + YETTY_YPLOT_UNIFORMS_WORDS + 2u) * sizeof(uint32_t)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: record too small");
+    }
+    uint32_t *wire = (uint32_t *)record_bytes;
+    if (wire[0] != YETTY_YPLOT_TYPE_ID) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: not a yplot record");
+    }
+    if ((wire[1] % sizeof(uint32_t)) != 0u ||
+        2u * sizeof(uint32_t) + (size_t)wire[1] > record_size) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: payload exceeds record");
+    }
+    size_t payload_words = wire[1] / sizeof(uint32_t);
+    if (payload_words < YETTY_YPLOT_UNIFORMS_WORDS + 2u) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: payload too small");
+    }
+    uint32_t *storage = wire + 2 + YETTY_YPLOT_UNIFORMS_WORDS;
+    size_t storage_total = payload_words - YETTY_YPLOT_UNIFORMS_WORDS;
+
+    /* Walk past bytecode + data buffers using their declared counts. */
+    size_t walk = 0;
+    uint32_t bytecode_len = storage[walk++];
+    if (walk + (size_t)bytecode_len + 1u > storage_total) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: truncated bytecode");
+    }
+    walk += bytecode_len;
+    uint32_t data_count = storage[walk++];
+    for (uint32_t i = 0; i < data_count; i++) {
+        if (walk >= storage_total) {
+            return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: truncated data list");
+        }
+        uint32_t buffer_len = storage[walk++];
+        if ((size_t)buffer_len > storage_total - walk) {
+            return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: truncated data buffer");
+        }
+        walk += buffer_len;
+    }
+
+    if (walk + 2u > storage_total || storage[walk] != (uint32_t)YPLOT_CHROME_TAIL_MAGIC) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: none");
+    }
+    uint32_t *tail = storage + walk;
+    size_t tail_capacity = storage_total - walk;
+    size_t tail_words = 2u + (size_t)tail[1];
+    if (tail_words > tail_capacity || tail_words < 10u) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: truncated tail");
+    }
+
+    out->tail = tail;
+    out->chrome_group_id = tail[2];
+    memcpy(&out->figure_x, &tail[3], sizeof(float));
+    memcpy(&out->figure_y, &tail[4], sizeof(float));
+    memcpy(&out->figure_w, &tail[5], sizeof(float));
+    memcpy(&out->figure_h, &tail[6], sizeof(float));
+    out->legend_mode = tail[7];
+    out->legend_count = tail[8];
+    if (out->legend_count > YPLOT_CHROME_MAX_LEGEND ||
+        9u + (size_t)out->legend_count + 1u > tail_words) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: bad legend count");
+    }
+    out->legend_colors = &tail[9];
+    uint32_t strings_bytes = tail[9u + out->legend_count];
+    size_t strings_words = ((size_t)strings_bytes + 3u) / 4u;
+    if (9u + (size_t)out->legend_count + 1u + strings_words > tail_words) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: truncated strings");
+    }
+    const char *cursor = (const char *)&tail[9u + out->legend_count + 1u];
+    const char *end = cursor + strings_bytes;
+    out->title = yplot_chrome_next_string(&cursor, end);
+    out->x_label = yplot_chrome_next_string(&cursor, end);
+    out->y_label = yplot_chrome_next_string(&cursor, end);
+    if (!out->title || !out->x_label || !out->y_label) {
+        return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: bad string blob");
+    }
+    for (uint32_t i = 0; i < out->legend_count; i++) {
+        out->legend_names[i] = yplot_chrome_next_string(&cursor, end);
+        if (!out->legend_names[i]) {
+            return YETTY_ERR(yetty_ycore_void, "yplot chrome tail: bad legend name");
+        }
+    }
+    return YETTY_OK_VOID();
+}
+
 /* Pack uniforms + buffers into a fresh ydraw buffer carrying one yplot prim,
  * plus MSDF tick labels on both axes, the title / axis-name chrome, and a
  * curve legend, all gated on FLAG_LABELS. `legend_entries` names each curve
@@ -872,84 +1200,36 @@ static struct yetty_ycore_void_result yplot_emit_into_list(
         return YETTY_ERR(yetty_ycore_void, "yplot: y log scale requires 0 < y_min < y_max");
     }
 
-    /* Full figure extents BEFORE any label inset — the drawable list scene
-     * must span these so the bottom/left labels in the reserved margins are
-     * not clipped and the scrollback figure reserves enough rows. */
-    float figure_x = u.bounds_x;
-    float figure_y = u.bounds_y;
-    float figure_w = u.bounds_w;
-    float figure_h = u.bounds_h;
-    float figure_max_x = u.bounds_x + u.bounds_w;
+    struct yplot_figure_layout layout =
+        yplot_layout_figure(&u, config, legend_entries, legend_count);
 
-    /* Reserve label margins by insetting the plot rect; the shader positions
-     * and clips the plot to bounds_*, so the margins stay transparent for
-     * the label text prims. */
-    struct yplot_label_plan plan = yplot_plan_labels(&u, config);
-
-    /* Field plots get a colorbar in the right margin instead of a legend
-     * (they render exactly one function, so there is nothing to name). */
-    bool is_field = (u.flags & YETTY_YPLOT_FLAG_FIELD) != 0u;
-    float colorbar_margin = 0.0f;
-    bool show_colorbar = false;
-    if (plan.enabled && is_field) {
-        colorbar_margin = yplot_colorbar_margin(&u, &plan);
-        float plot_width_left = u.bounds_w - plan.left_margin - colorbar_margin;
-        if (colorbar_margin <= u.bounds_w * 0.4f && plot_width_left >= 20.0f) {
-            show_colorbar = true;
-        } else {
-            colorbar_margin = 0.0f;
-        }
-    }
-
-    /* A legend is drawn only alongside the axis labels (same FLAG_LABELS
-     * gate). By default it needs two named curves to be worth its margin;
-     * the config can force it on for one curve or suppress it entirely. */
-    size_t legend_minimum = 2;
-    if (config && config->legend_mode == YETTY_YPLOT_LEGEND_ON) {
-        legend_minimum = 1;
-    } else if (config && config->legend_mode == YETTY_YPLOT_LEGEND_OFF) {
-        legend_minimum = SIZE_MAX;
-    }
-    float legend_margin = 0.0f;
-    bool show_legend = false;
-    if (plan.enabled && !is_field && legend_entries && legend_count >= legend_minimum) {
-        legend_margin = yplot_legend_margin(legend_entries, legend_count, plan.font_size);
-        float plot_width_left = u.bounds_w - plan.left_margin - legend_margin;
-        if (legend_margin > 0.0f && legend_margin <= u.bounds_w * 0.4f &&
-            plot_width_left >= 20.0f) {
-            show_legend = true;
-        } else {
-            legend_margin = 0.0f;
-        }
-    }
-
-    if (plan.enabled) {
-        u.bounds_x += plan.left_margin;
-        u.bounds_w -= plan.left_margin;
-        u.bounds_y += plan.top_margin;
-        u.bounds_h -= plan.top_margin + plan.bottom_margin + plan.x_label_margin;
-        /* Tell the shader where the labelled ticks sit so the grid lands
-         * under them (0 = log axis or no tick info: shader handles both). */
-        u.x_step = plan.x_log ? 0.0f : (float)plan.x_step;
-        u.y_step = plan.y_log ? 0.0f : (float)plan.y_step;
-    }
-    if (show_legend) {
-        u.bounds_w -= legend_margin;
-    }
-    if (show_colorbar) {
-        u.bounds_w -= colorbar_margin;
-    }
-
-    size_t required = yetty_yplot_uniforms_serialized_size(&u, bufs);
+    /* Serialize the complex record. A nonzero chrome_group_id makes the
+     * figure SELF-OWNED: the record grows the chrome-state tail (inside
+     * the payload, invisible to the count-driven storage walkers) so the
+     * receiving host can re-plan and re-render the chrome locally on a
+     * geometry / range op — resize never re-ships record or samples. */
+    uint32_t chrome_group_id = config ? config->chrome_group_id : 0u;
+    size_t base_required = yetty_yplot_uniforms_serialized_size(&u, bufs);
+    size_t tail_bytes =
+        chrome_group_id
+            ? yplot_chrome_tail_words(config, legend_entries, legend_count) * sizeof(uint32_t)
+            : 0u;
+    size_t required = base_required + tail_bytes;
     uint8_t *drawable_buf = malloc(required);
     if (!drawable_buf) {
         return YETTY_ERR(yetty_ycore_void, "yplot: prim alloc failed");
     }
     struct yetty_ycore_size_result ser =
-        yetty_yplot_uniforms_serialize(&u, bufs, drawable_buf, required);
+        yetty_yplot_uniforms_serialize(&u, bufs, drawable_buf, base_required);
     if (YETTY_IS_ERR(ser)) {
         free(drawable_buf);
         return YETTY_ERR(yetty_ycore_void, "yplot: serialize failed", ser);
+    }
+    if (tail_bytes) {
+        yplot_chrome_tail_write((uint32_t *)(drawable_buf + base_required), &layout, config,
+                                legend_entries, legend_count);
+        /* The tail is part of the payload: grow the declared payload size. */
+        ((uint32_t *)drawable_buf)[1] = (uint32_t)(required - 2u * sizeof(uint32_t));
     }
 
     struct yetty_ydraw_id_result idr =
@@ -959,28 +1239,154 @@ static struct yetty_ycore_void_result yplot_emit_into_list(
         return YETTY_ERR(yetty_ycore_void, "yplot: ydraw add_prim failed", idr);
     }
 
-    if (plan.enabled) {
-        struct yetty_ycore_void_result label_res =
-            yplot_emit_axis_labels(dest, &u, &plan, figure_max_x);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, label_res, "yplot: axis labels");
-        if (plan.have_title || plan.have_x_label || plan.have_y_label) {
-            struct yetty_ycore_void_result chrome_res =
-                yplot_emit_chrome(dest, &u, &plan, figure_x, figure_y, figure_w, figure_h, config);
-            YETTY_RETURN_IF_ERR(yetty_ycore_void, chrome_res, "yplot: figure chrome");
+    /* Self-owned chrome lands bracketed in its own GROUP so the receiver
+     * can replace exactly this content on a local re-plan; legacy records
+     * keep the bare-prims layout. */
+    if (chrome_group_id) {
+        struct yetty_ydraw_id_result group_res =
+            yetty_ydraw_drawable_list_begin_group(dest, chrome_group_id);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, group_res, "yplot: chrome group begin");
+        struct yetty_ycore_void_result chrome_res =
+            yplot_emit_chrome_prims(dest, &u, &layout, config, legend_entries, legend_count);
+        YETTY_RETURN_IF_ERR(yetty_ycore_void, chrome_res, "yplot: chrome prims");
+        return yetty_ydraw_drawable_list_end_group(dest, group_res.value);
+    }
+    return yplot_emit_chrome_prims(dest, &u, &layout, config, legend_entries, legend_count);
+}
+
+/* Re-plan a serialized record in place at a new figure size (and/or the
+ * axis ranges already patched into its uniform words) and optionally emit
+ * the fresh chrome prims — the receiving host's half of the self-owned
+ * chrome contract. See yplot.h for the public description. */
+struct yetty_ycore_void_result yetty_yplot_record_rechrome(uint8_t *record_bytes,
+                                                           size_t record_size, float new_width,
+                                                           float new_height,
+                                                           struct yetty_ydraw_drawable_list *dest)
+{
+    struct yplot_chrome_state chrome;
+    struct yetty_ycore_void_result parse_res =
+        yplot_chrome_tail_parse(record_bytes, record_size, &chrome);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, parse_res, "yplot rechrome: chrome tail");
+    if (new_width > 0.0f) {
+        if (!isfinite(new_width)) {
+            return YETTY_ERR(yetty_ycore_void, "yplot rechrome: non-finite width");
         }
+        chrome.figure_w = new_width;
+        memcpy(&chrome.tail[5], &new_width, sizeof(float));
     }
-    if (show_legend) {
-        /* The strip's left edge is the inset plot's right edge. */
-        float margin_left = u.bounds_x + u.bounds_w;
-        struct yetty_ycore_void_result legend_res =
-            yplot_emit_legend(dest, &u, &plan, margin_left, legend_entries, legend_count);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, legend_res, "yplot: legend");
+    if (new_height > 0.0f) {
+        if (!isfinite(new_height)) {
+            return YETTY_ERR(yetty_ycore_void, "yplot rechrome: non-finite height");
+        }
+        chrome.figure_h = new_height;
+        memcpy(&chrome.tail[6], &new_height, sizeof(float));
     }
-    if (show_colorbar) {
-        float margin_left = u.bounds_x + u.bounds_w;
-        struct yetty_ycore_void_result colorbar_res =
-            yplot_emit_colorbar(dest, &u, &plan, margin_left);
-        YETTY_RETURN_IF_ERR(yetty_ycore_void, colorbar_res, "yplot: colorbar");
+
+    /* Rebuild the uniforms view from the CURRENT payload words (ranges /
+     * flags / colors are authoritative there — range ops patch them before
+     * calling in), then reset the bounds to the retained figure rect and
+     * re-run the one shared layout. */
+    uint32_t *payload = (uint32_t *)record_bytes + 2;
+    struct yetty_yplot_uniforms u;
+    memcpy(&u, payload, YETTY_YPLOT_UNIFORMS_WORDS * sizeof(uint32_t));
+    u.bounds_x = chrome.figure_x;
+    u.bounds_y = chrome.figure_y;
+    u.bounds_w = chrome.figure_w;
+    u.bounds_h = chrome.figure_h;
+    u.x_step = 0.0f;
+    u.y_step = 0.0f;
+    if (!(isfinite(u.bounds_w) && u.bounds_w > 0.0f && isfinite(u.bounds_h) && u.bounds_h > 0.0f)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot rechrome: figure rect must be positive finite");
+    }
+
+    struct yplot_legend_entry legend[YPLOT_CHROME_MAX_LEGEND];
+    for (uint32_t i = 0; i < chrome.legend_count; i++) {
+        legend[i].name = chrome.legend_names[i];
+        legend[i].color = chrome.legend_colors[i];
+    }
+    struct yetty_yplot_render_config config = {
+        .title = chrome.title[0] ? chrome.title : NULL,
+        .x_label = chrome.x_label[0] ? chrome.x_label : NULL,
+        .y_label = chrome.y_label[0] ? chrome.y_label : NULL,
+        .legend_mode = (enum yetty_yplot_legend_mode)chrome.legend_mode,
+        .chrome_group_id = chrome.chrome_group_id,
+    };
+    struct yplot_figure_layout layout =
+        yplot_layout_figure(&u, &config, legend, chrome.legend_count);
+
+    /* Patch the re-planned inset bounds + tick steps back into the wire
+     * payload — the generated instance render re-parses these words into
+     * the GPU uniforms every frame, so this is the authoritative write. */
+    memcpy(&payload[0], &u.bounds_x, sizeof(float));
+    memcpy(&payload[1], &u.bounds_y, sizeof(float));
+    memcpy(&payload[2], &u.bounds_w, sizeof(float));
+    memcpy(&payload[3], &u.bounds_h, sizeof(float));
+    memcpy(&payload[8], &u.x_step, sizeof(float));
+    memcpy(&payload[9], &u.y_step, sizeof(float));
+
+    if (dest) {
+        return yplot_emit_chrome_prims(dest, &u, &layout, &config, legend, chrome.legend_count);
+    }
+    return YETTY_OK_VOID();
+}
+
+uint32_t yetty_yplot_record_chrome_group(const uint8_t *record_bytes, size_t record_size)
+{
+    /* Read-only probe — the parse never mutates, the cast only satisfies
+     * the shared parse signature (which exposes a patchable tail view). */
+    struct yplot_chrome_state chrome;
+    struct yetty_ycore_void_result parse_res =
+        yplot_chrome_tail_parse((uint8_t *)(uintptr_t)record_bytes, record_size, &chrome);
+    if (YETTY_IS_ERR(parse_res)) {
+        yetty_ycore_error_destroy(parse_res.error);
+        return 0u;
+    }
+    return chrome.chrome_group_id;
+}
+
+struct yetty_ycore_void_result yetty_yplot_record_patch_ranges(uint8_t *record_bytes,
+                                                               size_t record_size, uint32_t axis,
+                                                               float new_min, float new_max)
+{
+    if (!record_bytes || record_size < (2u + YETTY_YPLOT_UNIFORMS_WORDS) * sizeof(uint32_t)) {
+        return YETTY_ERR(yetty_ycore_void, "yplot patch_ranges: record too small");
+    }
+    if (((uint32_t *)record_bytes)[0] != YETTY_YPLOT_TYPE_ID) {
+        return YETTY_ERR(yetty_ycore_void, "yplot patch_ranges: not a yplot record");
+    }
+    if (!(isfinite(new_min) && isfinite(new_max) && new_max > new_min)) {
+        return YETTY_ERR(yetty_ycore_void,
+                         "yplot patch_ranges: range must be finite with max > min");
+    }
+    uint32_t *payload = (uint32_t *)record_bytes + 2;
+    uint32_t flags = payload[13];
+    uint32_t *range_words;
+    if (axis == 0u) {
+        if ((flags & YETTY_YPLOT_FLAG_XLOG) && !(new_min > 0.0f)) {
+            return YETTY_ERR(yetty_ycore_void, "yplot patch_ranges: x log scale requires min > 0");
+        }
+        range_words = &payload[4];
+    } else if (axis == 1u) {
+        if ((flags & YETTY_YPLOT_FLAG_YLOG) && !(new_min > 0.0f)) {
+            return YETTY_ERR(yetty_ycore_void, "yplot patch_ranges: y log scale requires min > 0");
+        }
+        range_words = &payload[6];
+    } else {
+        return YETTY_ERR(yetty_ycore_void, "yplot patch_ranges: axis must be 0 (x) or 1 (y)");
+    }
+    /* STAGED: the rechrome below is the only later fallible step and it
+     * mutates nothing on failure (tail parse and layout validation come
+     * before its patch), so restoring these two words on error rolls the
+     * record back to byte-identical. */
+    uint32_t saved_range[2] = {range_words[0], range_words[1]};
+    memcpy(&range_words[0], &new_min, sizeof(float));
+    memcpy(&range_words[1], &new_max, sizeof(float));
+    struct yetty_ycore_void_result rechrome_res =
+        yetty_yplot_record_rechrome(record_bytes, record_size, 0.0f, 0.0f, NULL);
+    if (YETTY_IS_ERR(rechrome_res)) {
+        range_words[0] = saved_range[0];
+        range_words[1] = saved_range[1];
+        return YETTY_ERR(yetty_ycore_void, "yplot patch_ranges: rechrome", rechrome_res);
     }
     return YETTY_OK_VOID();
 }
@@ -1041,6 +1447,7 @@ struct yetty_ycore_void_result yetty_yplot_emit_into(const struct yetty_yplot_re
         .x_label = plan->x_label,
         .y_label = plan->y_label,
         .legend_mode = plan->legend_mode,
+        .chrome_group_id = plan->chrome_group_id,
     };
     return yplot_emit_into_list(dest, origin_x, origin_y, &plan->uniforms, &plan->buffers, legend,
                                 legend_count, &config);
@@ -1728,6 +2135,7 @@ struct yetty_ycore_void_result yetty_yplot_emit_expression(
     render_plan.x_label = effective_config.x_label;
     render_plan.y_label = effective_config.y_label;
     render_plan.legend_mode = effective_config.legend_mode;
+    render_plan.chrome_group_id = effective_config.chrome_group_id;
 
     /* The plan's data buffers alias `wire_bufs`/`zero_fill`, so they must stay
      * alive across the emit; free them only after it returns. */

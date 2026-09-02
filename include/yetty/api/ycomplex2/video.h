@@ -59,6 +59,9 @@ struct yetty_ycore_void_result yetty_ycomplex2_video_video_h_set(struct yetty_yc
 struct float_result yetty_ycomplex2_video_fps_get(struct yetty_yclass_object *obj);
 struct yetty_ycore_void_result yetty_ycomplex2_video_fps_set(struct yetty_yclass_object *obj,
                                                              float value);
+struct yetty_ycore_int_result yetty_ycomplex2_video_layer_get(struct yetty_yclass_object *obj);
+struct yetty_ycore_void_result yetty_ycomplex2_video_layer_set(struct yetty_yclass_object *obj,
+                                                               int32_t value);
 
 /* set_h264: the raw Annex-B H.264 byte stream file (.h264/.264). */
 struct yetty_ycore_void_result yetty_ycomplex2_set_h264(struct yetty_yclass_object *obj,

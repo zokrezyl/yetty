@@ -213,7 +213,7 @@ class Text(Drawable):
         """Property `layer` (raises YettyError on failure)."""
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
-        _fn = _rt.cfn("yetty_ydrawlist2_text_layer_get", _t.uint32_result, [c_void_p])
+        _fn = _rt.cfn("yetty_ydrawlist2_text_layer_get", _t.yetty_ycore_int_result, [c_void_p])
         res = _rt.result_from_c(_fn(self._handle))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
@@ -223,7 +223,7 @@ class Text(Drawable):
         """Property `layer` (raises YettyError on failure)."""
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
-        _fn = _rt.cfn("yetty_ydrawlist2_text_layer_set", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        _fn = _rt.cfn("yetty_ydrawlist2_text_layer_set", _t.yetty_ycore_void_result, [c_void_p, c_int32])
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
@@ -294,6 +294,60 @@ class DrawableList(_rt.YClass):
             raise _rt.YettyError("uninitialized yclass handle")
         _fn = _rt.cfn("yetty_ydrawlist2_add", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
         res = _rt.result_from_c(_fn(self._handle, _rt.handle(drawable)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def begin_group(self, group_id: int) -> None:
+        """Call `yetty_ydrawlist2_begin_group`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ydrawlist2_begin_group", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, group_id))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def end_group(self) -> None:
+        """Call `yetty_ydrawlist2_end_group`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ydrawlist2_end_group", _t.yetty_ycore_void_result, [c_void_p])
+        res = _rt.result_from_c(_fn(self._handle))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def delete_group(self, group_id: int) -> None:
+        """Call `yetty_ydrawlist2_delete_group`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ydrawlist2_delete_group", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, group_id))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def update(self, id: int, payload: _t.yetty_ycore_buffer) -> None:
+        """Call `yetty_ydrawlist2_update`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ydrawlist2_update", _t.yetty_ycore_void_result, [c_void_p, c_uint32, _t.yetty_ycore_buffer])
+        res = _rt.result_from_c(_fn(self._handle, id, _rt.as_buffer(payload)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def path(self, prefix: _t.yetty_ycore_buffer) -> None:
+        """Call `yetty_ydrawlist2_path`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ydrawlist2_path", _t.yetty_ycore_void_result, [c_void_p, _t.yetty_ycore_buffer])
+        res = _rt.result_from_c(_fn(self._handle, _rt.as_buffer(prefix)))
+        if res.error is not None:
+            raise _rt.YettyError(res.error.message)
+        return res.value
+    def reserve(self, height_px: int) -> None:
+        """Call `yetty_ydrawlist2_reserve`; raises _rt.YettyError on failure."""
+        if self._handle is None:
+            raise _rt.YettyError("uninitialized yclass handle")
+        _fn = _rt.cfn("yetty_ydrawlist2_reserve", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        res = _rt.result_from_c(_fn(self._handle, height_px))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
@@ -377,21 +431,21 @@ class Shape(Drawable):
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
     @property
-    def z(self) -> int:
-        """Property `z` (raises YettyError on failure)."""
+    def layer(self) -> int:
+        """Property `layer` (raises YettyError on failure)."""
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
-        _fn = _rt.cfn("yetty_ydrawlist2_shape_z_get", _t.uint32_result, [c_void_p])
+        _fn = _rt.cfn("yetty_ydrawlist2_shape_layer_get", _t.yetty_ycore_int_result, [c_void_p])
         res = _rt.result_from_c(_fn(self._handle))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
         return res.value
-    @z.setter
-    def z(self, value: int) -> None:
-        """Property `z` (raises YettyError on failure)."""
+    @layer.setter
+    def layer(self, value: int) -> None:
+        """Property `layer` (raises YettyError on failure)."""
         if self._handle is None:
             raise _rt.YettyError("uninitialized yclass handle")
-        _fn = _rt.cfn("yetty_ydrawlist2_shape_z_set", _t.yetty_ycore_void_result, [c_void_p, c_uint32])
+        _fn = _rt.cfn("yetty_ydrawlist2_shape_layer_set", _t.yetty_ycore_void_result, [c_void_p, c_int32])
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
@@ -452,3 +506,15 @@ class Shape(Drawable):
         res = _rt.result_from_c(_fn(self._handle, value))
         if res.error is not None:
             raise _rt.YettyError(res.error.message)
+
+def drawable_list_release_raw(obj: Any) -> _rt.Result[Any]:
+    """Call `yetty_ydrawlist2_drawable_list_release_raw`."""
+    _fn = _rt.cfn("yetty_ydrawlist2_drawable_list_release_raw", _t.yetty_ydraw_drawable_list_result, [c_void_p])
+    res = _fn(_rt.handle(obj))
+    return _rt.result_from_c(res)
+
+def drawable_list_adopt_raw(obj: Any, raw: Any) -> _rt.Result[None]:
+    """Call `yetty_ydrawlist2_drawable_list_adopt_raw`."""
+    _fn = _rt.cfn("yetty_ydrawlist2_drawable_list_adopt_raw", _t.yetty_ycore_void_result, [c_void_p, c_void_p])
+    res = _fn(_rt.handle(obj), _rt.handle(raw))
+    return _rt.result_from_c(res)

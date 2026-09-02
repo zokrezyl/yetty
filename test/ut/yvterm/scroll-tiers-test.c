@@ -21,6 +21,8 @@
 
 #include <yetty/ydraw-factory/complex-factory.h>
 #include <yetty/api/yvterm/grid.h>
+#include <yetty/ysdf/types.gen.h>
+#include <yetty/yvterm/group-key.h>
 
 #include "ytest.h"
 
@@ -71,9 +73,13 @@ static struct yetty_ydraw_complex *fake_complex_create(int *destroy_count)
 }
 
 static struct yetty_ycore_void_result fake_materialize(const uint32_t *envelope_words,
-                                                       uint32_t envelope_word_count, void *userdata,
+                                                       uint32_t envelope_word_count,
+                                                       const uint32_t *journal_words,
+                                                       uint32_t journal_word_count, void *userdata,
                                                        struct yetty_ydraw_complex **out_instance)
 {
+    (void)journal_words;
+    (void)journal_word_count;
     struct tier_fixture *fixture = userdata;
     fixture->materialize_calls++;
     fixture->seen_type = envelope_word_count ? envelope_words[0] : 0u;
@@ -140,22 +146,53 @@ static const uint32_t *view_window(struct ytest *test, struct yetty_yclass_objec
     return window_res.value;
 }
 
+/* Aggregate helpers over the per-block accessors, preserving the pinned
+ * pre-block semantics: complex count = live figure runtimes on the slot,
+ * primitive count = retained records with wire bytes. */
+static void slot_rich_totals(struct ytest *test, struct yetty_yclass_object *grid, uint32_t slot,
+                             uint32_t *out_runtimes, uint32_t *out_records)
+{
+    *out_runtimes = 0;
+    *out_records = 0;
+    struct yetty_ycore_uint32_result block_count_res =
+        yetty_yvterm_grid_slot_rich_block_count(grid, slot);
+    YTEST_REQUIRE_OK(test, block_count_res);
+    for (uint32_t block_index = 0; block_index < block_count_res.value; ++block_index) {
+        uint32_t record_count = 0;
+        struct yetty_ycore_void_result block_res =
+            yetty_yvterm_grid_slot_rich_block(grid, slot, block_index, NULL, &record_count);
+        YTEST_REQUIRE_OK(test, block_res);
+        for (uint32_t record_index = 0; record_index < record_count; ++record_index) {
+            uint32_t word_count = 0;
+            struct yetty_ydraw_complex *complex = NULL;
+            struct yetty_ycore_const_uint32_ptr_result record_res =
+                yetty_yvterm_grid_slot_rich_block_record(grid, slot, block_index, record_index,
+                                                         &word_count, &complex);
+            YTEST_REQUIRE_OK(test, record_res);
+            if (complex) {
+                (*out_runtimes)++;
+            }
+            if (word_count) {
+                (*out_records)++;
+            }
+        }
+    }
+}
+
 static uint32_t slot_complex_count(struct ytest *test, struct yetty_yclass_object *grid,
                                    uint32_t slot)
 {
-    uint32_t count = 0;
-    struct yetty_ydraw_complex_const_ptr_ptr_result r =
-        yetty_yvterm_grid_slot_complexes(grid, slot, &count);
-    YTEST_REQUIRE_OK(test, r);
-    return count;
+    uint32_t runtimes = 0, records = 0;
+    slot_rich_totals(test, grid, slot, &runtimes, &records);
+    return runtimes;
 }
 
 static uint32_t slot_primitive_count(struct ytest *test, struct yetty_yclass_object *grid,
                                      uint32_t slot)
 {
-    struct yetty_ycore_uint32_result r = yetty_yvterm_grid_slot_primitive_count(grid, slot);
-    YTEST_REQUIRE_OK(test, r);
-    return r.value;
+    uint32_t runtimes = 0, records = 0;
+    slot_rich_totals(test, grid, slot, &runtimes, &records);
+    return records;
 }
 
 static uint32_t slot_codepoint(struct ytest *test, struct yetty_yclass_object *grid, uint32_t slot,
@@ -574,6 +611,141 @@ static void test_view_survives_streaming_output(struct ytest *test)
     yetty_yvterm_grid_dispose(grid);
 }
 
+/*---------------------------------------------------------------------------
+ * Tier v4: the complete paint key (z, sequence, ordinal) and the block's
+ * rolling anchors round-trip the archive EXACTLY — materialization never
+ * re-extracts or re-mints, so archived content sorts into the unified
+ * paint order exactly where it lived.
+ *-------------------------------------------------------------------------*/
+static void test_archive_reproduces_paint_keys_and_anchors(struct ytest *test)
+{
+    struct tier_fixture fixture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 20, 4, 0, 8);
+    struct yetty_ycore_void_result hook_res =
+        yetty_yvterm_grid_set_materialize(grid, fake_materialize, &fixture);
+    YTEST_REQUIRE_OK(test, hook_res);
+
+    /* A real SDF box with explicit z next to a complex envelope: two alive
+     * records with distinct keys in one block. Layout:
+     * [type][z][fill][stroke][stroke_w][cx cy hw hh cr]. */
+    uint32_t box_words[10] = {0};
+    box_words[0] = (uint32_t)YETTY_YSDF_BOX;
+    box_words[1] = (uint32_t)-3; /* z -3 — signed reinterpretation must survive */
+    box_words[2] = 0xCAFECAFEu;
+    float box_geometry[5] = {8.0f, 8.0f, 3.0f, 3.0f, 0.0f};
+    memcpy(&box_words[5], box_geometry, sizeof(box_geometry));
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_append_primitive(grid, 0, box_words, 10u));
+    uint64_t figure_line = anchor_figure(test, grid, &fixture);
+    YTEST_CHECK_EQ_SIZE(test, figure_line, 0);
+
+    /* Capture the live keys (record 0 = the box, record 1 = the envelope). */
+    int32_t live_z[2] = {0, 0};
+    uint64_t live_sequence[2] = {0, 0};
+    uint32_t live_ordinal[2] = {0, 0};
+    const uint32_t *live_window = view_window(test, grid, 0, 0, 4);
+    for (uint32_t record = 0; record < 2u; ++record) {
+        YTEST_REQUIRE_OK(test, yetty_yvterm_grid_slot_rich_block_record_paint_key(
+                                   grid, live_window[0], 0u, record, &live_z[record],
+                                   &live_sequence[record], &live_ordinal[record]));
+    }
+    YTEST_CHECK_EQ_INT(test, live_z[0], -3);
+    YTEST_CHECK_EQ_INT(test, live_z[1], 0);
+    YTEST_CHECK(test, live_sequence[1] > live_sequence[0]);
+
+    feed_newlines(test, grid, 40); /* age the line deep past the ring */
+    YTEST_CHECK_EQ_INT(test, fixture.destroy_count, 1);
+
+    /* View the archived line: the cache block's records must carry the
+     * captured keys verbatim. */
+    const uint32_t *window = view_window(test, grid, 1, figure_line, 4);
+    for (uint32_t record = 0; record < 2u; ++record) {
+        int32_t cache_z = 0;
+        uint64_t cache_sequence = 0;
+        uint32_t cache_ordinal = 0;
+        YTEST_REQUIRE_OK(
+            test, yetty_yvterm_grid_slot_rich_block_record_paint_key(
+                      grid, window[0], 0u, record, &cache_z, &cache_sequence, &cache_ordinal));
+        YTEST_CHECK_EQ_INT(test, cache_z, live_z[record]);
+        YTEST_CHECK_EQ_SIZE(test, cache_sequence, live_sequence[record]);
+        YTEST_CHECK_EQ_INT(test, cache_ordinal, live_ordinal[record]);
+    }
+
+    /* The cache block's rolling anchors are REAL timeline rows (the line it
+     * archived from), not a zero placeholder — the plan walk places leaves
+     * by bottom_owner_row − view_top, so a placeholder would render
+     * archived content at the timeline origin. */
+    struct yetty_ycore_uint32_result plan_count_res = yetty_yvterm_grid_paint_plan_leaf_count(grid);
+    YTEST_REQUIRE_OK(test, plan_count_res);
+    int found_cache_leaf = 0;
+    for (uint32_t leaf = 0; leaf < plan_count_res.value; ++leaf) {
+        uint64_t sequence = 0;
+        YTEST_REQUIRE_OK(test, yetty_yvterm_grid_paint_plan_leaf(grid, leaf, NULL, NULL, NULL, NULL,
+                                                                 &sequence, NULL));
+        if (sequence != live_sequence[0]) {
+            continue;
+        }
+        found_cache_leaf = 1;
+        uint64_t bottom_owner_row = 0;
+        uint32_t span_rows = 0;
+        YTEST_REQUIRE_OK(test, yetty_yvterm_grid_paint_plan_leaf_anchor(
+                                   grid, leaf, &bottom_owner_row, &span_rows));
+        YTEST_CHECK_EQ_SIZE(test, bottom_owner_row, figure_line);
+    }
+    YTEST_CHECK(test, found_cache_leaf);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
+/*---------------------------------------------------------------------------
+ * Archive round-trip of a MOVED group (tier v5): a sealed block's records
+ * carry their accumulated group offsets into the archive and project at the
+ * frozen position after materialization — not at unshifted local coords.
+ *-------------------------------------------------------------------------*/
+static void test_archived_group_offset_round_trip(struct ytest *test)
+{
+    struct tier_fixture fixture = {0};
+    struct yetty_yclass_object *grid = make_grid(test, 20, 4, 0, 8);
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_set_materialize(grid, fake_materialize, &fixture));
+
+    /* Nested groups so the bake must ACCUMULATE (12,30) + (0,4) = (12,34). */
+    uint64_t outer_key = yetty_yvterm_group_key_fold(YETTY_YVTERM_GROUP_KEY_ROOT, 71);
+    uint64_t inner_key = yetty_yvterm_group_key_fold(outer_key, 5);
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_rich_group_open(grid, 0, outer_key));
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_rich_group_open(grid, 0, inner_key));
+    uint32_t prim_words[3] = {0x10000001u, 4u, 0x12341234u};
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_append_primitive(grid, 0, prim_words, 3u));
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_rich_group_close(grid));
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_rich_group_close(grid));
+    feed_newlines(test, grid, 1);
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_relocate_rich_to_bottom(grid, 1u));
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_rich_group_offset_set(grid, outer_key, 12.0f, 30.0f));
+    YTEST_REQUIRE_OK(test, yetty_yvterm_grid_rich_group_offset_set(grid, inner_key, 0.0f, 4.0f));
+
+    feed_newlines(test, grid, 40); /* age the line deep past the ring */
+
+    /* Materialize via a scrolled-back view; the plan leaf must project at
+     * the frozen accumulated offset. */
+    const uint32_t *window = view_window(test, grid, 1, 0, 4);
+    YTEST_CHECK_EQ_INT(test, slot_primitive_count(test, grid, window[0]), 1);
+    struct yetty_ycore_uint32_result plan_count_res = yetty_yvterm_grid_paint_plan_leaf_count(grid);
+    YTEST_REQUIRE_OK(test, plan_count_res);
+    int found_frozen_leaf = 0;
+    for (uint32_t leaf = 0; leaf < plan_count_res.value; ++leaf) {
+        float offset_x = 0.0f;
+        float offset_y = 0.0f;
+        if (YETTY_IS_ERR(
+                yetty_yvterm_grid_paint_plan_leaf_offset(grid, leaf, &offset_x, &offset_y))) {
+            continue;
+        }
+        if (offset_x == 12.0f && offset_y == 34.0f) {
+            found_frozen_leaf = 1;
+        }
+    }
+    YTEST_CHECK(test, found_frozen_leaf);
+
+    yetty_yvterm_grid_dispose(grid);
+}
+
 int main(void)
 {
     struct ytest test = ytest_begin("yvterm_scroll_tiers");
@@ -590,5 +762,7 @@ int main(void)
     YTEST_RUN(&test, test_timeline_crosses_uint32_max);
     YTEST_RUN(&test, test_resize_failure_is_transactional);
     YTEST_RUN(&test, test_view_survives_streaming_output);
+    YTEST_RUN(&test, test_archive_reproduces_paint_keys_and_anchors);
+    YTEST_RUN(&test, test_archived_group_offset_round_trip);
     return ytest_end(&test);
 }
