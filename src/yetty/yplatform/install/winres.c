@@ -23,27 +23,11 @@
 
 #include <yetty/yplatform/install.h>
 
-#ifdef HAS_BIN_MANIFEST
-#include "yinstall_bin_manifest.h"
-#endif
-#ifdef HAS_DATA_MANIFEST
-#include "yinstall_data_manifest.h"
-#endif
-#ifdef HAS_GREETER_MANIFEST
-#include "yinstall_greeter_manifest.h"
-#endif
-#ifdef HAS_DEMOS_MANIFEST
-#include "yinstall_demos_manifest.h"
-#endif
-#ifdef HAS_YCONFIG_MANIFEST
-#include "yinstall_yconfig_manifest.h"
-#endif
-#ifdef HAS_YEMU_MANIFEST
-#include "yinstall_yemu_manifest.h"
-#endif
-#ifdef HAS_QEMU_MANIFEST
-#include "yinstall_qemu_manifest.h"
-#endif
+/* One guarded include per embedded prefix, generated per installer variant
+ * (tools/yinstall/CMakeLists.txt) since the manifest headers are named
+ * after the variant target. A prefix the variant does not carry has no
+ * HAS_<PREFIX>_MANIFEST guard and its fan-out below compiles out. */
+#include "yinstall_manifests.h"
 
 /*
  * The generated register_<prefix>_assets_c entry points take a fixed

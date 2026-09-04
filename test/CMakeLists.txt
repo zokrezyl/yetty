@@ -157,6 +157,12 @@ if(TARGET yetty_yscene)
     add_subdirectory(ut/yscene)
 endif()
 
+# ymsdf — generate-unless-cached atlas front, exercised through the CPU backend
+# (needs msdfgen; the gpu backend needs a device). Headless.
+if(TARGET yetty_ymsdf AND YETTY_ENABLE_FEATURE_YMSDF_GEN)
+    add_subdirectory(ut/ymsdf)
+endif()
+
 # ybrowser geometry + headless render tests (the render smoke test carries the
 # "network" label and is excluded from the fast lane).
 if(TARGET yetty_ybrowser)

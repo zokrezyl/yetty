@@ -4,8 +4,9 @@
 #   e.g. ./verify-release.sh v0.1.50
 #
 # Downloads all platform archives from the GitHub release, extracts them,
-# and checks that each contains the expected executables, CDB fonts,
-# shaders, and demo files.
+# and checks that each desktop archive holds its installer binary (one
+# archive per platform and installer variant: default / min / max) and that
+# the webasm / mobile archives hold their expected files.
 
 set -euo pipefail
 
@@ -56,27 +57,50 @@ check_dir() {
 }
 
 # ---------------------------------------------------------------------------
-# Checks for desktop platforms: executables and demo
-# Note: fonts and shaders are embedded via incbin, not included separately
+# Checks for desktop platforms: the self-contained installers.
+# Each desktop release archive holds exactly one installer binary; there is
+# one archive per (platform, variant). Fonts, shaders, tools and demos are
+# inside the installer's payload, not loose in the archive.
 # ---------------------------------------------------------------------------
-check_desktop() {
-    local dir="$1" platform="$2" exe_dir="$3" exe_ext="${4:-}"
 
-    info "[$platform] Executables"
-    check_file "$dir" "${exe_dir}/yetty${exe_ext}"  "yetty executable"
-    check_file "$dir" "${exe_dir}/ycat${exe_ext}"   "ycat executable"
-    check_file "$dir" "${exe_dir}/yecho${exe_ext}"  "yecho executable"
-
-    # Note: TTF fonts and shaders are embedded via incbin into the executable
-    # They are NOT included as separate files in desktop releases (see issue #171)
-
-    info "[$platform] Demo files"
-    check_dir  "$dir" "demo"                                "Demo directory"
-    check_dir  "$dir" "demo/scripts"                        "Demo scripts"
-    check_dir  "$dir" "demo/files"                          "Demo data files"
-    check_dir  "$dir" "demo/assets"                         "Demo assets"
-    check_file "$dir" "demo/files/logo.encoded.yetty"       "Demo logo"
-    check_file "$dir" "demo/files/shader.encoded.yetty"     "Demo shader"
+# check_installer <archive-base> <platform label> <exe extension>
+# e.g. check_installer yetty-linux "Linux x86_64" ""
+check_installer() {
+    local base="$1" platform="$2" exe_ext="${3:-}"
+    local variant archive dir root name
+    for variant in default min max; do
+        if [ "$variant" = "default" ]; then
+            name="yinstall${exe_ext}"
+            archive="${base}"
+        else
+            name="yinstall-${variant}${exe_ext}"
+            archive="${base}-${variant}"
+        fi
+        if [ -n "$exe_ext" ]; then
+            archive="${archive}.zip"
+        else
+            archive="${archive}.tar.gz"
+        fi
+        info "[$platform] ${variant} installer (${archive})"
+        if [ ! -f "$archive" ]; then
+            fail "${archive} not in release"
+            continue
+        fi
+        dir="extract-${archive%%.*}-${variant}"
+        mkdir -p "$dir"
+        if [ -n "$exe_ext" ]; then
+            unzip -qo "$archive" -d "$dir"
+        else
+            tar -xzf "$archive" -C "$dir"
+        fi
+        # The binary may sit at the archive root or one level down.
+        root="$dir"
+        [ -f "$root/$name" ] || root="$(dirname "$(find "$dir" -name "$name" -type f | head -n 1 || true)")"
+        check_file "$root" "$name" "${name} installer"
+        if [ -z "$exe_ext" ] && [ -f "$root/$name" ] && [ ! -x "$root/$name" ]; then
+            fail "${name} is not executable"
+        fi
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -92,48 +116,18 @@ echo "  Downloaded:"
 ls -lh "$WORKDIR"/ 2>/dev/null | grep -v ^total | sed 's/^/    /'
 
 # ---------------------------------------------------------------------------
-# Linux
+# Desktop: Linux (x86_64, aarch64), macOS (arm64, x86_64), Windows (x64)
 # ---------------------------------------------------------------------------
-if [ -f yetty-linux.tar.gz ]; then
-    info "============ LINUX ============"
-    mkdir -p linux && tar -xzf yetty-linux.tar.gz -C linux
-    check_desktop linux "Linux" "build-desktop" ""
-else
-    info "============ LINUX: MISSING (yetty-linux.tar.gz not in release) ============"
-    ((ERRORS++)); ((CHECKS++))
-fi
+info "============ LINUX ============"
+check_installer yetty-linux          "Linux x86_64"  ""
+check_installer yetty-linux-aarch64  "Linux aarch64" ""
 
-# ---------------------------------------------------------------------------
-# macOS
-# ---------------------------------------------------------------------------
-if [ -f yetty-macos.tar.gz ]; then
-    info "============ macOS ============"
-    mkdir -p macos && tar -xzf yetty-macos.tar.gz -C macos
-    check_desktop macos "macOS" "build-macos" ""
-else
-    info "============ macOS: MISSING (yetty-macos.tar.gz not in release) ============"
-    ((ERRORS++)); ((CHECKS++))
-fi
+info "============ macOS ============"
+check_installer yetty-macos          "macOS arm64"   ""
+check_installer yetty-macos-x86_64   "macOS x86_64"  ""
 
-# ---------------------------------------------------------------------------
-# Windows
-# ---------------------------------------------------------------------------
-if [ -f yetty-windows.zip ]; then
-    info "============ WINDOWS ============"
-    mkdir -p windows && unzip -qo yetty-windows.zip -d windows
-    # Windows zip nests under yetty-windows/ and ships exactly one artifact:
-    # yinstall.exe, the self-contained installer. It carries yetty, the
-    # companion tools, the DirectX DLLs, the demo tree and the VM runtime as
-    # an embedded payload, so there are no loose executables or demo/ dir to
-    # check here — just the installer itself.
-    win_root="windows/yetty-windows"
-    [ -d "$win_root" ] || win_root="windows"
-    info "[Windows] Installer"
-    check_file "$win_root" "yinstall.exe" "yinstall installer"
-else
-    info "============ WINDOWS: MISSING (yetty-windows.zip not in release) ============"
-    ((ERRORS++)); ((CHECKS++))
-fi
+info "============ WINDOWS ============"
+check_installer yetty-windows        "Windows x64"   ".exe"
 
 # ---------------------------------------------------------------------------
 # WebAssembly

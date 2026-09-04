@@ -135,6 +135,28 @@ target_compile_definitions(yetty PRIVATE
 
 set_target_properties(yetty PROPERTIES ENABLE_EXPORTS TRUE)
 
+# ENABLE_EXPORTS (-rdynamic) would also export the statically linked X11 /
+# Xext / xcb copies (x11-static.cmake). The system X libraries that GLFW
+# dlopens at runtime (libXi, libXrandr, libXinerama, libXxf86vm, …) and the
+# NVIDIA Vulkan ICD (libGLX_nvidia.so.0) resolve XextAddDisplay /
+# XextRemoveDisplay through the global scope, where the executable comes
+# first — so they would land in the executable's private Xext copy instead of
+# libXext.so.6, splitting one process's Xext bookkeeping across two
+# implementations. The ICD's exit-time cleanup then tears down through the
+# wrong copy and crashes (pthread_mutex_lock on NULL inside the executable's
+# XextRemoveDisplay) in every session that ran the GPU MSDF generator. Keep
+# the static X11 archives out of the dynamic symbol table so every dlopen'd
+# library stays on the system copies it links against.
+if(YETTY_X11_STATIC_LIBS)
+    set(_yetty_x11_exclude_libs "")
+    foreach(_x11_lib ${YETTY_X11_STATIC_LIBS})
+        get_filename_component(_x11_lib_name "${_x11_lib}" NAME)
+        list(APPEND _yetty_x11_exclude_libs "${_x11_lib_name}")
+    endforeach()
+    list(JOIN _yetty_x11_exclude_libs ":" _yetty_x11_exclude_libs)
+    target_link_options(yetty PRIVATE "-Wl,--exclude-libs,${_yetty_x11_exclude_libs}")
+endif()
+
 # Fontconfig linking
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(FONTCONFIG REQUIRED fontconfig)

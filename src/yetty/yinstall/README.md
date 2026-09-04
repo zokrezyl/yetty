@@ -13,8 +13,62 @@ is no separate archive, no package manager step, no second download. This
 replaces shipping one enormous all-in-one `yetty` binary that had grown too
 large because every asset was baked directly into the terminal.
 
+The build produces the installer in **three sizes** — `yinstall-min`,
+`yinstall`, `yinstall-max` — that differ only in which components they carry
+(see *Variants* below). The description above is `yinstall-max`.
+
 Targets: **Linux, macOS, Windows.** (webasm / android / ios / tvos are out of
 scope — they have their own packaging.)
+
+---
+
+## Variants
+
+`tools/yinstall/CMakeLists.txt` builds three installers from the same sources.
+They share the component table and the install loop described in this
+document; they differ only in which components the build embeds.
+
+| Installer | carries | leaves out |
+|-----------|---------|------------|
+| `yinstall-min` | `yetty` alone (plus the DirectX / lavapipe runtime DLLs it needs on Windows), its WGSL shaders, the raw TTF/OTF fonts, `config.yaml` + `defaults.yaml` | every companion tool and demo program, the MSDF font databases, the greeter and demo assets, the temu configs, the VM runtime |
+| `yinstall` | every shipped executable (`yetty`, the companion CLIs, the `demo-*` programs), shaders, the raw fonts **and** the MSDF font databases, the full config, the greeter and demo assets | the RISC-V VM runtime (`yemu/`) and the QEMU emulator (`qemu/`) |
+| `yinstall-max` | everything `yinstall` has, plus the RISC-V VM runtime and QEMU | — |
+
+Measured on a Linux x86_64 release build (download = the installer binary,
+everything brotli-compressed inside; on disk = what a fresh install writes):
+
+| Installer | download | on disk |
+|-----------|---------:|--------:|
+| `yinstall-min` | 18 MB | 45 MB |
+| `yinstall` | 229 MB | 701 MB |
+| `yinstall-max` | 350 MB | 1.1 GB |
+
+Each variant is published for every desktop platform as its own release
+archive holding just that installer: `yetty-<platform>.tar.gz` for the
+default, `yetty-<platform>-min.tar.gz` / `-max.tar.gz` for the others (`.zip`
+on Windows), and reached through `yetty.dev/install.sh`, `install-min.sh`,
+`install-max.sh` and their `.ps1` twins (`build-tools/install/`, see
+`make-variants.sh`).
+
+A component the variant does not carry has no embedded asset under its
+prefix, so the install loop skips it — no log line, no empty directory
+(`--verbose` prints `not included in this installer` for it). The banner and
+`--version` name the variant (`yetty installer (yinstall-min) · version …`),
+so an install log always says which installer produced it.
+
+`yinstall-min` ships no MSDF font databases on purpose: yetty builds them
+from the raw fonts on its first run. Every text consumer opens
+`<data>/msdf-fonts/<face>.cdb` directly, so `yetty_create` first walks the
+default faces (the four DejaVu Sans Mono Nerd Font styles and the Emmentaler
+music font) and generates any atlas whose font file is present but whose CDB
+is not, through the shared MSDF generator (`msdf/generator`, gpu by default;
+see [ymsdf](../ymsdf/README.md)) as one batch: outlines on threads, one GPU
+dispatch per face, writes on threads. That first start takes about a second
+longer on a 2014-class GPU (bounded by the GPU passes) and logs one
+`built MSDF atlas` line per face; every later start finds the atlases in
+place. The atlases are byte-identical to what the GPU generator produced
+before. The full installers carry the pre-generated CDBs, so they never pay
+that cost.
 
 **Everything is brotli-compressed** inside the installer — every executable and
 every asset — so the download stays as small as the content allows. On
@@ -69,11 +123,10 @@ That extensibility is the whole point of the design.
 
 Every executable yetty ships — the terminal, the companion CLIs, and the
 `demo-*` programs alike — installs into the single `BIN` destination. The set is
-**curated at build time**, not hardcoded in the installer: the yetty build
-produces dozens of binaries, many of them internal codegen/dev tools
-(`gen-error`, `yetty-msdf-gen`, `gpu-info`, the `*-bench` programs) that must
-**not** be installed. The installer's CMake lists exactly the user-facing
-targets to embed; everything else is simply never staged.
+**decided at build time**, not hardcoded in the installer: the full variants
+embed every executable target defined under `tools/` (collected by walking the
+CMake directory graph, so a tool gated off by a feature flag is simply absent)
+plus `yetty` and the `demo-*` programs; `yinstall-min` embeds `yetty` alone.
 
 ---
 
@@ -281,17 +334,18 @@ the same data directory.
 ## Adding a new executable (the common case)
 
 Most additions are "I wrote a new tool/demo, ship it." Because the binary set is
-curated in the build, this never touches installer code:
+decided in the build, this never touches installer code:
 
-1. In `tools/yinstall/CMakeLists.txt`, add the build target to the list staged
-   into the `bin/` prefix. The staging step copies the built binary — e.g.
-   `$<TARGET_FILE:ycat>` — into the embed directory. A demo is no different from
-   any other tool here; it is just another target in the same list.
-2. Rebuild. The new binary is embedded, installed into `BIN`, gets its exec bit,
-   and shows up in the inventory.
+1. A tool under `tools/` needs nothing: `tools/yinstall/CMakeLists.txt` walks the
+   CMake directory graph under `tools/` and embeds every executable target it
+   finds into the `bin/` prefix of `yinstall` and `yinstall-max`. An executable
+   that lives elsewhere (the `demo-*` programs) is listed by name in the
+   `_yinstall_extra_exes` set in that file.
+2. Rebuild. The new binary is brotli-compressed at build time, embedded,
+   installed into `BIN`, gets its exec bit, and shows up in the inventory.
 
-The list is intentionally an explicit allow-list, not a glob over every build
-target, so internal codegen/dev tools never get shipped by accident.
+`yinstall-min` is the one variant that does not follow the walk — it embeds
+`yetty` alone by construction.
 
 ## Adding a new component (the recipe)
 

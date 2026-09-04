@@ -23,6 +23,8 @@
 #include <yetty/yui-core/view.h>
 #include <yetty/yplatform/platform-input-pipe.h>
 #include <yetty/yplatform/fs.h>
+#include <yetty/yplatform/time.h>
+#include <yetty/ymsdf/generator.h>
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -1354,6 +1356,100 @@ static void yetty_on_yui_connect(void *userdata, enum yetty_yui_view_kind kind)
  * Public API
  *===========================================================================*/
 
+/* One default face: the raw font file under <fonts_dir>, and the atlas stem
+ * every text consumer opens under <fonts_dir>/../msdf-fonts/. The two differ
+ * only for the music font, whose atlas is referenced by family name. */
+struct yetty_default_face {
+    const char *font_file;
+    const char *cdb_stem;
+};
+
+/* One atlas to build: a face whose font file is installed but whose atlas is
+ * not. */
+struct yetty_atlas_build {
+    char font_path[768];
+    char cdb_path[768];
+};
+
+/*
+ * Default font atlases. Every text consumer (yui, the terminal root font,
+ * vterm, the sdf layer, ydraw, …) opens <fonts_dir>/../msdf-fonts/<face>.cdb
+ * directly. The full installers ship those CDBs pre-generated; yinstall-min
+ * ships only the raw fonts. Build any missing atlas from its font file here,
+ * before yui / terminal creation, so a raw-font install renders text on its
+ * very first run. A cache hit costs one stat per face; the misses go to the
+ * shared MSDF generator (`msdf/generator`, gpu by default) as one batch,
+ * which overlaps the CPU-side work of the faces on threads and keeps the
+ * device on this thread. Failures are logged, not fatal: the consumers
+ * report the missing file themselves.
+ */
+static void ensure_default_font_atlases(struct yetty_yframework *runtime)
+{
+    static const struct yetty_default_face faces[] = {
+        {"DejaVuSansMNerdFontMono-Regular.ttf", "DejaVuSansMNerdFontMono-Regular"},
+        {"DejaVuSansMNerdFontMono-Bold.ttf", "DejaVuSansMNerdFontMono-Bold"},
+        {"DejaVuSansMNerdFontMono-Oblique.ttf", "DejaVuSansMNerdFontMono-Oblique"},
+        {"DejaVuSansMNerdFontMono-BoldOblique.ttf", "DejaVuSansMNerdFontMono-BoldOblique"},
+        {"Emmentaler-20.otf", "Emmentaler"},
+    };
+    enum { FACE_COUNT = sizeof(faces) / sizeof(faces[0]) };
+
+    struct yetty_yconfig_config *config = runtime->config;
+    const char *fonts_dir = config ? config->ops->get_string(config, "paths/fonts", "") : "";
+    if (!fonts_dir || !*fonts_dir) {
+        return;
+    }
+
+    /* Collect the misses. */
+    struct yetty_atlas_build builds[FACE_COUNT] = {0};
+    struct yetty_ymsdf_ensure_item items[FACE_COUNT] = {0};
+    size_t build_count = 0;
+    for (size_t index = 0; index < FACE_COUNT; index++) {
+        struct yetty_atlas_build *build = &builds[build_count];
+        snprintf(build->font_path, sizeof(build->font_path), "%s/%s", fonts_dir,
+                 faces[index].font_file);
+        snprintf(build->cdb_path, sizeof(build->cdb_path), "%s/../msdf-fonts/%s.cdb", fonts_dir,
+                 faces[index].cdb_stem);
+        if (yetty_yplatform_file_is_regular(build->cdb_path)) {
+            continue; /* cache hit */
+        }
+        if (!yetty_yplatform_file_is_regular(build->font_path)) {
+            ydebug("yetty_create: face %s not installed (no atlas, no font file)",
+                   faces[index].cdb_stem);
+            continue;
+        }
+        items[build_count].ttf_path = build->font_path;
+        items[build_count].cdb_path = build->cdb_path;
+        build_count++;
+    }
+    if (build_count == 0) {
+        return;
+    }
+
+    double time_start = yetty_yplatform_ytime_monotonic_sec();
+    struct yetty_ycore_void_result batch_res =
+        yetty_ymsdf_generator_ensure_cdb_batch(runtime->gpu.msdf_generator, items, build_count);
+    if (YETTY_IS_ERR(batch_res)) {
+        ywarn("yetty_create: MSDF atlas batch failed: %s", batch_res.error.msg);
+        yetty_ycore_error_destroy(batch_res.error);
+        return;
+    }
+    for (size_t index = 0; index < build_count; index++) {
+        struct yetty_ymsdf_ensure_item *item = &items[index];
+        if (YETTY_IS_ERR(item->result)) {
+            ywarn("yetty_create: cannot build MSDF atlas %s from %s: %s", item->cdb_path,
+                  item->ttf_path, item->result.error.msg);
+            yetty_ycore_error_destroy(item->result.error);
+            continue;
+        }
+        if (item->generated) {
+            yinfo("yetty_create: built MSDF atlas %s from %s", item->cdb_path, item->ttf_path);
+        }
+    }
+    yinfo("yetty_create: %zu MSDF atlases built in %.0f ms", build_count,
+          (yetty_yplatform_ytime_monotonic_sec() - time_start) * 1000.0);
+}
+
 struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
                                              struct yetty_yplatform_pty_factory *pty_factory)
 {
@@ -1391,6 +1487,10 @@ struct yetty_yetty_yetty_result yetty_create(struct yetty_yframework *runtime,
         (void)yetty_destroy(yetty);
         return YETTY_ERR(yetty_yetty_yetty, "failed to register event listeners");
     }
+
+    /* Make sure the default MSDF atlases exist before anything opens them
+     * (yui's default font is the first, and it is fatal to yui). */
+    ensure_default_font_atlases(runtime);
 
     /* Create tabbar — owns the (initially single) workspace. */
     ydebug("yetty_create: Creating tabbar...");

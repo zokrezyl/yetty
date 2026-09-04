@@ -673,42 +673,27 @@ if(YETTY_ENABLE_FEATURE_YVIDEO)
 endif()
 
 #-----------------------------------------------------------------------------
-# yetty_embed_assets(TARGET)
+# yetty_stage_embed_assets()
 #
-# Embeds shaders, fonts, and CDB files into the target binary.
-# Call this AFTER creating the target with add_executable/add_library.
-# WebAssembly: provides empty stubs (uses --preload-file instead)
+# Configure-time staging of the embeddable asset trees under the build dir.
+# Copies shaders / fonts / MSDF CDBs, the default config and the shared
+# RISC-V runtime into one staging directory each, ready for
+# incbin_add_directory(). Idempotent — safe to call from several targets.
+# Sets in the caller's scope:
+#   YETTY_EMBED_DATA_DIR    shaders/, fonts/, msdf-fonts/
+#   YETTY_EMBED_CONFIG_DIR  config.yaml, defaults.yaml, temu/
+#   YETTY_EMBED_YEMU_DIR    kernel / firmware / rootfs images, or "" when
+#                           neither TinyEMU nor QEMU is enabled
+# yetty_embed_assets() below stages + embeds everything into one target; the
+# installer variants (tools/yinstall) stage once and embed per-variant subsets.
 #-----------------------------------------------------------------------------
-function(yetty_embed_assets TARGET)
-    if(NOT YETTY_ENABLE_LIB_INCBIN)
-        return()
-    endif()
-
+function(yetty_stage_embed_assets)
     # Collect ALL data assets into one build directory
     set(EMBED_DATA_DIR "${CMAKE_BINARY_DIR}/embed-data")
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}")
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}/shaders")
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}/fonts")
     file(MAKE_DIRECTORY "${EMBED_DATA_DIR}/msdf-fonts")
-
-    # Stamp a per-source version baked into the binary so the runtime's
-    # asset-extract marker check (yetty_incbin_assets_needs_extraction)
-    # re-extracts whenever the embedded shaders / fonts could have changed.
-    # The marker lives under the per-install data dir (~/.local/share/yetty
-    # on Linux, %LOCALAPPDATA%\yetty\data on Windows); without a per-build
-    # version it stays at "dev" forever and an editor change to text-layer.wgsl
-    # never reaches the runtime until the user wipes the data dir by hand.
-    #
-    # Prefer the git HEAD short hash (+ "-dirty" when there are uncommitted
-    # changes) over a wall-clock timestamp: same commit reconfigured a second
-    # time keeps the same version, so incidental reconfigures (editing an
-    # unrelated CMakeLists, deleting build.ninja) no longer force a 950 MB
-    # asset re-extraction. Tied to .git/HEAD + .git/index so CMake reconfigures
-    # on commit / checkout / `git add`. Falls back to the timestamp in source
-    # tarball builds where .git is absent.
-    yetty_compute_build_version()
-    target_compile_definitions(${TARGET} PRIVATE
-        YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
 
     # Collect shaders from module locations. Scene figures (chrome, rich
     # content) render through yscene.wgsl; the vterm figure's text grid uses
@@ -814,8 +799,7 @@ function(yetty_embed_assets TARGET)
         file(COPY "${MSDF_FILE}" DESTINATION "${EMBED_DATA_DIR}/msdf-fonts")
     endforeach()
 
-    # Embed ALL data assets (brotli compressed)
-    incbin_add_directory(${TARGET} "data" "${EMBED_DATA_DIR}" "*" TRUE)
+    set(YETTY_EMBED_DATA_DIR "${EMBED_DATA_DIR}" PARENT_SCOPE)
 
     # Collect config into separate build directory
     set(EMBED_CONFIG_DIR "${CMAKE_BINARY_DIR}/embed-config")
@@ -849,8 +833,7 @@ function(yetty_embed_assets TARGET)
         "${YETTY_ROOT}/assets/yemu/temu/yetty-temu-extended.cfg"
         DESTINATION "${EMBED_CONFIG_DIR}/temu")
 
-    # Embed config (brotli-compressed; the extractor inflates on the way out)
-    incbin_add_directory(${TARGET} "yconfig" "${EMBED_CONFIG_DIR}" "*" TRUE)
+    set(YETTY_EMBED_CONFIG_DIR "${EMBED_CONFIG_DIR}" PARENT_SCOPE)
 
     # Embed shared RISC-V runtime (kernel, opensbi, rootfs) under yemu/ prefix.
     # Used by both --temu (TinyEMU, in-process) and --qemu (external QEMU via
@@ -860,6 +843,7 @@ function(yetty_embed_assets TARGET)
     # side-by-side for runtime path mode (see tinyemu_copy_runtime_to_bundle).
     # incbin's already-compressed path embeds the .br bytes as-is and strips
     # the .br suffix from the in-binary asset name.
+    set(YETTY_EMBED_YEMU_DIR "" PARENT_SCOPE)
     if(YETTY_ENABLE_LIB_TINYEMU OR YETTY_ENABLE_LIB_QEMU)
         set(EMBED_YEMU_DIR "${CMAKE_BINARY_DIR}/embed-yemu")
         file(REMOVE_RECURSE "${EMBED_YEMU_DIR}")
@@ -884,7 +868,53 @@ function(yetty_embed_assets TARGET)
             endif()
         endforeach()
 
-        incbin_add_directory(${TARGET} "yemu" "${EMBED_YEMU_DIR}" "*" FALSE)
+        set(YETTY_EMBED_YEMU_DIR "${EMBED_YEMU_DIR}" PARENT_SCOPE)
+    endif()
+endfunction()
+
+#-----------------------------------------------------------------------------
+# yetty_embed_assets(TARGET)
+#
+# Embeds shaders, fonts, and CDB files into the target binary.
+# Call this AFTER creating the target with add_executable/add_library.
+# WebAssembly: provides empty stubs (uses --preload-file instead)
+#-----------------------------------------------------------------------------
+function(yetty_embed_assets TARGET)
+    if(NOT YETTY_ENABLE_LIB_INCBIN)
+        return()
+    endif()
+
+    # Stamp a per-source version baked into the binary so the runtime's
+    # asset-extract marker check (yetty_incbin_assets_needs_extraction)
+    # re-extracts whenever the embedded shaders / fonts could have changed.
+    # The marker lives under the per-install data dir (~/.local/share/yetty
+    # on Linux, %LOCALAPPDATA%\yetty\data on Windows); without a per-build
+    # version it stays at "dev" forever and an editor change to text-layer.wgsl
+    # never reaches the runtime until the user wipes the data dir by hand.
+    #
+    # Prefer the git HEAD short hash (+ "-dirty" when there are uncommitted
+    # changes) over a wall-clock timestamp: same commit reconfigured a second
+    # time keeps the same version, so incidental reconfigures (editing an
+    # unrelated CMakeLists, deleting build.ninja) no longer force a 950 MB
+    # asset re-extraction. Tied to .git/HEAD + .git/index so CMake reconfigures
+    # on commit / checkout / `git add`. Falls back to the timestamp in source
+    # tarball builds where .git is absent.
+    yetty_compute_build_version()
+    target_compile_definitions(${TARGET} PRIVATE
+        YETTY_BUILD_VERSION="${YETTY_BUILD_VERSION_STR}")
+
+    yetty_stage_embed_assets()
+
+    # Embed ALL data assets (brotli compressed)
+    incbin_add_directory(${TARGET} "data" "${YETTY_EMBED_DATA_DIR}" "*" TRUE)
+
+    # Embed config (brotli-compressed; the extractor inflates on the way out)
+    incbin_add_directory(${TARGET} "yconfig" "${YETTY_EMBED_CONFIG_DIR}" "*" TRUE)
+
+    # Shared RISC-V runtime under yemu/ — files are shipped pre-brotli'd, so
+    # embed as-is (incbin strips the .br from the in-binary asset name).
+    if(YETTY_EMBED_YEMU_DIR)
+        incbin_add_directory(${TARGET} "yemu" "${YETTY_EMBED_YEMU_DIR}" "*" FALSE)
     endif()
 
     # Embed QEMU binary if enabled (fetched by yetty_3rdparty_fetch(qemu))

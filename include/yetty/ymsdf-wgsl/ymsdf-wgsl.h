@@ -5,8 +5,8 @@
  * ymsdf-wgsl - GPU MSDF glyph CDB generation via a WebGPU compute shader.
  *
  * Mirrors the API surface of ymsdf-gen (cpu) but routes glyph outline
- * decomposition (FreeType) → packed buffers → compute shader → RGBA32Float
- * storage texture → readback → CDB writer. Output CDB layout is
+ * decomposition (FreeType) → packed buffers → one compute dispatch over the
+ * atlas → RGBA8 storage texture → readback → CDB writer. Output CDB layout is
  * byte-compatible with the CPU generator: per-glyph
  * `struct yetty_ymsdf_wgsl_glyph_header` followed by RGBA8 pixel data.
  *
@@ -60,9 +60,52 @@ struct yetty_ymsdf_wgsl_config {
 };
 
 /* Generate a CDB at config->cdb_path. Walks every codepoint in the font's
- * cmap. Caller owns the WGPUDevice/Instance — they're not destroyed here. */
+ * cmap. Caller owns the WGPUDevice/Instance — they're not destroyed here.
+ * Equivalent to the staged calls below, with a pipeline built for the call. */
 struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
     const struct yetty_ymsdf_wgsl_config *config);
+
+/*
+ * The compiled compute pipeline for one device. Building it costs tens of
+ * milliseconds, so a caller generating several fonts keeps one and reuses
+ * it. device/instance are borrowed; shader_path as in the config. Use only
+ * from the device's thread.
+ */
+struct yetty_ymsdf_wgsl_pipeline;
+YETTY_YRESULT_DECLARE(yetty_ymsdf_wgsl_pipeline_ptr, struct yetty_ymsdf_wgsl_pipeline *);
+
+struct yetty_ymsdf_wgsl_pipeline_ptr_result yetty_ymsdf_wgsl_pipeline_create(
+    void *device, void *instance, const char *shader_path);
+void yetty_ymsdf_wgsl_pipeline_destroy(struct yetty_ymsdf_wgsl_pipeline *pipeline);
+
+/*
+ * Staged generation, for batches: the CPU stages of several fonts can run
+ * concurrently on their own threads while only the device stages need the
+ * device's thread — and submitting every font before reading any back lets
+ * the GPU work on the next font while the CPU copies the previous one.
+ *   prepare   CPU only, any thread. Reads the font, serialises every glyph
+ *             outline, lays out the atlas. Copies the config's strings.
+ *   submit    the device's thread: atlas texture, uploads, ONE compute
+ *             dispatch over the atlas and the copy-out, submitted; returns
+ *             before the GPU finishes.
+ *   readback  the device's thread: waits for that font's copy-out and reads
+ *             the atlas back, releasing the GPU objects.
+ *   write     any thread: writes config->cdb_path.
+ * render = submit + readback. A job is single-use; destroy it after write
+ * (or after any failure).
+ */
+struct yetty_ymsdf_wgsl_job;
+YETTY_YRESULT_DECLARE(yetty_ymsdf_wgsl_job_ptr, struct yetty_ymsdf_wgsl_job *);
+
+struct yetty_ymsdf_wgsl_job_ptr_result yetty_ymsdf_wgsl_job_prepare(
+    const struct yetty_ymsdf_wgsl_config *config);
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_job_submit(
+    struct yetty_ymsdf_wgsl_job *job, struct yetty_ymsdf_wgsl_pipeline *pipeline);
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_job_readback(struct yetty_ymsdf_wgsl_job *job);
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_job_render(
+    struct yetty_ymsdf_wgsl_job *job, struct yetty_ymsdf_wgsl_pipeline *pipeline);
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_job_write(struct yetty_ymsdf_wgsl_job *job);
+void yetty_ymsdf_wgsl_job_destroy(struct yetty_ymsdf_wgsl_job *job);
 
 #ifdef __cplusplus
 }

@@ -51,6 +51,26 @@ gr.value->ops->destroy(gr.value);   /* borrows device/instance — not released 
 is allowed to be slow; consumers gate on file existence (the `.cdb` acts as
 a cache) before calling it.
 
+`yetty_ymsdf_generator_ensure_cdb(gen, ttf_path, cdb_path, &generated)` is
+the "generate unless cached" front over that contract (`ensure.c`). Both
+backends write the CDB in place, truncating first, so a crash mid-generation
+would leave a short file that every later run mistakes for a cache hit. The
+front therefore builds the atlas in a private scratch directory beside the
+destination (`.building-<name>-<n>/`, claimed with an exclusive mkdir so two
+processes racing on the same first run never share a file) and renames the
+finished CDB into place. `gen` may be `NULL` for a cache hit; `generated`
+reports whether work was done.
+
+`yetty_ymsdf_generator_ensure_cdb_batch(gen, items, count)` does the same for
+several atlases at once, using the optional staged ops of the backend
+(`prepare` / `submit` / `readback` / `finish` / `job_destroy` on the ops
+table; the GPU backend has them, the CPU backend does not): the `prepare`
+stages of every miss run concurrently on their own threads, then on the
+calling thread every font is submitted before any is read back — so the GPU
+works on the next font while the CPU copies the previous one — and the CDB
+writes run concurrently again. The device is never touched from more than
+one thread. Per-atlas outcomes land in `items[]`.
+
 ## Backend notes
 
 - **cpu-generator.c** — adapts the (ttf_path, output_dir) shape of
@@ -74,6 +94,10 @@ referenced by a drawable list has no cached `.cdb` yet:
   ([yvterm](../yvterm/README.md)).
 - `../yscene/scene.c` — the scene figure's font slots
   ([yscene](../yscene/README.md)).
+- `../yetty/yetty.c` — `ensure_default_font_atlases` at startup: builds the
+  default terminal faces (DejaVu Sans Mono Nerd Font ×4, Emmentaler) from
+  the raw fonts as one `ensure_cdb_batch` when an install ships no
+  pre-generated CDBs (`yinstall-min`; see [yinstall](../yinstall/README.md)).
 
 ## Layout of the module
 
@@ -82,6 +106,7 @@ referenced by a drawable list has no cached `.cdb` yet:
 | `factory.c` | `create_from_config` — config-key dispatch, backend validation |
 | `cpu-generator.c` | ops wrapper over `yetty_ymsdf_gen` (compiled only with `YETTY_ENABLE_FEATURE_YMSDF_GEN`) |
 | `gpu-generator.c` | ops wrapper over `yetty_ymsdf_wgsl` |
+| `ensure.c` | `ensure_cdb` / `ensure_cdb_batch` — cache check, scratch-dir build, threaded stages, atomic rename into place |
 | `../../../include/yetty/ymsdf/generator.h` | the ops table, config struct, factories |
 
 Built when `YETTY_ENABLE_FEATURE_YMSDF_WGSL` is on (the factory is always
