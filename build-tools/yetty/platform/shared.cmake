@@ -18,9 +18,14 @@
 # those must NOT make a pristine release build report "-dirty". Only an actual
 # modification to a committed file means the source state differs from HEAD.
 function(yetty_compute_build_version)
-    if(DEFINED CACHE{YETTY_BUILD_VERSION_STR})
-        return()
-    endif()
+    # Recomputed from git on every configure, so a build tree follows the
+    # commit it is built from (the CMAKE_CONFIGURE_DEPENDS below re-runs
+    # configure when HEAD moves). Caching the first answer froze the stamp
+    # for the life of the build tree: an installer rebuilt at a newer commit
+    # still carried the old hash, and the install marker then reported a
+    # stale install as up to date. Only the no-git fallback keeps the cached
+    # value, so a source-tarball build does not get a fresh timestamp on
+    # every incidental reconfigure.
     set(_v "")
     if(EXISTS "${YETTY_ROOT}/.git")
         find_package(Git QUIET)
@@ -55,7 +60,11 @@ function(yetty_compute_build_version)
         endif()
     endif()
     if(NOT _v)
-        string(TIMESTAMP _v "%Y%m%d%H%M%S")
+        if(DEFINED CACHE{YETTY_BUILD_VERSION_STR})
+            set(_v "$CACHE{YETTY_BUILD_VERSION_STR}")
+        else()
+            string(TIMESTAMP _v "%Y%m%d%H%M%S")
+        endif()
     endif()
     set(YETTY_BUILD_VERSION_STR "${_v}" CACHE INTERNAL "yetty source-state stamp")
     message(STATUS "yetty: build version = ${_v}")
