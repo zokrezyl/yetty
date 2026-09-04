@@ -30,8 +30,8 @@ document; they differ only in which components the build embeds.
 
 | Installer | carries | leaves out |
 |-----------|---------|------------|
-| `yinstall-min` | `yetty` alone (plus the DirectX / lavapipe runtime DLLs it needs on Windows), its WGSL shaders, the raw TTF/OTF fonts, `config.yaml` + `defaults.yaml` | every companion tool and demo program, the MSDF font databases, the greeter and demo assets, the temu configs, the VM runtime |
-| `yinstall` | every shipped executable (`yetty`, the companion CLIs, the `demo-*` programs), shaders, the raw fonts **and** the MSDF font databases, the full config, the greeter and demo assets | the RISC-V VM runtime (`yemu/`) and the QEMU emulator (`qemu/`) |
+| `yinstall-min` | `yetty` alone (plus the DirectX / lavapipe runtime DLLs it needs on Windows), `libyetty_ffi` for the language bindings, its WGSL shaders, the raw TTF/OTF fonts, `config.yaml` + `defaults.yaml` | every companion tool and demo program, the MSDF font databases, the greeter and demo assets, the temu configs, the VM runtime |
+| `yinstall` | every shipped executable (`yetty`, the companion CLIs, the `demo-*` programs), `libyetty_ffi`, shaders, the raw fonts **and** the MSDF font databases, the full config, the greeter and demo assets | the RISC-V VM runtime (`yemu/`) and the QEMU emulator (`qemu/`) |
 | `yinstall-max` | everything `yinstall` has, plus the RISC-V VM runtime and QEMU | — |
 
 Measured on a Linux x86_64 release build (download = the installer binary,
@@ -175,6 +175,7 @@ decompresses transparently on extraction.
 | Component | prefix | destination | subdir | exec | contents |
 |-----------|--------|-------------|--------|------|----------|
 | Executables | `bin/` | `BIN` | — | yes | `yetty`, companion CLIs (`ycat`, `yplot`, `ygreeter`, `ydoc`, `ysheet`, `yslide`, …) and the `demo-*` programs |
+| FFI library | `lib/` | `LIB` | — | no | `libyetty_ffi` (`.so` / `.dylib` / `.dll`), the shared library the python / lua / go / typescript bindings and the `demo/scripts/ffi` launchers load |
 | Shaders & fonts | `data/` | `DATA` | — | no | WGSL shaders, TTF + MSDF fonts |
 | Greeter assets | `greeter/` | `DATA` | — | no | ygreeter logos, intro video, samples |
 | Demos | `demos/` | `DATA` | `demos` | no | the `demo/` tree — assets, scripts and sources |
@@ -207,6 +208,7 @@ resolver yetty itself uses), extended with a `BIN` root for the executables:
 | Destination | Linux | macOS | Windows |
 |-------------|-------|-------|---------|
 | `BIN` (all executables) | `~/.local/bin` | `~/.local/bin` | `%LOCALAPPDATA%\Programs\yetty` |
+| `LIB` (`libyetty_ffi`) | `~/.local/lib` | `~/.local/lib` | `%LOCALAPPDATA%\Programs\yetty` (beside the `.exe` files) |
 | `DATA` (shaders, fonts, VM runtime) | `~/.local/share/yetty` | `~/Library/Application Support/yetty` | `%LOCALAPPDATA%\yetty\data` |
 | `CONFIG` (config files) | `~/.config/yetty` | `~/Library/Application Support/yetty` | `%APPDATA%\yetty` |
 

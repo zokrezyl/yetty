@@ -234,7 +234,9 @@ def _candidate_paths() -> list[str]:
       1. $YETTY_FFI_LIB          explicit override
       2. bundled in the package  (an installed wheel ships the .so here)
       3. build trees in the repo (dev checkout: build-desktop-ffi-release, …)
-      4. the OS loader           (LD_LIBRARY_PATH / ldconfig / DYLD_*)
+      4. the yinstall lib dir    (~/.local/lib, $XDG_LIB_HOME; on Windows the
+                                  installed programs dir, next to yetty.exe)
+      5. the OS loader           (LD_LIBRARY_PATH / ldconfig / DYLD_*)
 
     An explicit override short-circuits the rest — probing the build tree is
     O(build-tree size) and pointless once the caller has named the file.
@@ -261,6 +263,12 @@ def _candidate_paths() -> list[str]:
             candidates.extend(sorted(glob.glob(
                 str(repo_root / build_glob / yffi_subpath / basename))))
 
+    # Installed by yinstall (every variant carries the library): ~/.local/lib
+    # on Linux/macOS, the programs dir beside yetty.exe on Windows.
+    for lib_dir in _installed_lib_dirs():
+        for basename in _LIB_BASENAMES:
+            candidates.append(str(lib_dir / basename))
+
     system = ctypes.util.find_library("yetty_ffi")
     if system:
         candidates.append(system)
@@ -273,6 +281,19 @@ def _candidate_paths() -> list[str]:
             seen.add(candidate)
             ordered.append(candidate)
     return ordered
+
+
+def _installed_lib_dirs() -> list[Path]:
+    """Where yinstall puts the library (mirrors yplatform's lib_dir)."""
+    dirs: list[Path] = []
+    xdg_lib = os.environ.get("XDG_LIB_HOME")
+    if xdg_lib:
+        dirs.append(Path(xdg_lib))
+    dirs.append(Path.home() / ".local" / "lib")
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        dirs.append(Path(local_app_data) / "Programs" / "yetty")
+    return dirs
 
 
 def load(path: str | None = None) -> ctypes.CDLL:
@@ -305,9 +326,9 @@ def load(path: str | None = None) -> ctypes.CDLL:
             continue
 
     raise RuntimeError(
-        "yetty FFI: could not locate a compatible libyetty_ffi.so. Build it "
-        "with `make build-desktop-ffi-release`, or set YETTY_FFI_LIB to its "
-        "path.\n"
+        "yetty FFI: could not locate a compatible libyetty_ffi.so. Install "
+        "yetty (yinstall puts it in ~/.local/lib), build it with `make "
+        "build-desktop-ytrace-release`, or set YETTY_FFI_LIB to its path.\n"
         f"Tried: {attempted or _candidate_paths()}")
 
 

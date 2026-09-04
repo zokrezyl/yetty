@@ -9,6 +9,7 @@
 #                  needs on Windows), its shaders, the raw TTF/OTF fonts and
 #                  the default config. No companion tools, no MSDF font
 #                  databases, no greeter/demo assets, no VM runtime.
+#   (every variant also carries lib/libyetty_ffi, the bindings' library)
 #   yinstall       the desktop toolset: every shipped executable (yetty, the
 #                  companion CLIs, the demo programs), shaders, the raw fonts
 #                  AND the MSDF font databases, config, greeter + demo assets.
@@ -22,7 +23,7 @@
 #     staged once here and embedded per variant.
 #   - bin/ (the executables)        → a build-time mechanism, because the
 #     binaries are build products that don't exist at configure time
-#     (yinstall_embed_executables() below).
+#     (yinstall_embed_build_products() below).
 if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT WIN32 AND NOT APPLE)
     return()  # webasm and anything else without a desktop install model
 endif()
@@ -76,7 +77,19 @@ function(yinstall_compress_executable ITEM OUT_BR OUT_ASSET OUT_SAFE)
     # ("Program Files (x86)") that would otherwise split the if() args.
     if(TARGET "${ITEM}")
         set(_source "$<TARGET_FILE:${ITEM}>")
-        set(_asset "${ITEM}${_exe_suffix}")
+        get_target_property(_target_type "${ITEM}" TYPE)
+        if(_target_type STREQUAL "SHARED_LIBRARY")
+            # A shared library keeps its platform file name (libyetty_ffi.so,
+            # libyetty_ffi.dylib, yetty_ffi.dll) — the bindings dlopen it by
+            # exactly that name.
+            get_target_property(_output_name "${ITEM}" OUTPUT_NAME)
+            if(NOT _output_name)
+                set(_output_name "${ITEM}")
+            endif()
+            set(_asset "${CMAKE_SHARED_LIBRARY_PREFIX}${_output_name}${CMAKE_SHARED_LIBRARY_SUFFIX}")
+        else()
+            set(_asset "${ITEM}${_exe_suffix}")
+        endif()
         string(MAKE_C_IDENTIFIER "${ITEM}" _safe)
     else()
         # Literal file (e.g. a runtime DLL from the Windows SDK). The asset
@@ -108,18 +121,22 @@ function(yinstall_compress_executable ITEM OUT_BR OUT_ASSET OUT_SAFE)
 endfunction()
 
 # ---------------------------------------------------------------------
-# yinstall_embed_executables(TARGET item1 item2 ...)
+# yinstall_embed_build_products(TARGET PREFIX item1 item2 ...)
 #
-# Embeds built executables under the "bin/" prefix. Unlike incbin_add_directory
-# (which globs + compresses at configure time), this works on build products:
-# each binary is brotli-compressed at build time and embedded via .incbin
-# (GCC/Clang) or RT_RCDATA (MSVC, which has no inline asm — mirrors the split
-# in incbin.cmake). The runtime inflates + chmods on extraction. Emits a
-# <target>_bin_manifest.h matching the shape the platform backend consumes
-# (register_bin_assets_c + HAS_BIN_MANIFEST), every entry marked compressed.
+# Embeds build products (executables, shared libraries, runtime DLLs) under
+# "<PREFIX>/" — "bin" for the executables, "lib" for the bindings' shared
+# library. Unlike incbin_add_directory (which globs + compresses at configure
+# time), this works on build products: each file is brotli-compressed at
+# build time and embedded via .incbin (GCC/Clang) or RT_RCDATA (MSVC, which
+# has no inline asm — mirrors the split in incbin.cmake). The runtime
+# inflates (+ chmods, for executable components) on extraction. Emits a
+# <target>_<prefix>_manifest.h matching the shape the platform backend
+# consumes (register_<prefix>_assets_c + HAS_<PREFIX>_MANIFEST), every entry
+# marked compressed.
 # ---------------------------------------------------------------------
-function(yinstall_embed_executables TARGET)
-    set(_manifest "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_bin_manifest.h")
+function(yinstall_embed_build_products TARGET PREFIX)
+    string(TOUPPER "${PREFIX}" _prefix_upper)
+    set(_manifest "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX}_manifest.h")
 
     # `_entries` carries the C-identifier-safe symbol stem, the *final* asset
     # name (already suffixed for targets, basename for files) and the .br
@@ -140,8 +157,8 @@ function(yinstall_embed_executables TARGET)
         # RCDATA path: rc.exe streams each .br into the PE at build time;
         # the generated register_bin_assets_c reads them back via FindResource.
         enable_language(RC)
-        set(_rc "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_bin.rc")
-        set(_reg "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_bin_register.c")
+        set(_rc "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX}.rc")
+        set(_reg "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX}_register.c")
         file(WRITE "${_rc}" "// GENERATED — do not edit.\n")
         file(WRITE "${_reg}"
 "// GENERATED — do not edit.
@@ -152,9 +169,9 @@ function(yinstall_embed_executables TARGET)
 #include <stdint.h>
 #include <stddef.h>
 
-typedef void (*bin_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
+typedef void (*${PREFIX}_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
 
-void register_bin_assets_c(bin_asset_callback_t cb)
+void register_${PREFIX}_assets_c(${PREFIX}_asset_callback_t cb)
 {
     HMODULE module_handle = GetModuleHandleW(NULL);
     HRSRC res_handle;
@@ -167,7 +184,7 @@ void register_bin_assets_c(bin_asset_callback_t cb)
             list(GET _parts 0 _safe)
             list(GET _parts 1 _asset)
             list(GET _parts 2 _br)
-            string(TOUPPER "bin_${_safe}" _rcname)
+            string(TOUPPER "${PREFIX}_${_safe}" _rcname)
             file(APPEND "${_rc}" "${_rcname} RCDATA \"${_br}\"\n")
             file(APPEND "${_reg}"
 "    res_handle = FindResourceA(module_handle, \"${_rcname}\", (LPCSTR)RT_RCDATA);
@@ -176,7 +193,7 @@ void register_bin_assets_c(bin_asset_callback_t cb)
         res_global = LoadResource(module_handle, res_handle);
         if (res_global) {
             res_ptr = LockResource(res_global);
-            if (res_ptr && res_size) cb(\"bin/${_asset}\", (const uint8_t *)res_ptr, (size_t)res_size, 1);
+            if (res_ptr && res_size) cb(\"${PREFIX}/${_asset}\", (const uint8_t *)res_ptr, (size_t)res_size, 1);
         }
     }
 ")
@@ -189,16 +206,16 @@ void register_bin_assets_c(bin_asset_callback_t cb)
         target_sources(${TARGET} PRIVATE "${_rc}" "${_reg}")
 
         file(WRITE "${_manifest}"
-"/* GENERATED — do not edit. yinstall embedded-executables manifest (RCDATA). */
-#ifndef YINSTALL_BIN_MANIFEST_H
-#define YINSTALL_BIN_MANIFEST_H
+"/* GENERATED — do not edit. yinstall embedded ${PREFIX}/ manifest (RCDATA). */
+#ifndef YINSTALL_${_prefix_upper}_MANIFEST_H
+#define YINSTALL_${_prefix_upper}_MANIFEST_H
 #include <stddef.h>
 #include <stdint.h>
 #ifdef __cplusplus
 extern \"C\" {
 #endif
-typedef void (*bin_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
-void register_bin_assets_c(bin_asset_callback_t cb);
+typedef void (*${PREFIX}_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
+void register_${PREFIX}_assets_c(${PREFIX}_asset_callback_t cb);
 #ifdef __cplusplus
 }
 #endif
@@ -206,7 +223,7 @@ void register_bin_assets_c(bin_asset_callback_t cb);
 ")
     else()
         # GCC/Clang: .incbin the .br blobs; a static-inline register walks them.
-        set(_incbin_src "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_bin_incbin.c")
+        set(_incbin_src "${CMAKE_CURRENT_BINARY_DIR}/${TARGET}_${PREFIX}_incbin.c")
         set(_incbin_content "/* GENERATED — do not edit. */\n#include \"incbin.h\"\n\n")
         set(_manifest_externs "")
         set(_manifest_calls "")
@@ -215,12 +232,12 @@ void register_bin_assets_c(bin_asset_callback_t cb);
             list(GET _parts 0 _safe)
             list(GET _parts 1 _asset)
             list(GET _parts 2 _br)
-            set(_symbol "bin_${_safe}")
+            set(_symbol "${PREFIX}_${_safe}")
             string(APPEND _incbin_content "INCBIN(${_symbol}, \"${_br}\");\n")
             string(APPEND _manifest_externs
                 "extern const unsigned char g${_symbol}Data[];\nextern const unsigned int g${_symbol}Size;\n")
             string(APPEND _manifest_calls
-                "    cb(\"bin/${_asset}\", g${_symbol}Data, (size_t)g${_symbol}Size, 1);\n")
+                "    cb(\"${PREFIX}/${_asset}\", g${_symbol}Data, (size_t)g${_symbol}Size, 1);\n")
         endforeach()
 
         file(GENERATE OUTPUT "${_incbin_src}" CONTENT "${_incbin_content}")
@@ -229,16 +246,16 @@ void register_bin_assets_c(bin_asset_callback_t cb);
         target_include_directories(${TARGET} PRIVATE ${INCBIN_INCLUDE_DIR})
 
         file(WRITE "${_manifest}"
-"/* GENERATED — do not edit. yinstall embedded-executables manifest (incbin). */
-#ifndef YINSTALL_BIN_MANIFEST_H
-#define YINSTALL_BIN_MANIFEST_H
+"/* GENERATED — do not edit. yinstall embedded ${PREFIX}/ manifest (incbin). */
+#ifndef YINSTALL_${_prefix_upper}_MANIFEST_H
+#define YINSTALL_${_prefix_upper}_MANIFEST_H
 #include <stddef.h>
 #include <stdint.h>
 #ifdef __cplusplus
 extern \"C\" {
 #endif
-${_manifest_externs}typedef void (*bin_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
-static inline void register_bin_assets_c(bin_asset_callback_t cb) {
+${_manifest_externs}typedef void (*${PREFIX}_asset_callback_t)(const char* name, const uint8_t* data, size_t size, int compressed);
+static inline void register_${PREFIX}_assets_c(${PREFIX}_asset_callback_t cb) {
 ${_manifest_calls}}
 #ifdef __cplusplus
 }
@@ -248,7 +265,7 @@ ${_manifest_calls}}
     endif()
 
     target_include_directories(${TARGET} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-    target_compile_definitions(${TARGET} PRIVATE HAS_BIN_MANIFEST=1)
+    target_compile_definitions(${TARGET} PRIVATE HAS_${_prefix_upper}_MANIFEST=1)
 endfunction()
 
 # ---------------------------------------------------------------------
@@ -256,7 +273,8 @@ endfunction()
 #
 # incbin_add_directory() names its generated manifest header after the
 # target (<target>_<prefix>_manifest.h) and defines HAS_<PREFIX>_MANIFEST on
-# that target; yinstall_embed_executables() follows the same shape for bin/.
+# that target; yinstall_embed_build_products() follows the same shape for
+# bin/ and lib/.
 # The platform backends (yplatform/install/{incbin,winres}.c) are shared by
 # every variant, so they include one fixed name — yinstall_manifests.h —
 # which this writes per target into a private include dir: a guarded include
@@ -268,7 +286,7 @@ function(yinstall_write_manifest_umbrella TARGET)
     file(MAKE_DIRECTORY "${_dir}")
     set(_content "/* GENERATED — do not edit. Manifest headers embedded in ${TARGET}. */\n")
     string(APPEND _content "#ifndef YINSTALL_MANIFESTS_H\n#define YINSTALL_MANIFESTS_H\n")
-    foreach(_prefix bin data greeter demos yconfig yemu qemu)
+    foreach(_prefix bin lib data greeter demos yconfig yemu qemu)
         string(TOUPPER "${_prefix}" _upper)
         string(APPEND _content
             "#ifdef HAS_${_upper}_MANIFEST\n#include \"${TARGET}_${_prefix}_manifest.h\"\n#endif\n")
@@ -371,19 +389,21 @@ endfunction()
 
 # ---------------------------------------------------------------------
 # yinstall_add_variant(TARGET
-#     DATA_DIR <dir> CONFIG_DIR <dir> EXECUTABLES <item>...
+#     DATA_DIR <dir> CONFIG_DIR <dir> EXECUTABLES <item>... [LIBRARIES <item>...]
 #     [GREETER] [DEMOS] [VM])
 #
 # One installer variant = the installer executable + its embedded
 # components. DATA_DIR / CONFIG_DIR are staged trees for the data/ and
 # yconfig/ prefixes; EXECUTABLES is the bin/ payload (targets and literal
-# runtime files). The flags add the optional components: ygreeter's assets
+# runtime files); LIBRARIES the lib/ payload (the bindings' shared library).
+# The flags add the optional components: ygreeter's assets
 # (greeter/), the demo tree (demos/) and the RISC-V VM runtime (yemu/ +
 # qemu/). A component that is not embedded is simply absent from the
 # installer's manifest set — the install loop skips it.
 # ---------------------------------------------------------------------
 function(yinstall_add_variant TARGET)
-    cmake_parse_arguments(ARG "GREETER;DEMOS;VM" "DATA_DIR;CONFIG_DIR" "EXECUTABLES" ${ARGN})
+    cmake_parse_arguments(ARG "GREETER;DEMOS;VM" "DATA_DIR;CONFIG_DIR" "EXECUTABLES;LIBRARIES"
+                          ${ARGN})
 
     yinstall_add_installer(${TARGET})
 
@@ -416,9 +436,12 @@ function(yinstall_add_variant TARGET)
     endif()
 
     if(ARG_EXECUTABLES)
-        yinstall_embed_executables(${TARGET} ${ARG_EXECUTABLES})
+        yinstall_embed_build_products(${TARGET} bin ${ARG_EXECUTABLES})
     else()
         message(WARNING "${TARGET}: no embeddable executables found in this configuration")
+    endif()
+    if(ARG_LIBRARIES)
+        yinstall_embed_build_products(${TARGET} lib ${ARG_LIBRARIES})
     endif()
 endfunction()
 
@@ -511,6 +534,16 @@ if(TARGET yetty)
     list(APPEND _yinstall_min_exes yetty)
 endif()
 
+# lib/ — the shared library the language bindings (python / lua / go /
+# typescript under bindings/) load: every variant carries it, and the demo
+# launchers under demo/scripts/ffi look for it in the installed lib dir.
+# Built only when the tree is configured with YETTY_BUILD_FFI_SHARED (the
+# desktop Makefile targets do); absent otherwise.
+set(_yinstall_libs "")
+if(TARGET yetty_ffi)
+    list(APPEND _yinstall_libs yetty_ffi)
+endif()
+
 # Windows runtime DLLs — yetty and the other GPU tools link against the
 # DirectX shader compiler (dxcompiler / dxil / d3dcompiler_47), which is NOT
 # part of a stock Windows and must sit next to the .exe. The yetty build
@@ -574,12 +607,14 @@ yinstall_add_variant(yinstall-min
     DATA_DIR    "${_yinstall_data_min_dir}"
     CONFIG_DIR  "${_yinstall_config_min_dir}"
     EXECUTABLES ${_yinstall_min_exes}
+    LIBRARIES   ${_yinstall_libs}
 )
 
 yinstall_add_variant(yinstall
     DATA_DIR    "${YETTY_EMBED_DATA_DIR}"
     CONFIG_DIR  "${YETTY_EMBED_CONFIG_DIR}"
     EXECUTABLES ${_yinstall_all_exes}
+    LIBRARIES   ${_yinstall_libs}
     GREETER DEMOS
 )
 
@@ -587,5 +622,6 @@ yinstall_add_variant(yinstall-max
     DATA_DIR    "${YETTY_EMBED_DATA_DIR}"
     CONFIG_DIR  "${YETTY_EMBED_CONFIG_DIR}"
     EXECUTABLES ${_yinstall_all_exes}
+    LIBRARIES   ${_yinstall_libs}
     GREETER DEMOS VM
 )

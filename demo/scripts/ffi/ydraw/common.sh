@@ -41,7 +41,20 @@ ffi_find_library() {
             fi
         done
     done
-    echo "libyetty_ffi.{so,dylib} not found in any build-desktop-* tree." >&2
+    # Installed by yinstall (every variant carries the library): ~/.local/lib,
+    # or $XDG_LIB_HOME when set.
+    local lib_dir
+    for lib_dir in "${XDG_LIB_HOME:-}" "$HOME/.local/lib"; do
+        [ -n "$lib_dir" ] || continue
+        for name in "${basenames[@]}"; do
+            if [ -f "$lib_dir/$name" ]; then
+                FFI_LIB="$lib_dir/$name"
+                return 0
+            fi
+        done
+    done
+    echo "libyetty_ffi.{so,dylib} not found in any build-desktop-* tree or in ~/.local/lib." >&2
+    echo "Install yetty (curl -fsSL https://yetty.dev/install.sh | bash)," >&2
     echo "Build it:  USE_DISTCC=1 make build-desktop-ytrace-release" >&2
     echo "or point YETTY_FFI_LIB at an existing library." >&2
     return 1

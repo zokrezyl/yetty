@@ -31,6 +31,7 @@ extern "C" {
 /* Which resolved root a component's files install under. */
 enum yetty_yinstall_destination {
     YETTY_YINSTALL_DEST_BIN,    /* executables → platform paths bin_dir    */
+    YETTY_YINSTALL_DEST_LIB,    /* shared libraries → platform paths lib_dir */
     YETTY_YINSTALL_DEST_DATA,   /* shaders, fonts, VM runtime → data_dir   */
     YETTY_YINSTALL_DEST_CONFIG, /* config files → config_dir               */
 };

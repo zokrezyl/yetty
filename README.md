@@ -40,9 +40,9 @@ sizes, each with its own one-liner:
 
 | Installer | Script | Contains | Download |
 |-----------|--------|----------|---------:|
-| `yinstall-min` | `install-min.sh` / `install-min.ps1` | `yetty` alone, its shaders and the raw TTF/OTF fonts, the default config. yetty builds the MSDF font atlases from the raw fonts on its first start (about a second on an old GPU). | ~18 MB |
-| `yinstall` | `install.sh` / `install.ps1` | Every yetty executable: the terminal, the companion tools (`ycat`, `yplot`, `ygreeter`, `ydoc`, `ysheet`, `yslide`, …) and the demo programs, plus shaders, raw fonts **and** the pre-generated MSDF font atlases, config, greeter and demo assets. | ~230 MB |
-| `yinstall-max` | `install-max.sh` / `install-max.ps1` | Everything in `yinstall`, plus the RISC-V VM runtime (kernel, firmware, root filesystem) and the QEMU emulator behind `--temu` / `--qemu`. | ~350 MB |
+| `yinstall-min` | `install-min.sh` / `install-min.ps1` | `yetty` alone, its shaders and the raw TTF/OTF fonts, the default config, and `libyetty_ffi` for the language bindings. yetty builds the MSDF font atlases from the raw fonts on its first start (about a second on an old GPU). | ~55 MB |
+| `yinstall` | `install.sh` / `install.ps1` | Every yetty executable: the terminal, the companion tools (`ycat`, `yplot`, `ygreeter`, `ydoc`, `ysheet`, `yslide`, …) and the demo programs, `libyetty_ffi`, plus shaders, raw fonts **and** the pre-generated MSDF font atlases, config, greeter and demo assets. | ~255 MB |
+| `yinstall-max` | `install-max.sh` / `install-max.ps1` | Everything in `yinstall`, plus the RISC-V VM runtime (kernel, firmware, root filesystem) and the QEMU emulator behind `--temu` / `--qemu`. | ~380 MB |
 
 ```bash
 curl -fsSL https://yetty.dev/install-min.sh | bash     # smallest: the terminal

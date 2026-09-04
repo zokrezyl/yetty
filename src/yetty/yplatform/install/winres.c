@@ -63,6 +63,9 @@ struct yetty_ycore_void_result yetty_yplatform_install_foreach_asset(
 #ifdef HAS_BIN_MANIFEST
     register_bin_assets_c(bridge_trampoline);
 #endif
+#ifdef HAS_LIB_MANIFEST
+    register_lib_assets_c(bridge_trampoline);
+#endif
 #ifdef HAS_DATA_MANIFEST
     register_data_assets_c(bridge_trampoline);
 #endif

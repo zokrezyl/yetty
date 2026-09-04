@@ -86,6 +86,17 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
         snprintf(p->bin_dir_buf, sizeof(p->bin_dir_buf), "/tmp/yetty-bin");
     }
 
+    /* lib_dir = $XDG_LIB_HOME || $HOME/.local/lib: the shared libraries the
+     * language bindings load (libyetty_ffi), next to ~/.local/bin. */
+    const char *xdg_lib = getenv("XDG_LIB_HOME");
+    if (xdg_lib && *xdg_lib) {
+        snprintf(p->lib_dir_buf, sizeof(p->lib_dir_buf), "%s", xdg_lib);
+    } else if (home && *home) {
+        snprintf(p->lib_dir_buf, sizeof(p->lib_dir_buf), "%s/.local/lib", home);
+    } else {
+        snprintf(p->lib_dir_buf, sizeof(p->lib_dir_buf), "/tmp/yetty-lib");
+    }
+
     return YETTY_OK(yetty_yplatform_paths_ptr, p);
 }
 

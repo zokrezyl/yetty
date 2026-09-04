@@ -5,8 +5,9 @@
     it, and runs the self-contained installer. The installer carries its
     payload embedded and unpacks each piece to the right location on first
     run. It comes in three sizes (see src/yetty/yinstall/README.md, "Variants"):
-        min      yetty alone with shaders, raw fonts and config; the MSDF font
-                 atlases are built from the raw fonts on the first start
+        min      yetty alone with shaders, raw fonts, config and yetty_ffi.dll
+                 (the language bindings' library); the MSDF font atlases are
+                 built from the raw fonts on the first start
         default  every yetty executable and tool, fonts + pre-generated
                  atlases, config, greeter and demo assets
         max      default plus the RISC-V VM runtime and QEMU

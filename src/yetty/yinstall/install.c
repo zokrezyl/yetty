@@ -40,6 +40,8 @@ static const struct yetty_yinstall_component *yinstall_components(size_t *count)
     static const struct yetty_yinstall_component table[] = {
         {"Executables", "bin/", YETTY_YINSTALL_DEST_BIN, "", 1,
          "yetty terminal, companion CLIs and demos"},
+        {"FFI library", "lib/", YETTY_YINSTALL_DEST_LIB, "", 0,
+         "libyetty_ffi for the language bindings"},
         {"Shaders & fonts", "data/", YETTY_YINSTALL_DEST_DATA, "", 0,
          "WGSL shaders and the bundled fonts"},
         {"Greeter assets", "greeter/", YETTY_YINSTALL_DEST_DATA, "", 0,
@@ -141,6 +143,8 @@ static const char *resolve_root(enum yetty_yinstall_destination destination,
     switch (destination) {
     case YETTY_YINSTALL_DEST_BIN:
         return paths->bin_dir_buf;
+    case YETTY_YINSTALL_DEST_LIB:
+        return paths->lib_dir_buf;
     case YETTY_YINSTALL_DEST_DATA:
         return paths->data_dir_buf;
     case YETTY_YINSTALL_DEST_CONFIG:
