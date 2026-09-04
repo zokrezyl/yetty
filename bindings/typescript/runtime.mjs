@@ -4,6 +4,7 @@
 // knowledge lives in the generated spec tables (ydraw.mjs) — never here.
 import koffi from "koffi";
 import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -32,6 +33,17 @@ function libraryPath() {
   for (const entry of buildTrees) {
     candidates.push(join(repo, entry, "src", "yetty", "yffi", "libyetty_ffi.so"));
   }
+  // Installed by yinstall (every variant carries the library): ~/.local/lib,
+  // or $XDG_LIB_HOME when set.
+  const libDirs = [];
+  if (process.env.XDG_LIB_HOME) {
+    libDirs.push(process.env.XDG_LIB_HOME);
+  }
+  libDirs.push(join(homedir(), ".local", "lib"));
+  for (const dir of libDirs) {
+    candidates.push(join(dir, "libyetty_ffi.so"));
+    candidates.push(join(dir, "libyetty_ffi.dylib"));
+  }
   candidates.push("libyetty_ffi.so");
   for (const candidate of candidates) {
     if (candidate === "libyetty_ffi.so" || existsSync(candidate)) {
@@ -39,7 +51,8 @@ function libraryPath() {
     }
   }
   throw new Error(
-    "yetty FFI: libyetty_ffi.so not found; set YETTY_FFI_LIB or build the desktop tree");
+    "yetty FFI: libyetty_ffi.so not found; install yetty (yinstall puts it in " +
+    "~/.local/lib), build the desktop tree, or set YETTY_FFI_LIB");
 }
 
 const lib = koffi.load(libraryPath());

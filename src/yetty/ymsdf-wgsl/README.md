@@ -24,6 +24,35 @@ Pipeline works end-to-end; the output now closely matches the CPU msdfgen refere
 - Headless CLI (`tools/gen-msdf-gpu/yetty-ymsdf-gen-gpu`) for generating
   CDBs without a window — useful for diffing against the CPU output.
 
+### Pipeline and performance
+
+One font is one compute dispatch. `prepare` (CPU, any thread) decomposes
+every glyph with FreeType, packs the segment metadata/points, shelf-packs
+the atlas on the 8-pixel tile grid (a glyph always starts on a tile
+boundary and the next one starts a whole tile later) and builds a
+tile → glyph table plus one packed `GlyphUniforms` per glyph. `submit`
+(device thread) creates the RGBA8 atlas texture at exactly the finished
+layout's size, uploads the four buffers and queues one
+`dispatchWorkgroups(atlas_width / 8, atlas_height / 8)` followed by the
+copy-out; each 8×8 workgroup reads its tile's slot and shades that glyph's
+pixels. `readback` maps the copied-out buffer (which waits for exactly that
+font's work), `write` emits the CDB. The generator's compute pipeline is a
+separate object (`yetty_ymsdf_wgsl_pipeline`) compiled once per device.
+
+In the shader, a segment is skipped when the pixel's distance to the
+segment's control-point bounding box already reaches the largest per-channel
+minimum: every minimum updates with a strict `<`, so the skip is exact and the
+atlas bytes are identical to evaluating every segment. The store truncates to
+8 bits the way the old RGBA32Float → CPU conversion did, so the output is also
+byte-identical to that path (verified with md5 over the five default faces).
+
+Measured on a GeForce GTX 750 Ti for DejaVuSansMNerdFontMono-Regular
+(13 755 glyphs, 8192×2176 atlas): prepare ~120 ms, submit ~55 ms, GPU
+~150 ms, readback ~25 ms, CDB write ~55 ms. A batch of the five default faces
+(`yetty_ymsdf_generator_ensure_cdb_batch`) prepares and writes all faces on
+threads and submits every face before reading any back, so the wall time is
+about one second on that card and is bounded by the GPU passes alone.
+
 ### Diff metrics (DejaVuSansMNerdFontMono-Regular @ 32px, range=4)
 
 Versus the CPU msdfgen-based reference, on the 1404 codepoints both

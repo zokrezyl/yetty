@@ -27,10 +27,15 @@ struct GlyphUniforms {
     _padding: u32,
 };
 
-@group(0) @binding(0) var<uniform> uniforms: GlyphUniforms;
+// Every glyph of the font, packed. One dispatch covers the whole atlas; each
+// 8x8 workgroup tile looks up the glyph it belongs to through tile_slots.
+@group(0) @binding(0) var<storage, read> glyphs: array<GlyphUniforms>;
 @group(0) @binding(1) var<storage, read> metadata: array<u32>;
 @group(0) @binding(2) var<storage, read> points: array<f32>;
-@group(0) @binding(3) var output_texture: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(3) var output_texture: texture_storage_2d<rgba8unorm, write>;
+// One entry per 8x8 atlas tile: 1 + index into `glyphs`, or 0 for an empty
+// tile. Glyphs are placed on 8-pixel boundaries so a tile never straddles two.
+@group(0) @binding(4) var<storage, read> tile_slots: array<u32>;
 
 // Get point from buffer (each point is 2 floats)
 fn get_point(idx: u32) -> vec2<f32> {
@@ -195,9 +200,22 @@ fn segment_direction(point_idx: u32, npoints: u32, t: f32) -> vec2<f32> {
 
 // Main MSDF calculation
 @compute @workgroup_size(8, 8, 1)
-fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-    let pixel_x = global_id.x;
-    let pixel_y = global_id.y;
+fn main(@builtin(workgroup_id) workgroup: vec3<u32>,
+        @builtin(local_invocation_id) local_id: vec3<u32>,
+        @builtin(num_workgroups) workgroups: vec3<u32>) {
+    // Which glyph owns this tile (workgroups.x == atlas width / 8).
+    let slot = tile_slots[workgroup.y * workgroups.x + workgroup.x];
+    if slot == 0u {
+        return;
+    }
+    let uniforms = glyphs[slot - 1u];
+
+    // Pixel inside the glyph's own rectangle (tiles start on the glyph's
+    // 8-aligned origin, so this never underflows).
+    let atlas_x = workgroup.x * 8u + local_id.x;
+    let atlas_y = workgroup.y * 8u + local_id.y;
+    let pixel_x = atlas_x - uniforms.atlas_offset.x;
+    let pixel_y = atlas_y - uniforms.atlas_offset.y;
 
     // Check bounds
     if pixel_x >= uniforms.glyph_size.x || pixel_y >= uniforms.glyph_size.y {
@@ -269,42 +287,60 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             let npoints = get_meta(meta_idx);
             meta_idx = meta_idx + 1u;
 
-            // Calculate distance to this segment
-            var d: vec3<f32>;
-            if npoints == 2u {
-                let p0 = get_point(point_idx);
-                let p1 = get_point(point_idx + 1u);
-                d = distance_to_line(p0, p1, p);
-            } else {
-                let p0 = get_point(point_idx);
-                let p1 = get_point(point_idx + 1u);
-                let p2 = get_point(point_idx + 2u);
-                d = distance_to_quad(p0, p1, p2, p);
+            // The segment's control points; a line reuses p1 as p2 so the
+            // bounding box below covers both shapes. A quadratic lies inside
+            // the convex hull of its control points, so the distance from
+            // the pixel to that box is a lower bound on the true distance
+            // to the segment (which is what distance_to_line/quad return).
+            let p0 = get_point(point_idx);
+            let p1 = get_point(point_idx + 1u);
+            var p2 = p1;
+            if npoints != 2u {
+                p2 = get_point(point_idx + 2u);
             }
+            let box_lo = min(min(p0, p1), p2);
+            let box_hi = max(max(p0, p1), p2);
+            let box_gap = max(box_lo - p, vec2<f32>(0.0)) + max(p - box_hi, vec2<f32>(0.0));
+            let lower_bound = length(box_gap);
 
-            let signed_dist = d.x;
-            let abs_dist = abs(signed_dist);
+            // Every minimum below updates with a strict '<', so a segment
+            // whose lower bound already reaches the largest per-channel
+            // minimum (>= min_abs_sdf and every channel) cannot change any
+            // of them: skip the cubic solve. Exact — the output is
+            // identical to evaluating every segment.
+            if lower_bound < max(max(min_abs_r, min_abs_g), min_abs_b) {
+                // Calculate distance to this segment
+                var d: vec3<f32>;
+                if npoints == 2u {
+                    d = distance_to_line(p0, p1, p);
+                } else {
+                    d = distance_to_quad(p0, p1, p2, p);
+                }
 
-            if (color & RED) != 0u {
-                if abs_dist < min_abs_r {
-                    min_abs_r = abs_dist;
-                    min_dist_r = signed_dist;
+                let signed_dist = d.x;
+                let abs_dist = abs(signed_dist);
+
+                if (color & RED) != 0u {
+                    if abs_dist < min_abs_r {
+                        min_abs_r = abs_dist;
+                        min_dist_r = signed_dist;
+                    }
                 }
-            }
-            if (color & GREEN) != 0u {
-                if abs_dist < min_abs_g {
-                    min_abs_g = abs_dist;
-                    min_dist_g = signed_dist;
+                if (color & GREEN) != 0u {
+                    if abs_dist < min_abs_g {
+                        min_abs_g = abs_dist;
+                        min_dist_g = signed_dist;
+                    }
                 }
-            }
-            if (color & BLUE) != 0u {
-                if abs_dist < min_abs_b {
-                    min_abs_b = abs_dist;
-                    min_dist_b = signed_dist;
+                if (color & BLUE) != 0u {
+                    if abs_dist < min_abs_b {
+                        min_abs_b = abs_dist;
+                        min_dist_b = signed_dist;
+                    }
                 }
-            }
-            if abs_dist < min_abs_sdf {
-                min_abs_sdf = abs_dist;
+                if abs_dist < min_abs_sdf {
+                    min_abs_sdf = abs_dist;
+                }
             }
 
             // Winding contribution: signed crossings of the +x ray from
@@ -440,5 +476,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         i32(uniforms.atlas_offset.y + pixel_y)
     );
 
-    textureStore(output_texture, atlas_pos, vec4<f32>(normalized, 1.0));
+    // rgba8unorm rounds to nearest on store. The CDB consumers were tuned on
+    // atlases converted on the CPU with a plain float->u8 cast (truncation)
+    // from an RGBA32Float texture; truncate here so every atlas byte stays
+    // identical to that path.
+    let truncated = floor(clamp(normalized, vec3<f32>(0.0), vec3<f32>(1.0)) * 255.0) / 255.0;
+    textureStore(output_texture, atlas_pos, vec4<f32>(truncated, 1.0));
 }

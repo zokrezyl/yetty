@@ -183,11 +183,15 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: yetty-linux
-        # Ship the self-contained installer, not the bare yetty binary: it
-        # carries yetty + ygreeter + companion tools + all assets as an
-        # embedded payload and unpacks them on first run. A raw `yetty` has no
-        # assets and no companion tools, so it is useless as a release asset.
-        path: ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+        # Ship the self-contained installers, not the bare yetty binary: each
+        # carries yetty (+ companion tools + assets, depending on the variant)
+        # as an embedded payload and unpacks it on first run. A raw `yetty`
+        # has no assets, so it is useless as a release asset. Three sizes —
+        # min / default / max — see src/yetty/yinstall/README.md "Variants".
+        path: |
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall-min
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall-max
         if-no-files-found: error
 
   # =============================================================================
@@ -306,11 +310,15 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: yetty-linux-aarch64
-        # Ship the self-contained installer, not the bare yetty binary: it
-        # carries yetty + ygreeter + companion tools + all assets as an
-        # embedded payload and unpacks them on first run. A raw `yetty` has no
-        # assets and no companion tools, so it is useless as a release asset.
-        path: ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+        # Ship the self-contained installers, not the bare yetty binary: each
+        # carries yetty (+ companion tools + assets, depending on the variant)
+        # as an embedded payload and unpacks it on first run. A raw `yetty`
+        # has no assets, so it is useless as a release asset. Three sizes —
+        # min / default / max — see src/yetty/yinstall/README.md "Variants".
+        path: |
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall-min
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall-max
         if-no-files-found: error
 
   # =============================================================================
@@ -363,11 +371,15 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: yetty-macos
-        # Ship the self-contained installer, not the bare yetty binary: it
-        # carries yetty + ygreeter + companion tools + all assets as an
-        # embedded payload and unpacks them on first run. A raw `yetty` has no
-        # assets and no companion tools, so it is useless as a release asset.
-        path: ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+        # Ship the self-contained installers, not the bare yetty binary: each
+        # carries yetty (+ companion tools + assets, depending on the variant)
+        # as an embedded payload and unpacks it on first run. A raw `yetty`
+        # has no assets, so it is useless as a release asset. Three sizes —
+        # min / default / max — see src/yetty/yinstall/README.md "Variants".
+        path: |
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall-min
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall-max
         if-no-files-found: error
 
   # =============================================================================
@@ -417,11 +429,15 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: yetty-macos-x86_64
-        # Ship the self-contained installer, not the bare yetty binary: it
-        # carries yetty + ygreeter + companion tools + all assets as an
-        # embedded payload and unpacks them on first run. A raw `yetty` has no
-        # assets and no companion tools, so it is useless as a release asset.
-        path: ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+        # Ship the self-contained installers, not the bare yetty binary: each
+        # carries yetty (+ companion tools + assets, depending on the variant)
+        # as an embedded payload and unpacks it on first run. A raw `yetty`
+        # has no assets, so it is useless as a release asset. Three sizes —
+        # min / default / max — see src/yetty/yinstall/README.md "Variants".
+        path: |
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall-min
+          ${{ env.BUILD_DIR }}/tools/yinstall/yinstall-max
         if-no-files-found: error
 
   # =============================================================================
@@ -474,28 +490,30 @@ jobs:
         $StageDir = "${{ github.workspace }}/yetty-windows"
         New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
 
-        # The Windows release ships exactly one thing: yinstall.exe. It is the
-        # self-contained installer that carries the entire yetty product — the
-        # terminal, the companion tools, the DirectX runtime DLLs, shaders,
-        # fonts, config, the demo tree and the RISC-V VM runtime — as an
-        # embedded payload, and unpacks each piece to the right per-user
-        # location on first run. Nothing else belongs in the archive: shipping
-        # loose yetty.exe / DLLs / demos alongside it would just duplicate what
-        # is already inside yinstall. install.ps1 downloads this archive, finds
-        # yinstall.exe and runs it.
+        # The Windows release ships the self-contained installers and nothing
+        # else: yinstall.exe, yinstall-min.exe and yinstall-max.exe. Each
+        # carries its payload (the terminal; plus companion tools, DirectX
+        # runtime DLLs, shaders, fonts, config, demos and the RISC-V VM
+        # runtime depending on the variant) and unpacks it to the right
+        # per-user location on first run. Shipping loose yetty.exe / DLLs /
+        # demos alongside would just duplicate what is already inside.
+        # install.ps1 downloads the variant's archive, finds the .exe and runs
+        # it. See src/yetty/yinstall/README.md "Variants".
         #
         # Handle both the Ninja layout (tools/yinstall/yinstall.exe) and the VS
         # multi-config layout (tools/yinstall/Release/yinstall.exe).
-        $YinstallExe = @(
-            "$BuildDir/tools/yinstall/yinstall.exe",
-            "$BuildDir/tools/yinstall/Release/yinstall.exe"
-        ) | Where-Object { Test-Path $_ } | Select-Object -First 1
-        if (-not $YinstallExe) {
-            Write-Error "yinstall.exe not found under $BuildDir/tools/yinstall"
-            exit 1
+        foreach ($Name in @("yinstall.exe", "yinstall-min.exe", "yinstall-max.exe")) {
+            $Exe = @(
+                "$BuildDir/tools/yinstall/$Name",
+                "$BuildDir/tools/yinstall/Release/$Name"
+            ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+            if (-not $Exe) {
+                Write-Error "$Name not found under $BuildDir/tools/yinstall"
+                exit 1
+            }
+            Copy-Item $Exe -Destination $StageDir
+            Write-Host "Staged $Name ($([math]::Round((Get-Item $Exe).Length/1MB,1)) MB)"
         }
-        Copy-Item $YinstallExe -Destination $StageDir
-        Write-Host "Staged $(Split-Path $YinstallExe -Leaf) ($([math]::Round((Get-Item $YinstallExe).Length/1MB,1)) MB)"
 
     - name: Upload Windows artifacts
       uses: actions/upload-artifact@v4
@@ -1009,13 +1027,16 @@ jobs:
         cp ${{ env.BUILD_DIR }}/yos-iframe.html site/
         cp -r ${{ env.BUILD_DIR }}/yos-web/engine site/engine
         cp -r ${{ env.BUILD_DIR }}/yos-web/yfs site/yfs
-        # Installer bootstrap scripts — served at yetty.dev/install.sh and
-        # yetty.dev/install.ps1. Each downloads the yinstall installer for the
-        # visitor's platform from the latest GitHub release and runs it:
+        # Installer bootstrap scripts — served at yetty.dev/install.sh,
+        # yetty.dev/install-min.sh, yetty.dev/install-max.sh and the .ps1
+        # twins. Each downloads its installer variant for the visitor's
+        # platform from the latest GitHub release and runs it:
         #   curl -fsSL https://yetty.dev/install.sh | bash
-        #   irm https://yetty.dev/install.ps1 | iex
-        cp build-tools/install/install.sh site/
-        cp build-tools/install/install.ps1 site/
+        #   curl -fsSL https://yetty.dev/install-min.sh | bash
+        #   irm https://yetty.dev/install-max.ps1 | iex
+        # The min/max scripts are install.sh / install.ps1 with the variant
+        # pinned, derived here so there is one bootstrap to maintain.
+        build-tools/install/make-variants.sh site/
         du -sh site/* | sort -h
 
     - name: Upload WebAssembly artifacts
@@ -1083,16 +1104,23 @@ jobs:
       with:
         name: yetty-linux
         path: yetty-linux
-    - name: Create archive
+    - name: Create archives
       # upload-artifact strips the Unix executable bit, so the downloaded
-      # yinstall comes back as 0644. Re-apply +x before archiving so users
-      # can run it straight after `tar -xzf` without a manual chmod.
+      # installers come back as 0644. Re-apply +x before archiving so users
+      # can run them straight after `tar -xzf` without a manual chmod. One
+      # archive per installer variant (see src/yetty/yinstall/README.md):
+      # the default download stays the plain name, min/max get a suffix.
       run: |
-        chmod +x yetty-linux/yinstall
-        tar -czvf yetty-linux.tar.gz -C yetty-linux .
+        chmod +x yetty-linux/yinstall yetty-linux/yinstall-min yetty-linux/yinstall-max
+        tar -czvf yetty-linux.tar.gz -C yetty-linux yinstall
+        tar -czvf yetty-linux-min.tar.gz -C yetty-linux yinstall-min
+        tar -czvf yetty-linux-max.tar.gz -C yetty-linux yinstall-max
     - uses: softprops/action-gh-release@v2
       with:
-        files: yetty-linux.tar.gz
+        files: |
+          yetty-linux.tar.gz
+          yetty-linux-min.tar.gz
+          yetty-linux-max.tar.gz
 
   release-linux-aarch64:
     runs-on: ubuntu-latest
@@ -1105,16 +1133,23 @@ jobs:
       with:
         name: yetty-linux-aarch64
         path: yetty-linux-aarch64
-    - name: Create archive
+    - name: Create archives
       # upload-artifact strips the Unix executable bit, so the downloaded
-      # yinstall comes back as 0644. Re-apply +x before archiving so users
-      # can run it straight after `tar -xzf` without a manual chmod.
+      # installers come back as 0644. Re-apply +x before archiving so users
+      # can run them straight after `tar -xzf` without a manual chmod. One
+      # archive per installer variant (see src/yetty/yinstall/README.md):
+      # the default download stays the plain name, min/max get a suffix.
       run: |
-        chmod +x yetty-linux-aarch64/yinstall
-        tar -czvf yetty-linux-aarch64.tar.gz -C yetty-linux-aarch64 .
+        chmod +x yetty-linux-aarch64/yinstall yetty-linux-aarch64/yinstall-min yetty-linux-aarch64/yinstall-max
+        tar -czvf yetty-linux-aarch64.tar.gz -C yetty-linux-aarch64 yinstall
+        tar -czvf yetty-linux-aarch64-min.tar.gz -C yetty-linux-aarch64 yinstall-min
+        tar -czvf yetty-linux-aarch64-max.tar.gz -C yetty-linux-aarch64 yinstall-max
     - uses: softprops/action-gh-release@v2
       with:
-        files: yetty-linux-aarch64.tar.gz
+        files: |
+          yetty-linux-aarch64.tar.gz
+          yetty-linux-aarch64-min.tar.gz
+          yetty-linux-aarch64-max.tar.gz
 
   release-macos:
     runs-on: ubuntu-latest
@@ -1127,16 +1162,23 @@ jobs:
       with:
         name: yetty-macos
         path: yetty-macos
-    - name: Create archive
+    - name: Create archives
       # upload-artifact strips the Unix executable bit, so the downloaded
-      # yinstall comes back as 0644. Re-apply +x before archiving so users
-      # can run it straight after `tar -xzf` without a manual chmod.
+      # installers come back as 0644. Re-apply +x before archiving so users
+      # can run them straight after `tar -xzf` without a manual chmod. One
+      # archive per installer variant (see src/yetty/yinstall/README.md):
+      # the default download stays the plain name, min/max get a suffix.
       run: |
-        chmod +x yetty-macos/yinstall
-        tar -czvf yetty-macos.tar.gz -C yetty-macos .
+        chmod +x yetty-macos/yinstall yetty-macos/yinstall-min yetty-macos/yinstall-max
+        tar -czvf yetty-macos.tar.gz -C yetty-macos yinstall
+        tar -czvf yetty-macos-min.tar.gz -C yetty-macos yinstall-min
+        tar -czvf yetty-macos-max.tar.gz -C yetty-macos yinstall-max
     - uses: softprops/action-gh-release@v2
       with:
-        files: yetty-macos.tar.gz
+        files: |
+          yetty-macos.tar.gz
+          yetty-macos-min.tar.gz
+          yetty-macos-max.tar.gz
 
   release-macos-x86_64:
     runs-on: ubuntu-latest
@@ -1149,16 +1191,23 @@ jobs:
       with:
         name: yetty-macos-x86_64
         path: yetty-macos-x86_64
-    - name: Create archive
+    - name: Create archives
       # upload-artifact strips the Unix executable bit, so the downloaded
-      # yinstall comes back as 0644. Re-apply +x before archiving so users
-      # can run it straight after `tar -xzf` without a manual chmod.
+      # installers come back as 0644. Re-apply +x before archiving so users
+      # can run them straight after `tar -xzf` without a manual chmod. One
+      # archive per installer variant (see src/yetty/yinstall/README.md):
+      # the default download stays the plain name, min/max get a suffix.
       run: |
-        chmod +x yetty-macos-x86_64/yinstall
-        tar -czvf yetty-macos-x86_64.tar.gz -C yetty-macos-x86_64 .
+        chmod +x yetty-macos-x86_64/yinstall yetty-macos-x86_64/yinstall-min yetty-macos-x86_64/yinstall-max
+        tar -czvf yetty-macos-x86_64.tar.gz -C yetty-macos-x86_64 yinstall
+        tar -czvf yetty-macos-x86_64-min.tar.gz -C yetty-macos-x86_64 yinstall-min
+        tar -czvf yetty-macos-x86_64-max.tar.gz -C yetty-macos-x86_64 yinstall-max
     - uses: softprops/action-gh-release@v2
       with:
-        files: yetty-macos-x86_64.tar.gz
+        files: |
+          yetty-macos-x86_64.tar.gz
+          yetty-macos-x86_64-min.tar.gz
+          yetty-macos-x86_64-max.tar.gz
 
   release-windows:
     runs-on: ubuntu-latest
@@ -1171,11 +1220,20 @@ jobs:
       with:
         name: yetty-windows
         path: yetty-windows
-    - name: Create archive
-      run: zip -r yetty-windows.zip yetty-windows
+    - name: Create archives
+      # One zip per installer variant, each holding just its .exe (install.ps1
+      # finds the .exe by name at any depth). The default download keeps the
+      # plain name, min/max get a suffix.
+      run: |
+        zip -j yetty-windows.zip yetty-windows/yinstall.exe
+        zip -j yetty-windows-min.zip yetty-windows/yinstall-min.exe
+        zip -j yetty-windows-max.zip yetty-windows/yinstall-max.exe
     - uses: softprops/action-gh-release@v2
       with:
-        files: yetty-windows.zip
+        files: |
+          yetty-windows.zip
+          yetty-windows-min.zip
+          yetty-windows-max.zip
 
   release-webasm:
     runs-on: ubuntu-latest

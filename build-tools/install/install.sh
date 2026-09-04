@@ -2,24 +2,45 @@
 #
 # yetty installer bootstrap for Linux and macOS.
 #
-# Downloads the self-contained `yinstall` installer for this machine's OS and
-# architecture from the latest GitHub release, then runs it. `yinstall` carries
-# the whole yetty product (the terminal, the companion tools, shaders, fonts,
-# config and the RISC-V VM runtime) as an embedded payload and unpacks each
-# piece to the right per-OS location on first run.
+# Downloads the self-contained installer for this machine's OS and
+# architecture from the latest GitHub release, then runs it. The installer
+# carries its payload embedded and unpacks each piece to the right per-OS
+# location on first run. It comes in three sizes (see
+# src/yetty/yinstall/README.md, "Variants"):
+#   min      yetty alone with shaders, raw fonts, config and libyetty_ffi
+#            (the language bindings' library); the MSDF font atlases are
+#            built from the raw fonts on the first start
+#   default  every yetty executable and tool, fonts + pre-generated atlases,
+#            config, greeter and demo assets
+#   max      default plus the RISC-V VM runtime and QEMU
 #
 # Usage:
 #   curl -fsSL https://yetty.dev/install.sh | bash
-#   curl -fsSL https://yetty.dev/install.sh | bash -s -- --verbose
+#   curl -fsSL https://yetty.dev/install-min.sh | bash
+#   curl -fsSL https://yetty.dev/install-max.sh | bash
+#   curl -fsSL https://yetty.dev/install.sh | bash -s -- --variant max --verbose
+#
+# install-min.sh / install-max.sh are this script with `variant_default`
+# pinned (build-tools/install/make-variants.sh derives them).
+#
+# Options (before any arguments meant for the installer):
+#   --variant NAME  min | default | max
+#   --min / --max   shorthand for --variant
 #
 # Environment overrides:
+#   YETTY_VARIANT   min | default | max. Default: the script's pinned variant.
 #   YETTY_VERSION   release tag to install (e.g. yetty-0.2.46). Default: latest.
 #   YETTY_REPO      owner/repo to download from. Default: zokrezyl/yetty.
 #
-# Any arguments after `--` are forwarded verbatim to yinstall (e.g. --verbose,
+# Any other arguments are forwarded verbatim to the installer (e.g. --verbose,
 # --force). See `yinstall --help` for the full list.
 
 set -euo pipefail
+
+# The variant this script installs unless YETTY_VARIANT or --variant says
+# otherwise. make-variants.sh rewrites this one line for install-min.sh and
+# install-max.sh — keep it on its own line, exactly this shape.
+variant_default="default"
 
 readonly repo="${YETTY_REPO:-zokrezyl/yetty}"
 readonly version="${YETTY_VERSION:-latest}"
@@ -38,25 +59,35 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Resolve the release asset name for this OS + architecture. The desktop
-# release ships one archive per (os, arch); each contains a single `yinstall`.
+# Validate a variant name.
+check_variant() {
+    case "$1" in
+        min | default | max) ;;
+        *) die "unknown variant '$1' (have min, default, max)" ;;
+    esac
+}
+
+# The release asset name for this OS + architecture + variant. The desktop
+# release ships one archive per (os, arch, variant); each contains a single
+# installer binary. The default variant is the plain archive name, min and
+# max carry a suffix.
 resolve_asset() {
-    local kernel machine
+    local variant="$1" kernel machine base
     kernel="$(uname -s)"
     machine="$(uname -m)"
 
     case "$kernel" in
         Linux)
             case "$machine" in
-                x86_64 | amd64) echo "yetty-linux.tar.gz" ;;
-                aarch64 | arm64) echo "yetty-linux-aarch64.tar.gz" ;;
+                x86_64 | amd64) base="yetty-linux" ;;
+                aarch64 | arm64) base="yetty-linux-aarch64" ;;
                 *) die "unsupported Linux architecture '$machine' (have x86_64, aarch64)" ;;
             esac
             ;;
         Darwin)
             case "$machine" in
-                arm64) echo "yetty-macos.tar.gz" ;;
-                x86_64) echo "yetty-macos-x86_64.tar.gz" ;;
+                arm64) base="yetty-macos" ;;
+                x86_64) base="yetty-macos-x86_64" ;;
                 *) die "unsupported macOS architecture '$machine' (have arm64, x86_64)" ;;
             esac
             ;;
@@ -64,6 +95,22 @@ resolve_asset() {
             die "unsupported operating system '$kernel' — this script covers Linux and macOS. On Windows use install.ps1."
             ;;
     esac
+
+    if [ "$variant" = "default" ]; then
+        echo "${base}.tar.gz"
+    else
+        echo "${base}-${variant}.tar.gz"
+    fi
+}
+
+# The installer binary inside the archive: yinstall, yinstall-min, yinstall-max.
+resolve_installer_name() {
+    local variant="$1"
+    if [ "$variant" = "default" ]; then
+        echo "yinstall"
+    else
+        echo "yinstall-${variant}"
+    fi
 }
 
 # Build the download URL. A resolved tag uses the direct release path; the
@@ -123,8 +170,31 @@ download() {
 main() {
     command -v tar >/dev/null 2>&1 || die "need tar on PATH to unpack the installer"
 
-    local asset url archive installer release_tag
-    asset="$(resolve_asset)"
+    # Variant: the script's pinned default, overridden by YETTY_VARIANT, then
+    # by a leading --variant / --min / --max. Anything else goes to yinstall.
+    local variant="${YETTY_VARIANT:-$variant_default}"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --variant)
+                [ $# -ge 2 ] || die "--variant needs a value (min, default, max)"
+                variant="$2"
+                shift 2
+                ;;
+            --variant=*)
+                variant="${1#--variant=}"
+                shift
+                ;;
+            --min) variant="min"; shift ;;
+            --max) variant="max"; shift ;;
+            --default) variant="default"; shift ;;
+            *) break ;;
+        esac
+    done
+    check_variant "$variant"
+
+    local asset url archive installer installer_name release_tag
+    asset="$(resolve_asset "$variant")"
+    installer_name="$(resolve_installer_name "$variant")"
 
     release_tag="$version"
     if [ "$release_tag" = "latest" ]; then
@@ -141,17 +211,17 @@ main() {
     workdir="$(mktemp -d "${TMPDIR:-/tmp}/yetty-install.XXXXXX")"
     archive="${workdir}/${asset}"
 
-    log "downloading ${asset} (${release_tag}) from ${repo}"
+    log "downloading ${asset} (${release_tag}, ${variant} variant) from ${repo}"
     download "$url" "$archive"
 
     log "unpacking installer"
     tar -xzf "$archive" -C "$workdir"
 
-    installer="${workdir}/yinstall"
-    [ -f "$installer" ] || die "installer 'yinstall' not found inside ${asset}"
+    installer="${workdir}/${installer_name}"
+    [ -f "$installer" ] || die "installer '${installer_name}' not found inside ${asset}"
     chmod +x "$installer"
 
-    log "running yinstall"
+    log "running ${installer_name}"
     # Forward any pass-through args (e.g. --verbose, --force). yinstall prints
     # its own log, including where each component landed and any PATH advice.
     "$installer" "$@"

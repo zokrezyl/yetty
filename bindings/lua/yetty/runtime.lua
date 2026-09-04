@@ -14,8 +14,9 @@ local M = {}
 local clib = nil
 
 -- Ordered library candidates: $YETTY_FFI_LIB, then the dev checkout's build
--- trees (this file lives at <repo>/bindings/lua/yetty/runtime.lua), then a
--- bare soname for the OS loader. Discovery never runs a shell: the checkout
+-- trees (this file lives at <repo>/bindings/lua/yetty/runtime.lua), then the
+-- yinstall lib dir (~/.local/lib, $XDG_LIB_HOME), then a bare soname for the
+-- OS loader. Discovery never runs a shell: the checkout
 -- path would be interpolated into a command line, where shell metacharacters
 -- in the path could execute — the known build-tree names are probed with
 -- io.open instead.
@@ -41,6 +42,26 @@ local function candidate_paths()
   if repo then
     for _, tree in ipairs(BUILD_TREES) do
       local path = repo .. "/" .. tree .. "/src/yetty/yffi/libyetty_ffi.so"
+      local handle = io.open(path, "r")
+      if handle then
+        handle:close()
+        candidates[#candidates + 1] = path
+      end
+    end
+  end
+  -- Installed by yinstall (every variant carries the library).
+  local lib_dirs = {}
+  local xdg_lib = os.getenv("XDG_LIB_HOME")
+  if xdg_lib and xdg_lib ~= "" then
+    lib_dirs[#lib_dirs + 1] = xdg_lib
+  end
+  local home = os.getenv("HOME")
+  if home and home ~= "" then
+    lib_dirs[#lib_dirs + 1] = home .. "/.local/lib"
+  end
+  for _, dir in ipairs(lib_dirs) do
+    for _, name in ipairs({ "libyetty_ffi.so", "libyetty_ffi.dylib" }) do
+      local path = dir .. "/" .. name
       local handle = io.open(path, "r")
       if handle then
         handle:close()

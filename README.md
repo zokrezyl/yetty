@@ -34,9 +34,29 @@ irm https://yetty.dev/install.ps1 | iex
 ```
 
 The script downloads the installer for your platform from the latest release
-and runs it; `yinstall` unpacks the terminal, its companion tools, and assets
-into the right per-OS locations. To install manually, grab a build from
-[Releases](https://github.com/zokrezyl/yetty/releases/latest) or see
+and runs it. The installer is a single self-contained executable that unpacks
+everything it carries into the right per-OS locations. It comes in three
+sizes, each with its own one-liner:
+
+| Installer | Script | Contains | Download |
+|-----------|--------|----------|---------:|
+| `yinstall-min` | `install-min.sh` / `install-min.ps1` | `yetty` alone, its shaders and the raw TTF/OTF fonts, the default config, and `libyetty_ffi` for the language bindings. yetty builds the MSDF font atlases from the raw fonts on its first start (about a second on an old GPU). | ~55 MB |
+| `yinstall` | `install.sh` / `install.ps1` | Every yetty executable: the terminal, the companion tools (`ycat`, `yplot`, `ygreeter`, `ydoc`, `ysheet`, `yslide`, …) and the demo programs, `libyetty_ffi`, plus shaders, raw fonts **and** the pre-generated MSDF font atlases, config, greeter and demo assets. | ~255 MB |
+| `yinstall-max` | `install-max.sh` / `install-max.ps1` | Everything in `yinstall`, plus the RISC-V VM runtime (kernel, firmware, root filesystem) and the QEMU emulator behind `--temu` / `--qemu`. | ~380 MB |
+
+```bash
+curl -fsSL https://yetty.dev/install-min.sh | bash     # smallest: the terminal
+curl -fsSL https://yetty.dev/install-max.sh | bash     # everything, VM included
+```
+
+The same script also takes the variant as an argument
+(`curl -fsSL https://yetty.dev/install.sh | bash -s -- --max`) or from
+`YETTY_VARIANT`; on Windows set `$env:YETTY_VARIANT` before the pipe. Every
+installer is idempotent: run it again to repair an install, or with `--force`
+to overwrite files that are already there. To install manually, grab the
+archive for your platform and size from
+[Releases](https://github.com/zokrezyl/yetty/releases/latest)
+(`yetty-<platform>.tar.gz`, `-min`, `-max`; `.zip` on Windows) or see
 [src/yetty/yinstall/README.md](src/yetty/yinstall/README.md).
 
 ## What Yetty Is

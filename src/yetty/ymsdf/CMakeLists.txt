@@ -6,6 +6,7 @@
 set(_YMSDF_SOURCES
     gpu-generator.c
     factory.c
+    ensure.c
 )
 if(YETTY_ENABLE_FEATURE_YMSDF_GEN)
     list(APPEND _YMSDF_SOURCES cpu-generator.c)
@@ -20,6 +21,7 @@ target_include_directories(yetty_ymsdf PUBLIC
 target_link_libraries(yetty_ymsdf PUBLIC
     yetty_ycore
     yetty_ymsdf_wgsl
+    yetty_yplatform_core
 )
 if(YETTY_ENABLE_FEATURE_YMSDF_GEN)
     target_link_libraries(yetty_ymsdf PUBLIC yetty_ymsdf_gen)

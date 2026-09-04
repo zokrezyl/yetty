@@ -40,6 +40,8 @@ static const struct yetty_yinstall_component *yinstall_components(size_t *count)
     static const struct yetty_yinstall_component table[] = {
         {"Executables", "bin/", YETTY_YINSTALL_DEST_BIN, "", 1,
          "yetty terminal, companion CLIs and demos"},
+        {"FFI library", "lib/", YETTY_YINSTALL_DEST_LIB, "", 0,
+         "libyetty_ffi for the language bindings"},
         {"Shaders & fonts", "data/", YETTY_YINSTALL_DEST_DATA, "", 0,
          "WGSL shaders and the bundled fonts"},
         {"Greeter assets", "greeter/", YETTY_YINSTALL_DEST_DATA, "", 0,
@@ -141,6 +143,8 @@ static const char *resolve_root(enum yetty_yinstall_destination destination,
     switch (destination) {
     case YETTY_YINSTALL_DEST_BIN:
         return paths->bin_dir_buf;
+    case YETTY_YINSTALL_DEST_LIB:
+        return paths->lib_dir_buf;
     case YETTY_YINSTALL_DEST_DATA:
         return paths->data_dir_buf;
     case YETTY_YINSTALL_DEST_CONFIG:
@@ -372,10 +376,13 @@ static void install_asset(const char *name, const uint8_t *data, size_t size, in
     }
 }
 
-/* Install one component and print its log line. */
+/* Install one component and print its log line. A component this installer
+ * variant does not carry (no embedded asset under its prefix) is skipped
+ * silently and does not count towards `components_present`. */
 static struct yetty_ycore_void_result install_component(
     const struct yetty_yinstall_component *comp, const struct yetty_yinstall_options *options,
-    const struct yetty_yplatform_paths *paths, uint64_t *total_bytes, size_t *total_files)
+    const struct yetty_yplatform_paths *paths, uint64_t *total_bytes, size_t *total_files,
+    size_t *components_present)
 {
     struct component_install_ctx ctx = {0};
     ctx.component = comp;
@@ -396,8 +403,8 @@ static struct yetty_ycore_void_result install_component(
     if (dest_len < 0 || (size_t)dest_len >= sizeof(ctx.dest_dir)) {
         return YETTY_ERR(yetty_ycore_void, "component destination path too long");
     }
-    struct yetty_ycore_void_result mkdir_res = yetty_yplatform_mkdir_p(ctx.dest_dir);
-    YETTY_RETURN_IF_ERR(yetty_ycore_void, mkdir_res, "cannot create component destination dir");
+    /* The destination is created lazily by write_file (per parent dir), so a
+     * component this variant does not carry leaves no empty directory. */
 
     struct yetty_ycore_void_result walk =
         yetty_yplatform_install_foreach_asset(install_asset, &ctx);
@@ -415,13 +422,22 @@ static struct yetty_ycore_void_result install_component(
         return ctx.result;
     }
 
+    size_t total_present = ctx.files_written + ctx.files_skipped;
+    if (total_present == 0) {
+        /* Not carried by this installer variant (yinstall-min ships no
+         * tools beyond yetty, no demos, no VM). Nothing landed, so nothing
+         * to log — except on --verbose, where the omission is worth a line. */
+        if (options->verbose) {
+            printf("  %-20s     not included in this installer\n", comp->name);
+        }
+        return YETTY_OK_VOID();
+    }
+    *components_present += 1;
+
     /* Build the detail column. */
     char detail[160];
-    size_t total_present = ctx.files_written + ctx.files_skipped;
-    if (ctx.files_written == 0 && total_present > 0) {
+    if (ctx.files_written == 0) {
         snprintf(detail, sizeof(detail), "up to date");
-    } else if (total_present == 0) {
-        snprintf(detail, sizeof(detail), "nothing embedded");
     } else {
         char size_str[32];
         format_size(ctx.bytes_on_disk, size_str, sizeof(size_str));
@@ -540,8 +556,9 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
         options = &defaults;
     }
     const char *version = options->version && *options->version ? options->version : "dev";
+    const char *name = options->name && *options->name ? options->name : "yinstall";
 
-    printf("yetty installer \xc2\xb7 version %s\n\n", version);
+    printf("yetty installer (%s) \xc2\xb7 version %s\n\n", name, version);
     printf("Installing to this machine:\n\n");
 
     /* Resolve the platform dirs once for this run (standalone tool, no config
@@ -585,9 +602,11 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
 
     uint64_t total_bytes = 0;
     size_t total_files = 0;
+    size_t components_present = 0;
     for (size_t index = 0; index < component_count; index++) {
-        struct yetty_ycore_void_result result = install_component(
-            &components[index], &effective_options, paths, &total_bytes, &total_files);
+        struct yetty_ycore_void_result result =
+            install_component(&components[index], &effective_options, paths, &total_bytes,
+                              &total_files, &components_present);
         if (YETTY_IS_ERR(result)) {
             printf("\n  %s: install failed.\n", components[index].name);
             release_paths_absorb(paths);
@@ -607,7 +626,7 @@ struct yetty_ycore_void_result yetty_yinstall_run(const struct yetty_yinstall_op
     if (total_files == 0) {
         printf("Nothing to do \xc2\xb7 yetty is already installed.\n");
     } else {
-        printf("Installed %zu components \xc2\xb7 %s written.\n", component_count, total_str);
+        printf("Installed %zu components \xc2\xb7 %s written.\n", components_present, total_str);
     }
 
     const char *bin_dir = paths->bin_dir_buf;

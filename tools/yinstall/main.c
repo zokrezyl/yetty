@@ -1,10 +1,12 @@
 /*
  * yinstall — the yetty installer.
  *
- * A self-contained executable that carries the whole yetty product as an
- * embedded payload and unpacks it to the right per-OS locations. All the
- * real work lives in the yetty_yinstall module; this is just argument
- * parsing and error reporting. See src/yetty/yinstall/README.md.
+ * A self-contained executable that carries the yetty product as an embedded
+ * payload and unpacks it to the right per-OS locations. The same source
+ * builds three variants (yinstall-min / yinstall / yinstall-max) that differ
+ * only in the payload the build embeds; YETTY_YINSTALL_NAME tells them
+ * apart. All the real work lives in the yetty_yinstall module; this is just
+ * argument parsing and error reporting. See src/yetty/yinstall/README.md.
  */
 
 #include <stdio.h>
@@ -17,10 +19,14 @@
 #define YETTY_BUILD_VERSION "dev"
 #endif
 
+#ifndef YETTY_YINSTALL_NAME
+#define YETTY_YINSTALL_NAME "yinstall"
+#endif
+
 static void print_usage(const char *program)
 {
     printf("Usage: %s [options]\n\n", program);
-    printf("Installs yetty and its companion tools onto this machine.\n\n");
+    printf("Installs yetty onto this machine (%s).\n\n", YETTY_YINSTALL_NAME);
     printf("Options:\n");
     printf("  -v, --verbose   list every file as it is installed\n");
     printf("  -f, --force     reinstall even files already present\n");
@@ -31,6 +37,7 @@ static void print_usage(const char *program)
 int main(int argc, char **argv)
 {
     struct yetty_yinstall_options options = {0};
+    options.name = YETTY_YINSTALL_NAME;
     options.version = YETTY_BUILD_VERSION;
 
     for (int index = 1; index < argc; index++) {
@@ -40,13 +47,13 @@ int main(int argc, char **argv)
         } else if (strcmp(arg, "-f") == 0 || strcmp(arg, "--force") == 0) {
             options.force = 1;
         } else if (strcmp(arg, "-V") == 0 || strcmp(arg, "--version") == 0) {
-            printf("yinstall %s\n", YETTY_BUILD_VERSION);
+            printf("%s %s\n", YETTY_YINSTALL_NAME, YETTY_BUILD_VERSION);
             return 0;
         } else if (strcmp(arg, "-h") == 0 || strcmp(arg, "--help") == 0) {
             print_usage(argv[0]);
             return 0;
         } else {
-            fprintf(stderr, "yinstall: unknown option '%s'\n\n", arg);
+            fprintf(stderr, "%s: unknown option '%s'\n\n", YETTY_YINSTALL_NAME, arg);
             print_usage(argv[0]);
             return 2;
         }

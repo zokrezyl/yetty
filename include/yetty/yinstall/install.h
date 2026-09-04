@@ -1,11 +1,14 @@
 /*
  * yinstall/install.h — the yetty installer module.
  *
- * yinstall is a self-contained executable that installs the whole yetty
- * product (the terminal, the companion CLIs and demos, shaders, fonts,
- * config, and the RISC-V VM runtime) onto a machine. Its payload is baked
- * into the binary; on run it unpacks every piece to the right per-OS
- * location and prints a clear log of what landed where.
+ * yinstall is a self-contained executable that installs the yetty product
+ * (the terminal, the companion CLIs and demos, shaders, fonts, config, and
+ * the RISC-V VM runtime) onto a machine. Its payload is baked into the
+ * binary; on run it unpacks every piece to the right per-OS location and
+ * prints a clear log of what landed where. The build produces three
+ * variants of the same executable that differ only in the components they
+ * carry (yinstall-min / yinstall / yinstall-max); the install loop is the
+ * same for all — a component the variant does not carry is simply skipped.
  *
  * This module is the platform-independent core: the component model, the
  * install loop, decompression, and the log. The embedded bytes are read
@@ -28,6 +31,7 @@ extern "C" {
 /* Which resolved root a component's files install under. */
 enum yetty_yinstall_destination {
     YETTY_YINSTALL_DEST_BIN,    /* executables → platform paths bin_dir    */
+    YETTY_YINSTALL_DEST_LIB,    /* shared libraries → platform paths lib_dir */
     YETTY_YINSTALL_DEST_DATA,   /* shaders, fonts, VM runtime → data_dir   */
     YETTY_YINSTALL_DEST_CONFIG, /* config files → config_dir               */
 };
@@ -50,6 +54,7 @@ struct yetty_yinstall_component {
 
 /* Knobs for a single install run. */
 struct yetty_yinstall_options {
+    const char *name; /* installer variant for the banner, e.g. "yinstall-min"; NULL → "yinstall" */
     const char *version; /* build version for the banner + marker; NULL → "dev" */
     int verbose;         /* list every file as it lands, not just per-component totals */
     int force;           /* rewrite files even when an up-to-date copy is present */

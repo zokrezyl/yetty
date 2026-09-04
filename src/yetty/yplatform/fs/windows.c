@@ -64,6 +64,11 @@ int yetty_yplatform_unlink(const char *path)
     return _unlink(path);
 }
 
+int yetty_yplatform_rmdir(const char *path)
+{
+    return _rmdir(path);
+}
+
 int yetty_yplatform_chmod(const char *path, unsigned int mode)
 {
     (void)path;

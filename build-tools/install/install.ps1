@@ -2,18 +2,29 @@
     yetty installer bootstrap for Windows.
 
     Downloads the yetty Windows release from the latest GitHub release, unpacks
-    it, and runs the self-contained `yinstall.exe` installer. `yinstall` carries
-    the whole yetty product (the terminal, the companion tools, shaders, fonts
-    and config) as an embedded payload and unpacks each piece to the right
-    location on first run.
+    it, and runs the self-contained installer. The installer carries its
+    payload embedded and unpacks each piece to the right location on first
+    run. It comes in three sizes (see src/yetty/yinstall/README.md, "Variants"):
+        min      yetty alone with shaders, raw fonts, config and yetty_ffi.dll
+                 (the language bindings' library); the MSDF font atlases are
+                 built from the raw fonts on the first start
+        default  every yetty executable and tool, fonts + pre-generated
+                 atlases, config, greeter and demo assets
+        max      default plus the RISC-V VM runtime and QEMU
 
     Usage (PowerShell):
         irm https://yetty.dev/install.ps1 | iex
+        irm https://yetty.dev/install-min.ps1 | iex
+        irm https://yetty.dev/install-max.ps1 | iex
+
+    install-min.ps1 / install-max.ps1 are this script with `$variantDefault`
+    pinned (build-tools/install/make-variants.sh derives them).
 
     Environment overrides (set before the pipe, since `iex` cannot take params):
+        $env:YETTY_VARIANT      min | default | max. Default: the script's pinned variant.
         $env:YETTY_VERSION      release tag to install (e.g. yetty-0.2.46). Default: latest.
         $env:YETTY_REPO         owner/repo to download from. Default: zokrezyl/yetty.
-        $env:YETTY_INSTALL_ARGS extra args forwarded to yinstall (e.g. "--verbose --force").
+        $env:YETTY_INSTALL_ARGS extra args forwarded to the installer (e.g. "--verbose --force").
 
     This script is written to be safe to run via `irm ... | iex`: it has no
     param() block (which iex cannot populate) and is driven entirely by the
@@ -38,11 +49,23 @@ try {
 function Write-Log { param([string]$Message) Write-Host "yetty-install: $Message" }
 function Die       { param([string]$Message) throw "yetty-install: error: $Message" }
 
+# The variant this script installs unless $env:YETTY_VARIANT says otherwise.
+# make-variants.sh rewrites this one line for install-min.ps1 and
+# install-max.ps1 — keep it on its own line, exactly this shape.
+$variantDefault = 'default'
+
 $repo    = if ($env:YETTY_REPO)    { $env:YETTY_REPO }    else { 'zokrezyl/yetty' }
 $version = if ($env:YETTY_VERSION) { $env:YETTY_VERSION } else { 'latest' }
+$variant = if ($env:YETTY_VARIANT) { $env:YETTY_VARIANT } else { $variantDefault }
+if ($variant -notin @('min', 'default', 'max')) {
+    Die "unknown variant '$variant' (have min, default, max)"
+}
 
-# The Windows desktop release ships a single x64 archive.
-$asset = 'yetty-windows.zip'
+# The Windows desktop release ships one x64 archive per variant, each holding
+# a single installer .exe. The default variant is the plain archive name, min
+# and max carry a suffix.
+$asset         = if ($variant -eq 'default') { 'yetty-windows.zip' } else { "yetty-windows-$variant.zip" }
+$installerName = if ($variant -eq 'default') { 'yinstall.exe' }      else { "yinstall-$variant.exe" }
 
 # Resolve "latest" to a concrete yetty-X.Y.Z tag. The repo publishes several
 # release families (yetty-*, yos-web-*, yetty-rootfs-riscv-*) and GitHub's
@@ -81,22 +104,22 @@ try {
     $archive = Join-Path $workdir $asset
 
     $displayVersion = if ($resolvedTag) { $resolvedTag } else { $version }
-    Write-Log "downloading $asset ($displayVersion) from $repo"
+    Write-Log "downloading $asset ($displayVersion, $variant variant) from $repo"
     Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
 
     Write-Log 'unpacking installer'
     $extractDir = Join-Path $workdir 'extracted'
     Expand-Archive -Path $archive -DestinationPath $extractDir -Force
 
-    # yinstall.exe may sit at the archive root or one level down (the release
-    # stages the runtime under a yetty-windows/ folder); find it either way.
-    $installer = Get-ChildItem -Path $extractDir -Filter 'yinstall.exe' -Recurse -File |
+    # The .exe may sit at the archive root or one level down; find it either
+    # way.
+    $installer = Get-ChildItem -Path $extractDir -Filter $installerName -Recurse -File |
         Select-Object -First 1
     if (-not $installer) {
-        Die "installer 'yinstall.exe' not found inside $asset"
+        Die "installer '$installerName' not found inside $asset"
     }
 
-    Write-Log 'running yinstall'
+    Write-Log "running $installerName"
     # Forward any pass-through args (e.g. --verbose, --force). yinstall prints
     # its own log, including where each component landed and any PATH advice.
     if ($env:YETTY_INSTALL_ARGS) {

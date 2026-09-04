@@ -20,29 +20,12 @@
 
 /* Each manifest defines a `register_<prefix>_assets_c` (a static inline
  * blob-walker on this backend) plus the HAS_<PREFIX>_MANIFEST guard.
- * Absent guards mean the build did not embed that prefix (e.g. a dev
- * build with no payload) — the corresponding fan-out simply compiles out. */
-#ifdef HAS_BIN_MANIFEST
-#include "yinstall_bin_manifest.h"
-#endif
-#ifdef HAS_DATA_MANIFEST
-#include "yinstall_data_manifest.h"
-#endif
-#ifdef HAS_GREETER_MANIFEST
-#include "yinstall_greeter_manifest.h"
-#endif
-#ifdef HAS_DEMOS_MANIFEST
-#include "yinstall_demos_manifest.h"
-#endif
-#ifdef HAS_YCONFIG_MANIFEST
-#include "yinstall_yconfig_manifest.h"
-#endif
-#ifdef HAS_YEMU_MANIFEST
-#include "yinstall_yemu_manifest.h"
-#endif
-#ifdef HAS_QEMU_MANIFEST
-#include "yinstall_qemu_manifest.h"
-#endif
+ * Absent guards mean this installer variant did not embed that prefix
+ * (yinstall-min carries no tools beyond yetty, no demos, no VM runtime) —
+ * the corresponding fan-out simply compiles out. The manifest headers are
+ * named after the variant target, so the build writes one umbrella header
+ * per variant (tools/yinstall/CMakeLists.txt) that pulls in its set. */
+#include "yinstall_manifests.h"
 
 /*
  * The generated register_<prefix>_assets_c entry points take a fixed
@@ -80,6 +63,9 @@ struct yetty_ycore_void_result yetty_yplatform_install_foreach_asset(
 
 #ifdef HAS_BIN_MANIFEST
     register_bin_assets_c(bridge_trampoline);
+#endif
+#ifdef HAS_LIB_MANIFEST
+    register_lib_assets_c(bridge_trampoline);
 #endif
 #ifdef HAS_DATA_MANIFEST
     register_data_assets_c(bridge_trampoline);

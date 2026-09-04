@@ -42,6 +42,9 @@ struct yetty_yplatform_paths_ptr_result yetty_yplatform_paths_get_platform_paths
         snprintf(p->data_dir_buf, sizeof(p->data_dir_buf), "C:\\temp\\yetty");
         snprintf(p->bin_dir_buf, sizeof(p->bin_dir_buf), "C:\\temp\\yetty\\bin");
     }
+    /* A DLL loads from beside the executables that use it: the language
+     * bindings' yetty_ffi.dll goes where the .exe files go. */
+    snprintf(p->lib_dir_buf, sizeof(p->lib_dir_buf), "%s", p->bin_dir_buf);
 
     const char *temp = getenv("TEMP");
     if (temp && *temp) {

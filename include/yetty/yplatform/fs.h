@@ -13,8 +13,13 @@
 extern "C" {
 #endif
 
-/* Create a single directory (returns 0 on success or if already exists) */
+/* Create a single directory. Returns 0 only when this call created it;
+ * -1 on error with errno set (EEXIST when it already exists), so callers
+ * that need to claim a directory exclusively can rely on the result. */
 int yetty_yplatform_mkdir(const char *path);
+
+/* Remove an empty directory. Returns 0 on success, -1 on error (errno set). */
+int yetty_yplatform_rmdir(const char *path);
 
 /* Create directory and all parent directories. An already-existing
  * directory is success; anything else (permission denied, read-only

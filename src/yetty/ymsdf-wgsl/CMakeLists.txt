@@ -16,6 +16,7 @@ target_include_directories(yetty_ymsdf_wgsl PUBLIC
 target_link_libraries(yetty_ymsdf_wgsl PUBLIC
     yetty_ycore
     yetty_ycdb
+    yetty_yplatform_core
     webgpu
     ${FREETYPE_ALL_LIBS}
 )

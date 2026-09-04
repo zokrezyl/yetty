@@ -4,8 +4,9 @@
  * Mirrors yetty-poc/src/yetty/msdf-wgsl/src/msdf-wgsl.cpp but ported to C.
  * Pipeline:
  *   FreeType outline → metadata + points GPU buffers
- *     → per-glyph compute dispatch → RGBA32Float storage texture
- *     → readback → RGBA8 conversion → CDB writer.
+ *     → one compute dispatch over the whole atlas (a tile → glyph table
+ *       tells each 8×8 workgroup which glyph it renders)
+ *     → RGBA8 storage texture → readback → CDB writer.
  *
  * Atlas is shelf-packed at 8192px wide. The texture grows in height when
  * the cursor walks off the bottom; old contents are copied across via
@@ -22,6 +23,7 @@
 #include <yetty/ymsdf-wgsl/ymsdf-wgsl.h>
 #include <yetty/ycdb/ycdb.h>
 #include <yetty/ytrace/ytrace.h>
+#include <yetty/yplatform/time.h>
 
 #include <webgpu/webgpu.h>
 
@@ -635,14 +637,26 @@ static struct bounds get_glyph_bounds(FT_Face face, uint32_t codepoint)
 }
 
 /*=============================================================================
- * Atlas — a single RGBA32Float storage texture grown via texture-to-texture
- * copy as the shelf packer walks off the bottom.
+ * Atlas — shelf packing on the CPU (prepare stage) and, once the layout is
+ * final, one RGBA8Unorm storage texture of exactly that size (render stage).
+ * Glyphs sit on the 8-pixel tile grid so an 8×8 compute tile never straddles
+ * two of them — the one-dispatch tile table relies on that.
  *===========================================================================*/
 
-struct atlas {
-    WGPUDevice device;
-    WGPUTexture texture;
-    WGPUTextureView view;
+enum {
+    ATLAS_TILE = 8,     /* compute workgroup tile edge; glyph placement grid */
+    ATLAS_WIDTH = 8192, /* fixed width; the height follows the font */
+};
+
+/* Round `n` up to the tile grid. */
+static int align_to_tile(int n)
+{
+    return (n + ATLAS_TILE - 1) / ATLAS_TILE * ATLAS_TILE;
+}
+
+/* CPU-side shelf packer. No GPU objects — the texture is created from the
+ * finished layout in the render stage. */
+struct atlas_layout {
     int width;
     int height;
     int row_height;
@@ -651,108 +665,89 @@ struct atlas {
     size_t glyph_count;
 };
 
-static void atlas_cleanup(struct atlas *a)
-{
-    if (a->view) {
-        wgpuTextureViewRelease(a->view);
-        a->view = NULL;
-    }
-    if (a->texture) {
-        wgpuTextureDestroy(a->texture);
-        wgpuTextureRelease(a->texture);
-        a->texture = NULL;
-    }
-}
-
-static int atlas_resize(struct atlas *a, int new_height)
-{
-    if (new_height <= a->height) {
-        return 0;
-    }
-
-    WGPUTextureDescriptor desc = {0};
-    desc.dimension = WGPUTextureDimension_2D;
-    desc.size = (WGPUExtent3D){(uint32_t)a->width, (uint32_t)new_height, 1};
-    desc.mipLevelCount = 1;
-    desc.sampleCount = 1;
-    desc.format = WGPUTextureFormat_RGBA32Float;
-    desc.usage = WGPUTextureUsage_StorageBinding | WGPUTextureUsage_TextureBinding |
-                 WGPUTextureUsage_CopySrc | WGPUTextureUsage_CopyDst;
-    WGPUTexture nt = wgpuDeviceCreateTexture(a->device, &desc);
-    if (!nt) {
-        return -1;
-    }
-
-    WGPUTextureViewDescriptor vdesc = {0};
-    vdesc.format = WGPUTextureFormat_RGBA32Float;
-    vdesc.dimension = WGPUTextureViewDimension_2D;
-    vdesc.mipLevelCount = 1;
-    vdesc.arrayLayerCount = 1;
-    WGPUTextureView nv = wgpuTextureCreateView(nt, &vdesc);
-    if (!nv) {
-        wgpuTextureDestroy(nt);
-        wgpuTextureRelease(nt);
-        return -1;
-    }
-
-    /* Carry over old contents. */
-    if (a->texture && a->height > 0) {
-        WGPUCommandEncoderDescriptor edesc = {0};
-        WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(a->device, &edesc);
-        WGPUTexelCopyTextureInfo src = {0};
-        src.texture = a->texture;
-        WGPUTexelCopyTextureInfo dst = {0};
-        dst.texture = nt;
-        WGPUExtent3D ext = {(uint32_t)a->width, (uint32_t)a->height, 1};
-        wgpuCommandEncoderCopyTextureToTexture(enc, &src, &dst, &ext);
-        WGPUCommandBufferDescriptor cdesc = {0};
-        WGPUCommandBuffer cb = wgpuCommandEncoderFinish(enc, &cdesc);
-        WGPUQueue q = wgpuDeviceGetQueue(a->device);
-        wgpuQueueSubmit(q, 1, &cb);
-        wgpuCommandBufferRelease(cb);
-        wgpuCommandEncoderRelease(enc);
-    }
-
-    atlas_cleanup(a);
-    a->texture = nt;
-    a->view = nv;
-    a->height = new_height;
-    return 0;
-}
-
-static int atlas_init(struct atlas *a, WGPUDevice device, int width)
+static void atlas_layout_init(struct atlas_layout *a, int width)
 {
     memset(a, 0, sizeof(*a));
-    a->device = device;
     a->width = width;
-    a->cursor_x = 1;
-    a->cursor_y = 1;
-    /* Lazy initial allocation — first allocate() forces resize. */
-    return 0;
 }
 
-static int atlas_allocate(struct atlas *a, int w, int h, int *out_x, int *out_y)
+/* Every glyph starts on an 8-pixel boundary in both axes and the next one
+ * starts a whole tile after it ends. The +1 keeps the one-pixel gap between
+ * neighbours the shelf packer always had. */
+static int atlas_layout_allocate(struct atlas_layout *a, int w, int h, int *out_x, int *out_y)
 {
-    if (a->cursor_x + w + 1 > a->width) {
-        a->cursor_x = 1;
-        a->cursor_y += a->row_height + 1;
+    int stride_w = align_to_tile(w + 1);
+    if (stride_w > a->width) {
+        return -1;
+    }
+    if (a->cursor_x + stride_w > a->width) {
+        a->cursor_x = 0;
+        a->cursor_y += align_to_tile(a->row_height + 1);
         a->row_height = 0;
     }
     if (a->cursor_y + h + 1 > a->height) {
-        int doubled = a->height * 2;
-        int needed = a->cursor_y + h + 64;
-        int nh = doubled > needed ? doubled : needed;
-        if (atlas_resize(a, nh) < 0) {
-            return -1;
-        }
+        a->height = a->cursor_y + h + 1;
     }
     *out_x = a->cursor_x;
     *out_y = a->cursor_y;
-    a->cursor_x += w + 1;
+    a->cursor_x += stride_w;
     if (h > a->row_height) {
         a->row_height = h;
     }
     a->glyph_count++;
+    return 0;
+}
+
+/* Close the last shelf and snap the height to the tile grid. */
+static void atlas_layout_finish(struct atlas_layout *a)
+{
+    a->height = align_to_tile(a->height);
+}
+
+/* The storage texture for a finished layout. */
+struct atlas_texture {
+    WGPUTexture texture;
+    WGPUTextureView view;
+};
+
+static void atlas_texture_cleanup(struct atlas_texture *t)
+{
+    if (t->view) {
+        wgpuTextureViewRelease(t->view);
+        t->view = NULL;
+    }
+    if (t->texture) {
+        wgpuTextureDestroy(t->texture);
+        wgpuTextureRelease(t->texture);
+        t->texture = NULL;
+    }
+}
+
+static int atlas_texture_create(struct atlas_texture *t, WGPUDevice device,
+                                const struct atlas_layout *layout)
+{
+    memset(t, 0, sizeof(*t));
+    WGPUTextureDescriptor desc = {0};
+    desc.dimension = WGPUTextureDimension_2D;
+    desc.size = (WGPUExtent3D){(uint32_t)layout->width, (uint32_t)layout->height, 1};
+    desc.mipLevelCount = 1;
+    desc.sampleCount = 1;
+    desc.format = WGPUTextureFormat_RGBA8Unorm;
+    desc.usage = WGPUTextureUsage_StorageBinding | WGPUTextureUsage_CopySrc;
+    t->texture = wgpuDeviceCreateTexture(device, &desc);
+    if (!t->texture) {
+        return -1;
+    }
+    WGPUTextureViewDescriptor vdesc = {0};
+    vdesc.format = WGPUTextureFormat_RGBA8Unorm;
+    vdesc.dimension = WGPUTextureViewDimension_2D;
+    vdesc.mipLevelCount = 1;
+    vdesc.arrayLayerCount = 1;
+    t->view = wgpuTextureCreateView(t->texture, &vdesc);
+    if (!t->view) {
+        atlas_texture_cleanup(t);
+        return -1;
+    }
     return 0;
 }
 
@@ -858,39 +853,12 @@ static char *find_shader_path(const char *user_path)
 }
 
 /*=============================================================================
- * Async wait helpers — register the callback in WaitAnyOnly mode, then
+ * Async wait helper — register the callback in WaitAnyOnly mode, then
  * block in wgpuInstanceWaitAny until the future completes. The callback
  * fires on this thread from inside the wait call, so no atomics and no
  * polling are needed. Requires an instance created with
  * WGPUInstanceFeatureName_TimedWaitAny (non-zero timeouts fail otherwise).
  *===========================================================================*/
-
-static void queue_done_callback(WGPUQueueWorkDoneStatus status, WGPUStringView message,
-                                void *userdata1, void *userdata2)
-{
-    (void)message;
-    (void)userdata2;
-    *(WGPUQueueWorkDoneStatus *)userdata1 = status;
-}
-
-static int wait_queue_done(WGPUQueue queue, WGPUInstance instance)
-{
-    WGPUQueueWorkDoneStatus status = WGPUQueueWorkDoneStatus_Error;
-    WGPUQueueWorkDoneCallbackInfo callback_info = {0};
-    callback_info.mode = WGPUCallbackMode_WaitAnyOnly;
-    callback_info.callback = queue_done_callback;
-    callback_info.userdata1 = &status;
-
-    WGPUFutureWaitInfo wait_info = {0};
-    wait_info.future = wgpuQueueOnSubmittedWorkDone(queue, callback_info);
-
-    WGPUWaitStatus wait_status = wgpuInstanceWaitAny(instance, 1, &wait_info, UINT64_MAX);
-    if (wait_status != WGPUWaitStatus_Success) {
-        ywarn("ymsdf-wgsl: WaitAny for queue work-done failed (%d)", (int)wait_status);
-        return -1;
-    }
-    return status == WGPUQueueWorkDoneStatus_Success ? 0 : -1;
-}
 
 static void map_done_callback(WGPUMapAsyncStatus status, WGPUStringView message, void *userdata1,
                               void *userdata2)
@@ -922,10 +890,11 @@ static int wait_buffer_map(WGPUBuffer buffer, WGPUMapMode mode, size_t size, WGP
 /*=============================================================================
  * Compute pipeline — created once per generate() call and torn down at the
  * end. The shader source is read from disk; the bind group layout is fixed:
- *   binding 0: uniform (per-glyph parameters)
+ *   binding 0: storage<read> per-glyph parameters, one entry per glyph
  *   binding 1: storage<read> metadata
  *   binding 2: storage<read> points
- *   binding 3: storage texture write-only RGBA32Float
+ *   binding 3: storage texture write-only RGBA8Unorm (the atlas)
+ *   binding 4: storage<read> tile → glyph table (one u32 per 8×8 tile)
  *===========================================================================*/
 
 struct compute {
@@ -972,10 +941,10 @@ static int compute_init(struct compute *c, WGPUDevice device, WGPUInstance insta
         return -1;
     }
 
-    WGPUBindGroupLayoutEntry e[4] = {0};
+    WGPUBindGroupLayoutEntry e[5] = {0};
     e[0].binding = 0;
     e[0].visibility = WGPUShaderStage_Compute;
-    e[0].buffer.type = WGPUBufferBindingType_Uniform;
+    e[0].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
     e[1].binding = 1;
     e[1].visibility = WGPUShaderStage_Compute;
     e[1].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
@@ -985,11 +954,14 @@ static int compute_init(struct compute *c, WGPUDevice device, WGPUInstance insta
     e[3].binding = 3;
     e[3].visibility = WGPUShaderStage_Compute;
     e[3].storageTexture.access = WGPUStorageTextureAccess_WriteOnly;
-    e[3].storageTexture.format = WGPUTextureFormat_RGBA32Float;
+    e[3].storageTexture.format = WGPUTextureFormat_RGBA8Unorm;
     e[3].storageTexture.viewDimension = WGPUTextureViewDimension_2D;
+    e[4].binding = 4;
+    e[4].visibility = WGPUShaderStage_Compute;
+    e[4].buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
 
     WGPUBindGroupLayoutDescriptor ldesc = {0};
-    ldesc.entryCount = 4;
+    ldesc.entryCount = 5;
     ldesc.entries = e;
     c->bgl = wgpuDeviceCreateBindGroupLayout(device, &ldesc);
     if (!c->bgl) {
@@ -1212,172 +1184,222 @@ static struct yetty_ycore_void_result write_cdb_file(const char *cdb_path,
     return yetty_ycdb_writer_finish(w);
 }
 
-/* Read the RGBA32Float atlas back to a malloc'd RGBA8 buffer.
- * Returns NULL on error. */
-static uint8_t *atlas_readback_rgba8(struct atlas *a, WGPUInstance instance)
-{
-    if (!a->texture || a->width == 0 || a->height == 0) {
-        return NULL;
-    }
-    size_t bpp = 16; /* RGBA32Float */
-    size_t bytes_per_row = (size_t)a->width * bpp;
-    size_t aligned = (bytes_per_row + 255) & ~(size_t)255;
-    size_t total = aligned * (size_t)a->height;
-
-    WGPUBufferDescriptor bdesc = {0};
-    bdesc.size = total;
-    bdesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
-    WGPUBuffer staging = wgpuDeviceCreateBuffer(a->device, &bdesc);
-    if (!staging) {
-        return NULL;
-    }
-
-    WGPUCommandEncoderDescriptor edesc = {0};
-    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(a->device, &edesc);
-    WGPUTexelCopyTextureInfo src = {0};
-    src.texture = a->texture;
-    WGPUTexelCopyBufferInfo dst = {0};
-    dst.buffer = staging;
-    dst.layout.bytesPerRow = (uint32_t)aligned;
-    dst.layout.rowsPerImage = (uint32_t)a->height;
-    WGPUExtent3D ext = {(uint32_t)a->width, (uint32_t)a->height, 1};
-    wgpuCommandEncoderCopyTextureToBuffer(enc, &src, &dst, &ext);
-
-    WGPUCommandBufferDescriptor cdesc = {0};
-    WGPUCommandBuffer cb = wgpuCommandEncoderFinish(enc, &cdesc);
-    WGPUQueue q = wgpuDeviceGetQueue(a->device);
-    wgpuQueueSubmit(q, 1, &cb);
-    wgpuCommandBufferRelease(cb);
-    wgpuCommandEncoderRelease(enc);
-
-    if (wait_queue_done(q, instance) < 0) {
-        wgpuBufferRelease(staging);
-        return NULL;
-    }
-
-    if (wait_buffer_map(staging, WGPUMapMode_Read, total, instance) < 0) {
-        wgpuBufferRelease(staging);
-        return NULL;
-    }
-    const float *fp = wgpuBufferGetConstMappedRange(staging, 0, total);
-    if (!fp) {
-        wgpuBufferUnmap(staging);
-        wgpuBufferRelease(staging);
-        return NULL;
-    }
-
-    uint8_t *out = malloc((size_t)a->width * a->height * 4);
-    if (!out) {
-        wgpuBufferUnmap(staging);
-        wgpuBufferRelease(staging);
-        return NULL;
-    }
-    for (int y = 0; y < a->height; y++) {
-        const float *row = fp + ((size_t)y * aligned / sizeof(float));
-        uint8_t *drow = out + (size_t)y * a->width * 4;
-        for (int x = 0; x < a->width; x++) {
-            const float *px = row + (size_t)x * 4;
-            for (int c = 0; c < 4; c++) {
-                float v = px[c] * 255.0f;
-                if (v < 0.0f) {
-                    v = 0.0f;
-                } else if (v > 255.0f) {
-                    v = 255.0f;
-                }
-                drow[x * 4 + c] = (uint8_t)v;
-            }
-        }
-    }
-
-    wgpuBufferUnmap(staging);
-    wgpuBufferDestroy(staging);
-    wgpuBufferRelease(staging);
-    return out;
-}
-
 /*=============================================================================
- * Public API
+ * Public API — a generation is staged, so a batch of fonts can overlap the
+ * CPU work of one with the GPU pass of another (see ymsdf/ensure.c):
+ *   prepare   CPU only, any thread: FreeType outlines → packed buffers,
+ *             atlas layout, per-glyph parameters, tile table.
+ *   submit    the device's thread: texture, uploads, ONE dispatch over the
+ *             atlas + the copy-out, submitted.
+ *   readback  the device's thread: wait for that copy-out, read the atlas.
+ *   write     any thread: the CDB file.
+ * The compute pipeline is a separate object so a batch compiles it once.
+ * config_generate() runs everything back to back.
  *===========================================================================*/
 
-struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
+struct yetty_ymsdf_wgsl_job {
+    char *ttf_path;
+    char *cdb_path;
+    char *shader_path; /* may be NULL */
+    WGPUDevice device;
+    WGPUInstance instance;
+    float scale;
+    float range;
+
+    /* prepare → */
+    struct emit_glyph *emits;
+    size_t emit_count;
+    struct u32_vec combined_meta;
+    struct f32_vec combined_pts;
+    struct atlas_layout layout;
+    struct glyph_uniforms *slots; /* one per rendered glyph */
+    size_t slot_count;
+    uint32_t *tile_slots; /* tiles_x * tiles_y */
+    size_t tiles_x;
+    size_t tiles_y;
+
+    /* submit → (released by readback) */
+    struct atlas_texture texture;
+    WGPUBuffer meta_buf;
+    WGPUBuffer pts_buf;
+    WGPUBuffer slots_buf;
+    WGPUBuffer tiles_buf;
+    WGPUBuffer staging; /* the atlas copied out, 256-byte row pitch */
+    WGPUBindGroup bind_group;
+    int submitted;
+
+    /* readback → */
+    uint8_t *rgba8; /* layout.width * layout.height * 4, NULL if nothing rendered */
+
+    double time_start;
+    double time_prepared;
+    double time_submitted;
+    double time_rendered;
+};
+
+/* Pipeline object: the compiled compute pipeline + layout for one device. */
+struct yetty_ymsdf_wgsl_pipeline {
+    struct compute comp;
+};
+
+struct yetty_ymsdf_wgsl_pipeline_ptr_result yetty_ymsdf_wgsl_pipeline_create(
+    void *device, void *instance, const char *shader_path)
+{
+    if (!device || !instance) {
+        return YETTY_ERR(yetty_ymsdf_wgsl_pipeline_ptr, "ymsdf-wgsl: device and instance required");
+    }
+    struct yetty_ymsdf_wgsl_pipeline *pipeline = calloc(1, sizeof(*pipeline));
+    if (!pipeline) {
+        return YETTY_ERR(yetty_ymsdf_wgsl_pipeline_ptr, "ymsdf-wgsl: alloc pipeline");
+    }
+    if (compute_init(&pipeline->comp, (WGPUDevice)device, (WGPUInstance)instance, shader_path) <
+        0) {
+        free(pipeline);
+        return YETTY_ERR(yetty_ymsdf_wgsl_pipeline_ptr, "ymsdf-wgsl: compute pipeline init failed");
+    }
+    return YETTY_OK(yetty_ymsdf_wgsl_pipeline_ptr, pipeline);
+}
+
+void yetty_ymsdf_wgsl_pipeline_destroy(struct yetty_ymsdf_wgsl_pipeline *pipeline)
+{
+    if (!pipeline) {
+        return;
+    }
+    compute_cleanup(&pipeline->comp);
+    free(pipeline);
+}
+
+static void release_buffer(WGPUBuffer *buffer)
+{
+    if (*buffer) {
+        wgpuBufferDestroy(*buffer);
+        wgpuBufferRelease(*buffer);
+        *buffer = NULL;
+    }
+}
+
+/* Drop everything a submit put on the device. */
+static void job_release_device_state(struct yetty_ymsdf_wgsl_job *job)
+{
+    if (job->bind_group) {
+        wgpuBindGroupRelease(job->bind_group);
+        job->bind_group = NULL;
+    }
+    release_buffer(&job->slots_buf);
+    release_buffer(&job->tiles_buf);
+    release_buffer(&job->meta_buf);
+    release_buffer(&job->pts_buf);
+    release_buffer(&job->staging);
+    atlas_texture_cleanup(&job->texture);
+    job->submitted = 0;
+}
+
+void yetty_ymsdf_wgsl_job_destroy(struct yetty_ymsdf_wgsl_job *job)
+{
+    if (!job) {
+        return;
+    }
+    job_release_device_state(job);
+    free(job->rgba8);
+    free(job->tile_slots);
+    free(job->slots);
+    u32_vec_free(&job->combined_meta);
+    f32_vec_free(&job->combined_pts);
+    free(job->emits);
+    free(job->shader_path);
+    free(job->cdb_path);
+    free(job->ttf_path);
+    free(job);
+}
+
+static char *dup_string(const char *text)
+{
+    size_t len = strlen(text);
+    char *copy = malloc(len + 1);
+    if (copy) {
+        memcpy(copy, text, len + 1);
+    }
+    return copy;
+}
+
+/* Every prepare failure path: close FreeType, drop the half-built job. */
+static struct yetty_ymsdf_wgsl_job_ptr_result prepare_fail(struct yetty_ymsdf_wgsl_job *job,
+                                                           FT_Library lib, FT_Face face,
+                                                           const char *message)
+{
+    if (face) {
+        FT_Done_Face(face);
+    }
+    if (lib) {
+        FT_Done_FreeType(lib);
+    }
+    yetty_ymsdf_wgsl_job_destroy(job);
+    return YETTY_ERR(yetty_ymsdf_wgsl_job_ptr, message);
+}
+
+struct yetty_ymsdf_wgsl_job_ptr_result yetty_ymsdf_wgsl_job_prepare(
     const struct yetty_ymsdf_wgsl_config *config)
 {
     if (!config || !config->ttf_path || !config->cdb_path || !config->device || !config->instance) {
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: invalid config");
+        return YETTY_ERR(yetty_ymsdf_wgsl_job_ptr, "ymsdf-wgsl: invalid config");
     }
 
-    WGPUDevice device = (WGPUDevice)config->device;
-    WGPUInstance instance = (WGPUInstance)config->instance;
+    struct yetty_ymsdf_wgsl_job *job = calloc(1, sizeof(*job));
+    if (!job) {
+        return YETTY_ERR(yetty_ymsdf_wgsl_job_ptr, "ymsdf-wgsl: alloc job");
+    }
+    job->time_start = yetty_yplatform_ytime_monotonic_sec();
+    job->device = (WGPUDevice)config->device;
+    job->instance = (WGPUInstance)config->instance;
+    job->ttf_path = dup_string(config->ttf_path);
+    job->cdb_path = dup_string(config->cdb_path);
+    job->shader_path = config->shader_path ? dup_string(config->shader_path) : NULL;
+    if (!job->ttf_path || !job->cdb_path || (config->shader_path && !job->shader_path)) {
+        return prepare_fail(job, NULL, NULL, "ymsdf-wgsl: alloc job paths");
+    }
     float font_size = config->font_size > 0 ? config->font_size : 32.0f;
     float pixel_range = config->pixel_range > 0 ? config->pixel_range : 4.0f;
 
     /* FreeType */
     FT_Library lib = NULL;
     if (FT_Init_FreeType(&lib) != 0) {
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: FT_Init_FreeType failed");
+        return prepare_fail(job, NULL, NULL, "ymsdf-wgsl: FT_Init_FreeType failed");
     }
     FT_Face face = NULL;
-    if (FT_New_Face(lib, config->ttf_path, 0, &face) != 0) {
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: FT_New_Face failed");
+    if (FT_New_Face(lib, job->ttf_path, 0, &face) != 0) {
+        return prepare_fail(job, lib, NULL, "ymsdf-wgsl: FT_New_Face failed");
     }
     float upem = (float)face->units_per_EM;
     if (upem <= 0.0f) {
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: invalid units_per_EM");
+        return prepare_fail(job, lib, face, "ymsdf-wgsl: invalid units_per_EM");
     }
-    float scale = font_size * 64.0f / upem;
-    float range = pixel_range;
-    /* Font-units → pixel scale at config->font_size. Used to convert every
-     * glyph's bearing/size/advance for the CDB header. */
+    job->scale = font_size * 64.0f / upem;
+    job->range = pixel_range;
+    float scale = job->scale;
+    float range = job->range;
+    /* Font-units → pixel scale at font_size. Used to convert every glyph's
+     * bearing/size/advance for the CDB header. */
     float us = font_size / upem;
-
-    /* Compute pipeline */
-    struct compute comp;
-    if (compute_init(&comp, device, instance, config->shader_path) < 0) {
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: compute pipeline init failed");
-    }
-
-    /* Atlas */
-    struct atlas atlas;
-    atlas_init(&atlas, device, 8192);
 
     /* Codepoints */
     struct u32_vec cps = {0};
     if (collect_codepoints(face, &cps) < 0) {
         u32_vec_free(&cps);
-        atlas_cleanup(&atlas);
-        compute_cleanup(&comp);
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: collect codepoints failed");
+        return prepare_fail(job, lib, face, "ymsdf-wgsl: collect codepoints failed");
     }
     if (cps.size == 0) {
         u32_vec_free(&cps);
-        atlas_cleanup(&atlas);
-        compute_cleanup(&comp);
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: empty charset");
+        return prepare_fail(job, lib, face, "ymsdf-wgsl: empty charset");
     }
-    ydebug("ymsdf-wgsl: %s has %zu codepoints", config->ttf_path, cps.size);
+    ydebug("ymsdf-wgsl: %s has %zu codepoints", job->ttf_path, cps.size);
 
-    /* Per-glyph serialization, atlas allocation, emit list. */
-    struct emit_glyph *emits = calloc(cps.size, sizeof(struct emit_glyph));
-    struct u32_vec combined_meta = {0};
-    struct f32_vec combined_pts = {0};
-    if (!emits) {
+    /* Per-glyph serialization, atlas layout, emit list. */
+    job->emits = calloc(cps.size, sizeof(struct emit_glyph));
+    if (!job->emits) {
         u32_vec_free(&cps);
-        atlas_cleanup(&atlas);
-        compute_cleanup(&comp);
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: alloc emits");
+        return prepare_fail(job, lib, face, "ymsdf-wgsl: alloc emits");
     }
-    size_t emit_count = 0;
+    atlas_layout_init(&job->layout, ATLAS_WIDTH);
     int padding = (int)ceilf(range);
 
     for (size_t i = 0; i < cps.size; i++) {
@@ -1396,7 +1418,7 @@ struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
             u32_vec_free(&gc.metadata);
             f32_vec_free(&gc.points);
             FT_Load_Char(face, cp, FT_LOAD_NO_SCALE);
-            struct emit_glyph *e = &emits[emit_count++];
+            struct emit_glyph *e = &job->emits[job->emit_count++];
             e->codepoint = cp;
             e->atlas_w = 0;
             e->atlas_h = 0;
@@ -1419,267 +1441,360 @@ struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
         int aw = (int)ceilf(bw * scale) + padding * 2;
         int ah = (int)ceilf(bh * scale) + padding * 2;
         int ax, ay;
-        if (atlas_allocate(&atlas, aw, ah, &ax, &ay) < 0) {
+        if (atlas_layout_allocate(&job->layout, aw, ah, &ax, &ay) < 0) {
             ywarn("ymsdf-wgsl: atlas full at U+%04X", cp);
             u32_vec_free(&gc.metadata);
             f32_vec_free(&gc.points);
             continue;
         }
 
-        struct emit_glyph *e = &emits[emit_count++];
+        struct emit_glyph *e = &job->emits[job->emit_count++];
         e->codepoint = cp;
         e->atlas_x = (uint32_t)ax;
         e->atlas_y = (uint32_t)ay;
         e->atlas_w = (uint32_t)aw;
         e->atlas_h = (uint32_t)ah;
         /* CDB metadata convention (matches the CPU msdfgen path in
-         * src/yetty/ymsdf-gen/ymsdf-gen.cpp:135-140 — same downstream
-         * consumer in msdf-font.c expects identical semantics):
+         * src/yetty/ymsdf-gen/ymsdf-gen.cpp — same downstream consumer in
+         * msdf-font.c expects identical semantics):
          *
          *   size_x / size_y  = the FULL atlas-bitmap dimensions, including
          *                      the MSDF pixel-range padding on every side.
-         *                      The shader treats this as the glyph render
-         *                      rectangle and samples the entire region.
          *   bearing_x        = (glyph-contour left in pixels) - padding
          *                      so cursor_x + bearing_x lands at the
          *                      bitmap's LEFT edge (not the glyph contour).
          *   bearing_y        = (glyph-contour top in pixels) + padding
          *                      so y - bearing_y lands at the bitmap's TOP.
-         *   advance          = horizontal advance in pixels.
-         *
-         * Earlier I stored the glyph-contour dims here, which made the
-         * shader sample only the inner glyph-contour-sized sub-rectangle
-         * of the actual bitmap — every glyph rendered shifted by
-         * `padding` and clipped at the right/bottom. */
+         *   advance          = horizontal advance in pixels. */
         e->size_x_px = (float)aw;
         e->size_y_px = (float)ah;
         e->bearing_x_px = b.min_x * FT_SCALE * us - (float)padding;
         e->bearing_y_px = b.max_y * FT_SCALE * us + (float)padding;
         e->advance_px = (float)face->glyph->metrics.horiAdvance * us;
-        e->meta_offset = (uint32_t)combined_meta.size;
-        e->point_offset = (uint32_t)(combined_pts.size / 2);
+        e->meta_offset = (uint32_t)job->combined_meta.size;
+        e->point_offset = (uint32_t)(job->combined_pts.size / 2);
         e->b = b;
 
-        for (size_t k = 0; k < gc.metadata.size; k++) {
-            if (u32_vec_push(&combined_meta, gc.metadata.data[k]) < 0) {
-                emit_count = 0;
-                break;
-            }
+        int oom = 0;
+        for (size_t k = 0; k < gc.metadata.size && !oom; k++) {
+            oom = u32_vec_push(&job->combined_meta, gc.metadata.data[k]) < 0;
         }
-        for (size_t k = 0; k < gc.points.size; k++) {
-            if (f32_vec_push(&combined_pts, gc.points.data[k]) < 0) {
-                emit_count = 0;
-                break;
-            }
+        for (size_t k = 0; k < gc.points.size && !oom; k++) {
+            oom = f32_vec_push(&job->combined_pts, gc.points.data[k]) < 0;
         }
         u32_vec_free(&gc.metadata);
         f32_vec_free(&gc.points);
-    }
-
-    if (emit_count == 0) {
-        free(emits);
-        u32_vec_free(&combined_meta);
-        f32_vec_free(&combined_pts);
-        u32_vec_free(&cps);
-        atlas_cleanup(&atlas);
-        compute_cleanup(&comp);
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: no glyphs emitted");
-    }
-    ydebug("ymsdf-wgsl: serialized %zu/%zu glyphs", emit_count, cps.size);
-
-    /* Upload combined buffers. Two storage buffers shared across all dispatches. */
-    WGPUQueue queue = wgpuDeviceGetQueue(device);
-    WGPUBuffer meta_buf = NULL;
-    WGPUBuffer pts_buf = NULL;
-    if (combined_meta.size > 0) {
-        WGPUBufferDescriptor d = {0};
-        d.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
-        d.size = combined_meta.size * sizeof(uint32_t);
-        meta_buf = wgpuDeviceCreateBuffer(device, &d);
-        wgpuQueueWriteBuffer(queue, meta_buf, 0, combined_meta.data, d.size);
-    }
-    if (combined_pts.size > 0) {
-        WGPUBufferDescriptor d = {0};
-        d.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
-        d.size = combined_pts.size * sizeof(float);
-        pts_buf = wgpuDeviceCreateBuffer(device, &d);
-        wgpuQueueWriteBuffer(queue, pts_buf, 0, combined_pts.data, d.size);
-    }
-
-    /* Per-glyph dispatch — uniform buffer + bind group per glyph, all
-     * recorded into one command encoder, single submit. */
-    WGPUCommandEncoderDescriptor edesc = {0};
-    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device, &edesc);
-
-    WGPUBuffer *uniform_bufs = calloc(emit_count, sizeof(WGPUBuffer));
-    WGPUBindGroup *bgroups = calloc(emit_count, sizeof(WGPUBindGroup));
-    if (!uniform_bufs || !bgroups) {
-        free(uniform_bufs);
-        free(bgroups);
-        if (meta_buf) {
-            wgpuBufferDestroy(meta_buf);
-            wgpuBufferRelease(meta_buf);
+        if (oom) {
+            u32_vec_free(&cps);
+            return prepare_fail(job, lib, face, "ymsdf-wgsl: alloc combined buffers");
         }
-        if (pts_buf) {
-            wgpuBufferDestroy(pts_buf);
-            wgpuBufferRelease(pts_buf);
+    }
+    u32_vec_free(&cps);
+    FT_Done_Face(face);
+    FT_Done_FreeType(lib);
+    face = NULL;
+    lib = NULL;
+
+    if (job->emit_count == 0) {
+        return prepare_fail(job, NULL, NULL, "ymsdf-wgsl: no glyphs emitted");
+    }
+    atlas_layout_finish(&job->layout);
+
+    /* Every rendered glyph's parameters, packed, plus the tile → glyph table
+     * the single dispatch reads: each 8×8 workgroup looks up its tile's slot
+     * and renders that glyph's pixels. */
+    for (size_t i = 0; i < job->emit_count; i++) {
+        if (job->emits[i].atlas_w != 0 && job->emits[i].atlas_h != 0) {
+            job->slot_count++;
         }
-        wgpuCommandEncoderRelease(enc);
-        free(emits);
-        u32_vec_free(&combined_meta);
-        f32_vec_free(&combined_pts);
-        u32_vec_free(&cps);
-        atlas_cleanup(&atlas);
-        compute_cleanup(&comp);
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: alloc per-glyph arrays");
+    }
+    job->tiles_x = (size_t)job->layout.width / ATLAS_TILE;
+    job->tiles_y = (size_t)job->layout.height / ATLAS_TILE;
+    size_t tile_count = job->tiles_x * job->tiles_y;
+    job->slots = calloc(job->slot_count ? job->slot_count : 1, sizeof(*job->slots));
+    job->tile_slots = calloc(tile_count ? tile_count : 1, sizeof(*job->tile_slots));
+    if (!job->slots || !job->tile_slots) {
+        return prepare_fail(job, NULL, NULL, "ymsdf-wgsl: alloc glyph table");
     }
 
     float padding_glyph_space = range / scale;
-
-    for (size_t i = 0; i < emit_count; i++) {
-        const struct emit_glyph *e = &emits[i];
+    size_t slot = 0;
+    for (size_t i = 0; i < job->emit_count; i++) {
+        const struct emit_glyph *e = &job->emits[i];
         if (e->atlas_w == 0 || e->atlas_h == 0) {
             continue; /* empty glyph — no compute needed */
         }
-        struct glyph_uniforms u = {0};
-        u.atlas_offset[0] = e->atlas_x;
-        u.atlas_offset[1] = e->atlas_y;
-        u.glyph_size[0] = e->atlas_w;
-        u.glyph_size[1] = e->atlas_h;
-        u.translate[0] = padding_glyph_space - e->b.min_x;
+        struct glyph_uniforms *u = &job->slots[slot];
+        u->atlas_offset[0] = e->atlas_x;
+        u->atlas_offset[1] = e->atlas_y;
+        u->glyph_size[0] = e->atlas_w;
+        u->glyph_size[1] = e->atlas_h;
+        u->translate[0] = padding_glyph_space - e->b.min_x;
         /* Pin the ink TOP exactly `padding` px below the bitmap top —
          * bearing_y_px assumes it. Anchoring the bottom let the ceil()
          * slack of atlas_h land at the top, giving each glyph a 0..1 px
          * vertical jitter on the rendered baseline (same fix as the CPU
          * generator). Identity when bh*scale is integral. */
-        u.translate[1] = e->b.max_y - ((float)e->atlas_h - (float)padding) / scale;
-        u.scale = scale;
+        u->translate[1] = e->b.max_y - ((float)e->atlas_h - (float)padding) / scale;
+        u->scale = scale;
         /* The compute shader measures distances in glyph space and
          * normalizes by u.range, so u.range is in GLYPH units. The font
          * shaders assume the field spans `range` OUTPUT pixels — convert
          * (matches the CPU generator; the two only coincided for 2048-upm
          * fonts at size 32, where scale == 1.0). */
-        u.range = range / scale;
-        u.meta_offset = e->meta_offset;
-        u.point_offset = e->point_offset;
-        u.glyph_height = (float)e->atlas_h;
+        u->range = range / scale;
+        u->meta_offset = e->meta_offset;
+        u->point_offset = e->point_offset;
+        u->glyph_height = (float)e->atlas_h;
 
-        WGPUBufferDescriptor ud = {0};
-        ud.size = sizeof(u);
-        ud.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-        WGPUBuffer ub = wgpuDeviceCreateBuffer(device, &ud);
-        wgpuQueueWriteBuffer(queue, ub, 0, &u, sizeof(u));
-
-        WGPUBindGroupEntry be[4] = {0};
-        be[0].binding = 0;
-        be[0].buffer = ub;
-        be[0].size = sizeof(u);
-        be[1].binding = 1;
-        be[1].buffer = meta_buf;
-        be[1].size = combined_meta.size * sizeof(uint32_t);
-        be[2].binding = 2;
-        be[2].buffer = pts_buf;
-        be[2].size = combined_pts.size * sizeof(float);
-        be[3].binding = 3;
-        be[3].textureView = atlas.view;
-
-        WGPUBindGroupDescriptor bgd = {0};
-        bgd.layout = comp.bgl;
-        bgd.entryCount = 4;
-        bgd.entries = be;
-        WGPUBindGroup bg = wgpuDeviceCreateBindGroup(device, &bgd);
-        uniform_bufs[i] = ub;
-        bgroups[i] = bg;
-
-        WGPUComputePassDescriptor pdesc = {0};
-        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, &pdesc);
-        wgpuComputePassEncoderSetPipeline(pass, comp.pipeline);
-        wgpuComputePassEncoderSetBindGroup(pass, 0, bg, 0, NULL);
-        uint32_t wgx = (e->atlas_w + 7) / 8;
-        uint32_t wgy = (e->atlas_h + 7) / 8;
-        wgpuComputePassEncoderDispatchWorkgroups(pass, wgx, wgy, 1);
-        wgpuComputePassEncoderEnd(pass);
-        wgpuComputePassEncoderRelease(pass);
+        /* Every tile the glyph's rectangle touches belongs to it (the
+         * packer keeps neighbours a whole tile apart). */
+        size_t tile_x0 = e->atlas_x / ATLAS_TILE;
+        size_t tile_x1 = (e->atlas_x + e->atlas_w - 1) / ATLAS_TILE;
+        size_t tile_y0 = e->atlas_y / ATLAS_TILE;
+        size_t tile_y1 = (e->atlas_y + e->atlas_h - 1) / ATLAS_TILE;
+        for (size_t ty = tile_y0; ty <= tile_y1 && ty < job->tiles_y; ty++) {
+            for (size_t tx = tile_x0; tx <= tile_x1 && tx < job->tiles_x; tx++) {
+                job->tile_slots[ty * job->tiles_x + tx] = (uint32_t)(slot + 1);
+            }
+        }
+        slot++;
     }
+
+    job->time_prepared = yetty_yplatform_ytime_monotonic_sec();
+    ydebug("ymsdf-wgsl: %s prepared %zu glyphs (%zu rendered, atlas %dx%d) in %.1f ms",
+           job->ttf_path, job->emit_count, job->slot_count, job->layout.width, job->layout.height,
+           (job->time_prepared - job->time_start) * 1000.0);
+    return YETTY_OK(yetty_ymsdf_wgsl_job_ptr, job);
+}
+
+static WGPUBuffer upload_storage_buffer(WGPUDevice device, WGPUQueue queue, const void *data,
+                                        size_t size)
+{
+    WGPUBufferDescriptor desc = {0};
+    desc.usage = WGPUBufferUsage_Storage | WGPUBufferUsage_CopyDst;
+    desc.size = size;
+    WGPUBuffer buffer = wgpuDeviceCreateBuffer(device, &desc);
+    if (buffer) {
+        wgpuQueueWriteBuffer(queue, buffer, 0, data, size);
+    }
+    return buffer;
+}
+
+/* Row pitch of the copied-out atlas: WebGPU wants 256-byte multiples. */
+static size_t atlas_staging_pitch(const struct atlas_layout *layout)
+{
+    size_t bytes_per_row = (size_t)layout->width * 4;
+    return (bytes_per_row + 255) & ~(size_t)255;
+}
+
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_job_submit(
+    struct yetty_ymsdf_wgsl_job *job, struct yetty_ymsdf_wgsl_pipeline *pipeline)
+{
+    if (!job || !job->emits) {
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: submit before prepare");
+    }
+    if (!pipeline) {
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: submit needs a pipeline");
+    }
+    if (job->submitted) {
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: job already submitted");
+    }
+    double time_begin = yetty_yplatform_ytime_monotonic_sec();
+    if (job->slot_count == 0 || job->combined_meta.size == 0 || job->combined_pts.size == 0) {
+        /* A font with no outline data at all: nothing to dispatch, every
+         * glyph is an empty entry in the CDB. */
+        job->time_submitted = time_begin;
+        job->time_rendered = time_begin;
+        return YETTY_OK_VOID();
+    }
+
+    WGPUDevice device = job->device;
+    WGPUQueue queue = wgpuDeviceGetQueue(device);
+
+    if (atlas_texture_create(&job->texture, device, &job->layout) < 0) {
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: atlas texture create failed");
+    }
+    job->meta_buf = upload_storage_buffer(device, queue, job->combined_meta.data,
+                                          job->combined_meta.size * sizeof(uint32_t));
+    job->pts_buf = upload_storage_buffer(device, queue, job->combined_pts.data,
+                                         job->combined_pts.size * sizeof(float));
+    job->slots_buf =
+        upload_storage_buffer(device, queue, job->slots, job->slot_count * sizeof(*job->slots));
+    job->tiles_buf = upload_storage_buffer(device, queue, job->tile_slots,
+                                           job->tiles_x * job->tiles_y * sizeof(*job->tile_slots));
+    WGPUBufferDescriptor sdesc = {0};
+    sdesc.size = atlas_staging_pitch(&job->layout) * (size_t)job->layout.height;
+    sdesc.usage = WGPUBufferUsage_CopyDst | WGPUBufferUsage_MapRead;
+    job->staging = wgpuDeviceCreateBuffer(device, &sdesc);
+    if (!job->meta_buf || !job->pts_buf || !job->slots_buf || !job->tiles_buf || !job->staging) {
+        job_release_device_state(job);
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: device buffers failed");
+    }
+
+    WGPUBindGroupEntry be[5] = {0};
+    be[0].binding = 0;
+    be[0].buffer = job->slots_buf;
+    be[0].size = job->slot_count * sizeof(*job->slots);
+    be[1].binding = 1;
+    be[1].buffer = job->meta_buf;
+    be[1].size = job->combined_meta.size * sizeof(uint32_t);
+    be[2].binding = 2;
+    be[2].buffer = job->pts_buf;
+    be[2].size = job->combined_pts.size * sizeof(float);
+    be[3].binding = 3;
+    be[3].textureView = job->texture.view;
+    be[4].binding = 4;
+    be[4].buffer = job->tiles_buf;
+    be[4].size = job->tiles_x * job->tiles_y * sizeof(*job->tile_slots);
+    WGPUBindGroupDescriptor bgd = {0};
+    bgd.layout = pipeline->comp.bgl;
+    bgd.entryCount = 5;
+    bgd.entries = be;
+    job->bind_group = wgpuDeviceCreateBindGroup(device, &bgd);
+    if (!job->bind_group) {
+        job_release_device_state(job);
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: bind group create failed");
+    }
+
+    /* One dispatch over the whole atlas, then the copy-out, in one submit:
+     * mapping the staging buffer later waits for exactly this font's work. */
+    WGPUCommandEncoderDescriptor edesc = {0};
+    WGPUCommandEncoder enc = wgpuDeviceCreateCommandEncoder(device, &edesc);
+    WGPUComputePassDescriptor pdesc = {0};
+    WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(enc, &pdesc);
+    wgpuComputePassEncoderSetPipeline(pass, pipeline->comp.pipeline);
+    wgpuComputePassEncoderSetBindGroup(pass, 0, job->bind_group, 0, NULL);
+    wgpuComputePassEncoderDispatchWorkgroups(pass, (uint32_t)job->tiles_x, (uint32_t)job->tiles_y,
+                                             1);
+    wgpuComputePassEncoderEnd(pass);
+    wgpuComputePassEncoderRelease(pass);
+
+    WGPUTexelCopyTextureInfo src = {0};
+    src.texture = job->texture.texture;
+    WGPUTexelCopyBufferInfo dst = {0};
+    dst.buffer = job->staging;
+    dst.layout.bytesPerRow = (uint32_t)atlas_staging_pitch(&job->layout);
+    dst.layout.rowsPerImage = (uint32_t)job->layout.height;
+    WGPUExtent3D ext = {(uint32_t)job->layout.width, (uint32_t)job->layout.height, 1};
+    wgpuCommandEncoderCopyTextureToBuffer(enc, &src, &dst, &ext);
 
     WGPUCommandBufferDescriptor cdesc = {0};
     WGPUCommandBuffer cb = wgpuCommandEncoderFinish(enc, &cdesc);
     wgpuQueueSubmit(queue, 1, &cb);
     wgpuCommandBufferRelease(cb);
     wgpuCommandEncoderRelease(enc);
+    job->submitted = 1;
+    job->time_submitted = yetty_yplatform_ytime_monotonic_sec();
+    ydebug("ymsdf-wgsl: %s submitted %zu glyphs over %zux%zu tiles in %.1f ms", job->ttf_path,
+           job->slot_count, job->tiles_x, job->tiles_y,
+           (job->time_submitted - time_begin) * 1000.0);
+    return YETTY_OK_VOID();
+}
 
-    bool queue_wait_failed = wait_queue_done(queue, instance) < 0;
-
-    /* Per-glyph cleanup */
-    for (size_t i = 0; i < emit_count; i++) {
-        if (bgroups[i]) {
-            wgpuBindGroupRelease(bgroups[i]);
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_job_readback(struct yetty_ymsdf_wgsl_job *job)
+{
+    if (!job || !job->emits) {
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: readback before prepare");
+    }
+    if (!job->submitted) {
+        if (job->slot_count == 0) {
+            return YETTY_OK_VOID(); /* nothing was rendered, nothing to read */
         }
-        if (uniform_bufs[i]) {
-            wgpuBufferDestroy(uniform_bufs[i]);
-            wgpuBufferRelease(uniform_bufs[i]);
-        }
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: readback before submit");
     }
-    free(bgroups);
-    free(uniform_bufs);
-    if (meta_buf) {
-        wgpuBufferDestroy(meta_buf);
-        wgpuBufferRelease(meta_buf);
-    }
-    if (pts_buf) {
-        wgpuBufferDestroy(pts_buf);
-        wgpuBufferRelease(pts_buf);
-    }
+    double time_begin = yetty_yplatform_ytime_monotonic_sec();
 
-    if (queue_wait_failed) {
-        free(emits);
-        u32_vec_free(&combined_meta);
-        f32_vec_free(&combined_pts);
-        u32_vec_free(&cps);
-        atlas_cleanup(&atlas);
-        compute_cleanup(&comp);
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: queue wait failed after compute submit");
+    size_t pitch = atlas_staging_pitch(&job->layout);
+    size_t bytes_per_row = (size_t)job->layout.width * 4;
+    size_t total = pitch * (size_t)job->layout.height;
+    /* The map completes once the copy-out — and so the dispatch before it —
+     * has executed; only this font's work is waited for. */
+    if (wait_buffer_map(job->staging, WGPUMapMode_Read, total, job->instance) < 0) {
+        job_release_device_state(job);
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: atlas readback map failed");
     }
-
-    /* Atlas readback + CDB write. */
-    uint8_t *rgba8 = atlas_readback_rgba8(&atlas, instance);
-    if (!rgba8) {
-        free(emits);
-        u32_vec_free(&combined_meta);
-        f32_vec_free(&combined_pts);
-        u32_vec_free(&cps);
-        atlas_cleanup(&atlas);
-        compute_cleanup(&comp);
-        FT_Done_Face(face);
-        FT_Done_FreeType(lib);
-        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: atlas readback failed");
+    double time_mapped = yetty_yplatform_ytime_monotonic_sec();
+    const uint8_t *mapped = wgpuBufferGetConstMappedRange(job->staging, 0, total);
+    if (!mapped) {
+        wgpuBufferUnmap(job->staging);
+        job_release_device_state(job);
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: atlas readback range failed");
     }
+    job->rgba8 = malloc((size_t)job->layout.width * job->layout.height * 4);
+    if (!job->rgba8) {
+        wgpuBufferUnmap(job->staging);
+        job_release_device_state(job);
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: alloc atlas readback");
+    }
+    /* Drop the 256-byte row padding of the copy layout. */
+    for (int y = 0; y < job->layout.height; y++) {
+        memcpy(job->rgba8 + (size_t)y * bytes_per_row, mapped + (size_t)y * pitch, bytes_per_row);
+    }
+    wgpuBufferUnmap(job->staging);
+    job_release_device_state(job);
 
-    /* Pixel-space metrics were already computed when each glyph was emitted
-     * (above), so we go straight to the CDB writer. */
+    job->time_rendered = yetty_yplatform_ytime_monotonic_sec();
+    ydebug("ymsdf-wgsl: %s read back: gpu wait %.1f ms, copy %.1f ms", job->ttf_path,
+           (time_mapped - time_begin) * 1000.0, (job->time_rendered - time_mapped) * 1000.0);
+    return YETTY_OK_VOID();
+}
 
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_job_render(
+    struct yetty_ymsdf_wgsl_job *job, struct yetty_ymsdf_wgsl_pipeline *pipeline)
+{
+    struct yetty_ycore_void_result submitted = yetty_ymsdf_wgsl_job_submit(job, pipeline);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, submitted, "ymsdf-wgsl: submit failed");
+    return yetty_ymsdf_wgsl_job_readback(job);
+}
+
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_job_write(struct yetty_ymsdf_wgsl_job *job)
+{
+    if (!job || !job->emits) {
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: write before prepare");
+    }
+    if (job->slot_count > 0 && !job->rgba8) {
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: write before render");
+    }
+    double time_begin = yetty_yplatform_ytime_monotonic_sec();
     struct yetty_ycore_void_result wres =
-        write_cdb_file(config->cdb_path, emits, emit_count, rgba8, atlas.width, atlas.height);
+        write_cdb_file(job->cdb_path, job->emits, job->emit_count, job->rgba8, job->layout.width,
+                       job->layout.height);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, wres, "ymsdf-wgsl: CDB write failed");
+    double time_written = yetty_yplatform_ytime_monotonic_sec();
+    ydebug("ymsdf-wgsl: wrote %s (%zu glyphs) in %.1f ms; %.1f ms since prepare began",
+           job->cdb_path, job->emit_count, (time_written - time_begin) * 1000.0,
+           (time_written - job->time_start) * 1000.0);
+    return YETTY_OK_VOID();
+}
 
-    free(rgba8);
-    free(emits);
-    u32_vec_free(&combined_meta);
-    f32_vec_free(&combined_pts);
-    u32_vec_free(&cps);
-    atlas_cleanup(&atlas);
-    compute_cleanup(&comp);
-    FT_Done_Face(face);
-    FT_Done_FreeType(lib);
-
-    if (YETTY_IS_ERR(wres)) {
-        return wres;
+struct yetty_ycore_void_result yetty_ymsdf_wgsl_config_generate(
+    const struct yetty_ymsdf_wgsl_config *config)
+{
+    if (!config) {
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: invalid config");
     }
-    ydebug("ymsdf-wgsl: wrote %s (%zu glyphs)", config->cdb_path, emit_count);
+    struct yetty_ymsdf_wgsl_pipeline_ptr_result pipeline_res =
+        yetty_ymsdf_wgsl_pipeline_create(config->device, config->instance, config->shader_path);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, pipeline_res, "ymsdf-wgsl: pipeline failed");
+    struct yetty_ymsdf_wgsl_pipeline *pipeline = pipeline_res.value;
+
+    struct yetty_ymsdf_wgsl_job_ptr_result prepared = yetty_ymsdf_wgsl_job_prepare(config);
+    if (YETTY_IS_ERR(prepared)) {
+        yetty_ymsdf_wgsl_pipeline_destroy(pipeline);
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: prepare failed", prepared);
+    }
+    struct yetty_ymsdf_wgsl_job *job = prepared.value;
+
+    struct yetty_ycore_void_result rendered = yetty_ymsdf_wgsl_job_render(job, pipeline);
+    if (YETTY_IS_ERR(rendered)) {
+        yetty_ymsdf_wgsl_job_destroy(job);
+        yetty_ymsdf_wgsl_pipeline_destroy(pipeline);
+        return YETTY_ERR(yetty_ycore_void, "ymsdf-wgsl: render failed", rendered);
+    }
+    struct yetty_ycore_void_result written = yetty_ymsdf_wgsl_job_write(job);
+    yetty_ymsdf_wgsl_job_destroy(job);
+    yetty_ymsdf_wgsl_pipeline_destroy(pipeline);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, written, "ymsdf-wgsl: write failed");
     return YETTY_OK_VOID();
 }
