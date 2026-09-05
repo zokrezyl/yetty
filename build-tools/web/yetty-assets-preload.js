@@ -10,9 +10,9 @@
 //   2. eagerly fetches the BOOT SET — every asset smaller than
 //      BOOT_EAGER_MAX (configs, WGSL shaders, small images) — in
 //      parallel into MEMFS;
-//   3. registers every remaining asset (MSDF CDBs, extra font weights,
-//      videos, logos) as a LAZY file: an empty placeholder in MEMFS
-//      plus an entry in the lazy map;
+//   3. registers every remaining asset (raw fonts, videos, logos) as a
+//      LAZY file: an empty placeholder in MEMFS plus an entry in the
+//      lazy map;
 //   4. wraps the wasm's __syscall_openat import (Module.instantiateWasm):
 //      opening a cold lazy asset suspends the whole runtime via
 //      Asyncify.handleSleep, fetches + decodes the body, writes it to
@@ -25,15 +25,19 @@
 // fetch manifest.json and preload every asset before main(), exactly
 // the old behaviour.
 //
-// Brotli: asset bodies stay brotli'd on the wire (the 4 MSDF CDBs are
-// ~8 MB wire / ~40 MB decoded EACH). yfs listing entries carry z="br";
-// decode prefers DecompressionStream('br') (present in every browser
-// that has WebGPU, i.e. every browser that runs yetty) and falls back
-// to the brotli decoder linked into yetty.wasm
+// Brotli: asset bodies stay brotli'd on the wire. yfs listing entries
+// carry z="br"; decode prefers DecompressionStream('br') (present in
+// every browser that has WebGPU, i.e. every browser that runs yetty)
+// and falls back to the brotli decoder linked into yetty.wasm
 // (src/yetty/yplatform/webasm/brotli-glue.c).
 //
 // Cache Storage: decoded bodies are cached keyed by the wire sha256 —
 // shared by both modes; warm starts skip download AND decode.
+//
+// MSDF font atlases are never served: yetty builds them from the raw
+// fonts with its GPU generator on the first start and hands each one to
+// Module.yettyPersistFile (below); later visits restore them from Cache
+// Storage before main().
 
 // Block emscripten's automatic main() invocation. We trigger it manually
 // from onRuntimeInitialized once boot assets are in MEMFS. callMain must
@@ -58,6 +62,131 @@ Module.noInitialRun = true;
     // Consulted by the wrapped __syscall_openat below.
     const lazyAssets = new Map();
     let yfsVersion = null;
+
+    // ---- generated assets (browser-built MSDF atlases) ---------------
+    //
+    // The MSDF font atlases are not served at all: yetty builds them from
+    // the raw fonts with its GPU generator on the first start
+    // (ensure_default_font_atlases in src/yetty/yetty/yetty.c) and hands
+    // each finished file to Module.yettyPersistFile. MEMFS does not
+    // survive a reload, so the file goes into Cache Storage and
+    // restoreGeneratedAssets() puts it back into MEMFS before main() on
+    // later visits. Entries are keyed by the MEMFS path and stamped with
+    // the content hashes of what they were built from — the source font
+    // and the generator shader as the served tree has them — so a font or
+    // shader update rebuilds, and a redeploy that changes neither costs
+    // nothing.
+    const GENERATED_KEY_PREFIX = 'generated-asset?path=';
+    const GENERATED_INPUTS_HEADER = 'x-yetty-inputs';
+    // MEMFS path -> content hash of the served body (both modes fill it).
+    const assetHashes = new Map();
+
+    // The inputs a generated file was built from, as one stamp string, or
+    // null when they cannot be determined (then nothing is persisted).
+    // /data/msdf-fonts/<stem>.cdb comes from /data/fonts/<stem>.* (the
+    // music face maps Emmentaler.cdb <- Emmentaler-20.otf, hence the
+    // prefix match) plus the generator's compute shader.
+    // Collapse '.' and '..' segments (and resolve a relative path against
+    // the process cwd) so the cache key is canonical whatever spelling the
+    // C side used — it hands us <fonts dir>/../msdf-fonts/<stem>.cdb.
+    function canonicalPath(path) {
+        const absolute = path.charAt(0) === '/' ? path : FS.cwd() + '/' + path;
+        const segments = [];
+        for (const segment of absolute.split('/')) {
+            if (!segment || segment === '.') continue;
+            if (segment === '..') { segments.pop(); continue; }
+            segments.push(segment);
+        }
+        return '/' + segments.join('/');
+    }
+
+    function generatedInputs(path) {
+        const match = /^\/data\/msdf-fonts\/([^/]+)\.cdb$/.exec(path);
+        if (!match) return null;
+        const stem = match[1];
+        const shader = assetHashes.get('/data/shaders/msdf_gen.wgsl');
+        let font = null;
+        for (const [assetPath, hash] of assetHashes) {
+            if (assetPath.indexOf('/data/fonts/') !== 0) continue;
+            const name = assetPath.slice('/data/fonts/'.length);
+            if (name === stem + '.ttf' || name === stem + '.otf' ||
+                name.indexOf(stem + '-') === 0) {
+                font = hash;
+                break;
+            }
+        }
+        if (!shader || !font) return null;
+        return 'shader=' + shader + ';font=' + font;
+    }
+
+    // Called from C (yetty_yplatform_persist_file) with a MEMFS path.
+    // Synchronous from the caller's view: the bytes are copied out of
+    // MEMFS right away; the cache write completes in the background.
+    Module.yettyPersistFile = function (path) {
+        path = canonicalPath(path);
+        const inputs = generatedInputs(path);
+        if (!inputs) {
+            console.warn('[yetty] not persisting %s: inputs unknown', path);
+            return false;
+        }
+        let bytes;
+        try {
+            bytes = FS.readFile(path);
+        } catch (e) {
+            console.error('[yetty] persist: cannot read', path, e);
+            return false;
+        }
+        const headers = {};
+        headers[GENERATED_INPUTS_HEADER] = inputs;
+        assetCache().then(function (cache) {
+            if (!cache) return;
+            return cache.put(GENERATED_KEY_PREFIX + encodeURIComponent(path),
+                             new Response(bytes, { headers: headers }));
+        }).then(function () {
+            console.log('[yetty] persisted %s (%s)', path, fmtBytes(bytes.length));
+        }).catch(function (e) {
+            console.warn('[yetty] persist failed for', path, e);
+        });
+        return true;
+    };
+
+    // Put every still-valid generated file back into MEMFS; drop the rest.
+    async function restoreGeneratedAssets() {
+        const cache = await assetCache();
+        if (!cache) return;
+        let keys;
+        try { keys = await cache.keys(); } catch (_) { return; }
+        let restored = 0, restoredBytes = 0;
+        for (const request of keys) {
+            const index = request.url.indexOf(GENERATED_KEY_PREFIX);
+            if (index < 0) continue;
+            const path = decodeURIComponent(
+                request.url.slice(index + GENERATED_KEY_PREFIX.length));
+            let response = null;
+            try { response = await cache.match(request); } catch (_) {}
+            if (!response) continue;
+            const expected = generatedInputs(path);
+            if (!expected || response.headers.get(GENERATED_INPUTS_HEADER) !== expected) {
+                try { await cache.delete(request); } catch (_) {}
+                console.log('[yetty] dropped stale generated %s', path);
+                continue;
+            }
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            mkdirsForFile(path);
+            FS.writeFile(path, bytes);
+            restored++;
+            restoredBytes += bytes.length;
+        }
+        if (restored) {
+            console.log('[yetty] restored %d generated atlas(es) from cache (%s)',
+                        restored, fmtBytes(restoredBytes));
+            status('restored ' + restored + ' generated atlas(es) from cache (' +
+                   fmtBytes(restoredBytes) + ')', 'ok');
+        } else {
+            console.log('[yetty] no generated atlases cached yet — yetty builds them on this start');
+            status('no generated atlases cached yet — yetty builds them on this start', 'phase');
+        }
+    }
 
     function status(text, level) {
         try {
@@ -230,6 +359,7 @@ Module.noInitialRun = true;
                 const rel = dirPath ? dirPath + '/' + entry.n : entry.n;
                 const path = '/' + rel;
                 const state = { entry, rel, path, loaded: false };
+                assetHashes.set(path, entry.h);
                 const bootEligible = entry.s < BOOT_EAGER_MAX &&
                     BOOT_EAGER_PREFIXES.some(function (prefix) {
                         return rel.indexOf(prefix) === 0;
@@ -336,6 +466,7 @@ Module.noInitialRun = true;
     // ---- legacy mode (no yfs tree served) ---------------------------
 
     async function legacyLoadOne(entry) {
+        assetHashes.set(entry.dest, entry.sha256 || 'unversioned');
         const { bytes, cached } = await fetchDecoded(
             ASSET_BASE + entry.url,
             ASSET_BASE + entry.url + '?v=' + (entry.sha256 || 'unversioned'),
@@ -375,6 +506,7 @@ Module.noInitialRun = true;
             const dirs = await yfsProbe();
             if (dirs) await preloadYfs(dirs);
             else await preloadLegacy();
+            await restoreGeneratedAssets();
         })().then(function () {
             console.log('[yetty] asset preload complete; calling main()');
             status('starting yetty terminal…', 'phase');

@@ -77,6 +77,13 @@ int yetty_yplatform_dir_next(struct yetty_yplatform_dir *d, struct yetty_yplatfo
 /* Close the handle. Safe on NULL. */
 void yetty_yplatform_dir_close(struct yetty_yplatform_dir *d);
 
+/* Copy a file under the data dir into durable storage on platforms whose
+ * data dir does not survive a restart (webasm: MEMFS → the page's Cache
+ * Storage, put back into MEMFS before main() on the next boot by the
+ * preload shim). A no-op success where the data dir is durable already.
+ * Best effort: an error only means the next start rebuilds the file. */
+struct yetty_ycore_void_result yetty_yplatform_persist_file(const char *path);
+
 #ifdef __cplusplus
 }
 #endif

@@ -209,11 +209,14 @@ function(yetty_stage_webasm_assets)
                     "data/fonts" TRUE "/data")
     endif()
 
-    # MSDF CDBs (already shipped .br by the 3rdparty fonts fetch).
-    if(YETTY_3RDPARTY_fonts_DIR)
-        _stage_glob("${YETTY_3RDPARTY_fonts_DIR}/*.cdb.br"
-                    "data/msdf-fonts" TRUE "/data")
-    endif()
+    # MSDF atlases are NOT staged: at ~8 MB wire / ~40 MB decoded each they
+    # were the bulk of a first visit. The browser build carries the GPU
+    # generator (ymsdf-wgsl) and builds them from the raw fonts above on
+    # the first start (ensure_default_font_atlases), then hands each
+    # finished atlas to the page's preload shim, which keeps it in Cache
+    # Storage and restores it into MEMFS before main() on later visits —
+    # keyed by the served font + generator shader, so a font or shader
+    # update rebuilds and a redeploy that changes neither costs nothing.
 
     # ygreeter media assets — the showcase's Media (Images + Video), PDF and
     # Markdown tabs read these straight from <data_dir>/ (i.e. /data/...) via

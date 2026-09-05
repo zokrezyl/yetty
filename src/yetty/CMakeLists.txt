@@ -13,8 +13,13 @@ if(YETTY_ENABLE_FEATURE_YGUI)
     # renders through DCS drawable envelopes only). Phase 1 core.
     add_subdirectory(ygui2)
 
-    # yguiapp2 — the generic ygui2 terminal application host.
-    add_subdirectory(yguiapp2)
+    # yguiapp2 — the generic ygui2 terminal application host. Its raw-mode
+    # terminal I/O is POSIX (termios, select, ioctl), so it does not build
+    # on Windows yet; the toolkit itself (ygui2) does, and the hosts that
+    # embed the framework in-process do not need this module.
+    if(NOT WIN32)
+        add_subdirectory(yguiapp2)
+    endif()
 endif()
 
 if(YETTY_ENABLE_FEATURE_YMGUI)

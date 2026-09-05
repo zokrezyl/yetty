@@ -46,6 +46,11 @@ struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd
  * render/event loop replace a raw poll(fd) call without `#ifdef _WIN32`. */
 int yetty_yplatform_io_wait_readable(int fd, int timeout_ms);
 
+/* Write the whole buffer to `fd`, retrying interrupted and short writes.
+ * Blocking; errors on a closed or failing descriptor. The portable form of
+ * the POSIX write() loop every DCS producer needs (Windows has no write()). */
+struct yetty_ycore_void_result yetty_yplatform_io_write_all(int fd, const void *buf, size_t len);
+
 #ifdef __cplusplus
 }
 #endif

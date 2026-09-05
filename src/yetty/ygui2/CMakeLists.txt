@@ -51,6 +51,7 @@ target_link_libraries(yetty_ygui2 PUBLIC
     m
     yetty_ycore
     yetty_yclass
+    yetty_yplatform_core # io_write_all — the terminal write path
     yetty_ydraw_list
     yetty_yface
     yetty_api_yplot # plot widget: wraps an api_yplot figure + pack
