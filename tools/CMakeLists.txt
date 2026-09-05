@@ -89,8 +89,15 @@ endif()
 
 if(YETTY_ENABLE_TOOL_YTOP)
     add_subdirectory(ytop)
-add_subdirectory(ytop2)
-add_subdirectory(ygreeter2)
+    # ytop2 drives the terminal with POSIX raw-mode I/O and ygreeter2 is
+    # hosted by yguiapp2, which is POSIX-only for now: neither builds on
+    # Windows yet.
+    if(NOT WIN32)
+        add_subdirectory(ytop2)
+    endif()
+    if(TARGET yetty_yguiapp2)
+        add_subdirectory(ygreeter2)
+    endif()
 endif()
 
 # yetty_ygit (the reusable component) only exists on desktop — gate on the

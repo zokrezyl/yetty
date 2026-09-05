@@ -97,7 +97,10 @@ referenced by a drawable list has no cached `.cdb` yet:
 - `../yetty/yetty.c` — `ensure_default_font_atlases` at startup: builds the
   default terminal faces (DejaVu Sans Mono Nerd Font ×4, Emmentaler) from
   the raw fonts as one `ensure_cdb_batch` when an install ships no
-  pre-generated CDBs (`yinstall-min`; see [yinstall](../yinstall/README.md)).
+  pre-generated CDBs — `yinstall-min` (see [yinstall](../yinstall/README.md))
+  and the browser build, where the atlases are never served: yetty.dev
+  builds them on the first visit and keeps them in the browser's Cache
+  Storage (`yetty_yplatform_persist_file`, `build-tools/web/yetty-assets-preload.js`).
 
 ## Layout of the module
 

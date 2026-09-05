@@ -21,7 +21,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include <yetty/yclass/class.h>
 #include <yetty/ycore/result.h>
@@ -33,6 +32,7 @@
 #include <yetty/yterminal/client-input.h>
 #include <yetty/ymgui/wire.h>
 #include <yetty/ygui2/defs.h>
+#include <yetty/yplatform/io.h>
 #include <yetty/ytrace/ytrace.h>
 
 #include "yetty/gen/impl/ygui2/widget.h"
@@ -585,18 +585,10 @@ static struct yetty_ycore_void_result framework_write_bytes(struct yetty_ygui2_f
     if (!framework->write_fd_valid) {
         return YETTY_ERR(yetty_ycore_void, "ygui2 write_bytes: no sink and no write_fd");
     }
-    size_t written = 0;
-    while (written < byte_count) {
-        ssize_t chunk =
-            write(framework->write_fd, (const uint8_t *)bytes + written, byte_count - written);
-        if (chunk < 0 && errno == EINTR) {
-            continue;
-        }
-        if (chunk <= 0) {
-            return YETTY_ERR(yetty_ycore_void, "ygui2 write_bytes: short/failed terminal write");
-        }
-        written += (size_t)chunk;
-    }
+    struct yetty_ycore_void_result write_res =
+        yetty_yplatform_io_write_all(framework->write_fd, bytes, byte_count);
+    YETTY_RETURN_IF_ERR(yetty_ycore_void, write_res,
+                        "ygui2 write_bytes: short/failed terminal write");
     return YETTY_OK_VOID();
 }
 
@@ -2740,15 +2732,11 @@ static struct yetty_ycore_void_result framework_ship(struct yetty_ygui2_framewor
     if (framework->sink) {
         framework->sink(envelope.data, envelope.size, framework->sink_userdata);
     } else if (framework->write_fd_valid) {
-        size_t written = 0;
-        while (written < envelope.size) {
-            ssize_t chunk = write(framework->write_fd, (const uint8_t *)envelope.data + written,
-                                  envelope.size - written);
-            if (chunk <= 0) {
-                yetty_ycore_buffer_destroy(&envelope);
-                return YETTY_ERR(yetty_ycore_void, "ygui2 ship: short write");
-            }
-            written += (size_t)chunk;
+        struct yetty_ycore_void_result write_res =
+            yetty_yplatform_io_write_all(framework->write_fd, envelope.data, envelope.size);
+        if (YETTY_IS_ERR(write_res)) {
+            yetty_ycore_buffer_destroy(&envelope);
+            return YETTY_ERR(yetty_ycore_void, "ygui2 ship: short write", write_res);
         }
     }
     yetty_ycore_buffer_destroy(&envelope);

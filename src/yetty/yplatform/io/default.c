@@ -4,6 +4,7 @@
 #include <yetty/yplatform/io.h>
 
 #include <errno.h>
+#include <stdint.h>
 #include <poll.h>
 #include <unistd.h>
 
@@ -56,4 +57,24 @@ struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd
         return YETTY_OK(yetty_yplatform_io_size, 0);
     }
     return YETTY_ERR(yetty_yplatform_io_size, "io_read_nonblocking: read failed");
+}
+
+struct yetty_ycore_void_result yetty_yplatform_io_write_all(int fd, const void *buf, size_t len)
+{
+    if (fd < 0 || (!buf && len > 0)) {
+        return YETTY_ERR(yetty_ycore_void, "io_write_all: bad fd or buffer");
+    }
+    const uint8_t *cursor = buf;
+    size_t written = 0;
+    while (written < len) {
+        ssize_t chunk = write(fd, cursor + written, len - written);
+        if (chunk < 0 && errno == EINTR) {
+            continue;
+        }
+        if (chunk <= 0) {
+            return YETTY_ERR(yetty_ycore_void, "io_write_all: write failed");
+        }
+        written += (size_t)chunk;
+    }
+    return YETTY_OK_VOID();
 }

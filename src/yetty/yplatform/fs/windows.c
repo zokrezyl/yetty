@@ -200,3 +200,10 @@ void yetty_yplatform_dir_close(struct yetty_yplatform_dir *d)
     }
     free(d);
 }
+
+struct yetty_ycore_void_result yetty_yplatform_persist_file(const char *path)
+{
+    /* The data dir is a real directory that outlives the process. */
+    (void)path;
+    return YETTY_OK_VOID();
+}

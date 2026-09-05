@@ -1,6 +1,9 @@
 /* fs.c - POSIX filesystem helpers */
 
 #include <yetty/yplatform/fs.h>
+#ifdef __EMSCRIPTEN__
+#include <emscripten/emscripten.h>
+#endif
 #include <dirent.h>
 #include <errno.h>
 #include <libgen.h>
@@ -189,3 +192,40 @@ void yetty_yplatform_dir_close(struct yetty_yplatform_dir *d)
     free(d->root);
     free(d);
 }
+
+#ifdef __EMSCRIPTEN__
+/* The page's preload shim (build-tools/web/yetty-assets-preload.js) owns
+ * Cache Storage: it copies the MEMFS file into the cache and restores it
+ * before main() on the next boot. 0 when the shim is not installed. */
+// clang-format off
+EM_JS(int, yetty_fs_persist_file_js, (const char *path), {
+    if (typeof Module.yettyPersistFile !== 'function') {
+        return 0;
+    }
+    try {
+        return Module.yettyPersistFile(UTF8ToString(path)) ? 1 : 0;
+    } catch (error) {
+        console.error('[yetty] persist failed:', error);
+        return 0;
+    }
+});
+// clang-format on
+
+struct yetty_ycore_void_result yetty_yplatform_persist_file(const char *path)
+{
+    if (!path || !*path) {
+        return YETTY_ERR(yetty_ycore_void, "persist_file: empty path");
+    }
+    if (!yetty_fs_persist_file_js(path)) {
+        return YETTY_ERR(yetty_ycore_void, "persist_file: browser cache storage unavailable");
+    }
+    return YETTY_OK_VOID();
+}
+#else
+struct yetty_ycore_void_result yetty_yplatform_persist_file(const char *path)
+{
+    /* The data dir is a real directory that outlives the process. */
+    (void)path;
+    return YETTY_OK_VOID();
+}
+#endif

@@ -12,6 +12,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <io.h>
+#include <stdint.h>
 
 int yetty_yplatform_io_wait_readable(int fd, int timeout_ms)
 {
@@ -114,4 +115,23 @@ struct yetty_yplatform_io_size_result yetty_yplatform_io_read_nonblocking(int fd
         return YETTY_ERR(yetty_yplatform_io_size, "io_read_nonblocking: ReadFile failed");
     }
     return YETTY_OK(yetty_yplatform_io_size, (size_t)got);
+}
+
+struct yetty_ycore_void_result yetty_yplatform_io_write_all(int fd, const void *buf, size_t len)
+{
+    if (fd < 0 || (!buf && len > 0)) {
+        return YETTY_ERR(yetty_ycore_void, "io_write_all: bad fd or buffer");
+    }
+    const uint8_t *cursor = buf;
+    size_t written = 0;
+    while (written < len) {
+        size_t remaining = len - written;
+        unsigned int want = remaining > 0x7FFFFFFFu ? 0x7FFFFFFFu : (unsigned int)remaining;
+        int chunk = _write(fd, cursor + written, want);
+        if (chunk <= 0) {
+            return YETTY_ERR(yetty_ycore_void, "io_write_all: _write failed");
+        }
+        written += (size_t)chunk;
+    }
+    return YETTY_OK_VOID();
 }

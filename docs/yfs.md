@@ -8,11 +8,12 @@ yfs is a static, HTTP-served filesystem tree deployed with the site
    tool binaries in `/bin`, `/usr/share`, the demo files. Nothing is
    downloaded up front except the shell; every other file and binary is
    fetched on first access.
-2. **yetty itself** (phase 2, planned): the webasm asset set (font CDBs,
-   WGSL shaders, images). Today `yetty-assets-preload.js` fetches the
-   whole staged asset set at startup whether it is used or not; phase 2
-   splits it into a small eager boot set plus lazily-fetched,
-   progressively-rendered assets.
+2. **yetty itself** (phase 2, implemented): the webasm asset set (raw
+   fonts, WGSL shaders, images). `yetty-assets-preload.js` fetches a small
+   eager boot set and demand-pages the rest. The MSDF font atlases are not
+   served at all: yetty builds them from the raw fonts with its GPU
+   generator on the first visit and the shim keeps them in the browser's
+   Cache Storage (see the consumer section below).
 
 One format, one generator, one deployment — per consumer only the
 *backend* that mounts the tree differs.
@@ -140,14 +141,22 @@ Retired by yfs: `fs/pack.bin` (the monolithic `/usr/share` blob) and
 ## Phase 2 — yetty assets (implemented)
 
 The tree has a sibling root, `yfs/<V>/yetty/`, holding the webasm asset
-set (fonts, MSDF CDBs, WGSL shaders, configs, demo files under
-`demos/`). It is staged at webasm configure time by
-`build-tools/yos/stage-yetty-yfs.py` from the `yetty-assets/` manifest
-into the same yos-web yfs directory the bundle provides — shared blob
-store, same version prefix. Two format notes specific to this producer:
-bodies stay **brotli'd on the wire** (listing entries carry `z:"br"`,
-`s` is the stored/wire size — the 4 MSDF CDBs are ~8 MB wire / ~40 MB
-decoded each), and every body lives in the blob store.
+set (raw fonts, WGSL shaders, configs, demo files under `demos/`). It is
+staged at webasm configure time by `build-tools/yos/stage-yetty-yfs.py`
+from the `yetty-assets/` manifest into the same yos-web yfs directory the
+bundle provides — shared blob store, same version prefix. Two format notes
+specific to this producer: bodies stay **brotli'd on the wire** (listing
+entries carry `z:"br"`, `s` is the stored/wire size), and every body lives
+in the blob store.
+
+The MSDF font atlases are deliberately absent from the tree. yetty builds
+them from the served raw fonts with its GPU generator on the first visit
+(`ensure_default_font_atlases`, the same step a raw-font desktop install
+runs) and hands each finished file to the shim
+(`yetty_yplatform_persist_file` → `Module.yettyPersistFile`), which stores
+it in Cache Storage stamped with the listing hashes of the source font and
+the generator shader; the next visit restores it into MEMFS before `main()`
+and rebuilds only when a font or the shader changed.
 
 The consumer is `build-tools/web/yetty-assets-preload.js`:
 

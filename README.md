@@ -21,22 +21,26 @@ Pure C. WebGPU-rendered. FFI-first. Built around small composable modules.
 
 ## Install
 
-Linux and macOS:
+Three sizes, one line each. Linux and macOS:
 
 ```bash
-curl -fsSL https://yetty.dev/install.sh | bash
+curl -fsSL https://yetty.dev/install-min.sh | bash   # yetty only              ~55 MB
+curl -fsSL https://yetty.dev/install.sh | bash       # yetty + tools + atlases ~255 MB
+curl -fsSL https://yetty.dev/install-max.sh | bash   # everything, VM included ~380 MB
 ```
 
 Windows (PowerShell):
 
 ```powershell
+irm https://yetty.dev/install-min.ps1 | iex
 irm https://yetty.dev/install.ps1 | iex
+irm https://yetty.dev/install-max.ps1 | iex
 ```
 
-The script downloads the installer for your platform from the latest release
-and runs it. The installer is a single self-contained executable that unpacks
-everything it carries into the right per-OS locations. It comes in three
-sizes, each with its own one-liner:
+Each script downloads the matching installer for your platform from the
+latest release and runs it. The installer is a single self-contained
+executable that unpacks everything it carries into the right per-OS
+locations. What the three sizes contain:
 
 | Installer | Script | Contains | Download |
 |-----------|--------|----------|---------:|
@@ -44,12 +48,7 @@ sizes, each with its own one-liner:
 | `yinstall` | `install.sh` / `install.ps1` | Every yetty executable: the terminal, the companion tools (`ycat`, `yplot`, `ygreeter`, `ydoc`, `ysheet`, `yslide`, …) and the demo programs, `libyetty_ffi`, plus shaders, raw fonts **and** the pre-generated MSDF font atlases, config, greeter and demo assets. | ~255 MB |
 | `yinstall-max` | `install-max.sh` / `install-max.ps1` | Everything in `yinstall`, plus the RISC-V VM runtime (kernel, firmware, root filesystem) and the QEMU emulator behind `--temu` / `--qemu`. | ~380 MB |
 
-```bash
-curl -fsSL https://yetty.dev/install-min.sh | bash     # smallest: the terminal
-curl -fsSL https://yetty.dev/install-max.sh | bash     # everything, VM included
-```
-
-The same script also takes the variant as an argument
+The default script also takes the variant as an argument
 (`curl -fsSL https://yetty.dev/install.sh | bash -s -- --max`) or from
 `YETTY_VARIANT`; on Windows set `$env:YETTY_VARIANT` before the pipe. Every
 installer is idempotent: run it again to repair an install, or with `--force`

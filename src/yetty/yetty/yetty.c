@@ -1444,6 +1444,16 @@ static void ensure_default_font_atlases(struct yetty_yframework *runtime)
         }
         if (item->generated) {
             yinfo("yetty_create: built MSDF atlas %s from %s", item->cdb_path, item->ttf_path);
+            /* Where the data dir is volatile (webasm MEMFS) this copies the
+             * atlas into durable browser storage, so the next start does
+             * not rebuild it. Elsewhere it is a no-op. */
+            struct yetty_ycore_void_result persist_res =
+                yetty_yplatform_persist_file(item->cdb_path);
+            if (YETTY_IS_ERR(persist_res)) {
+                ywarn("yetty_create: MSDF atlas %s not persisted: %s", item->cdb_path,
+                      persist_res.error.msg);
+                yetty_ycore_error_destroy(persist_res.error);
+            }
         }
     }
     yinfo("yetty_create: %zu MSDF atlases built in %.0f ms", build_count,
